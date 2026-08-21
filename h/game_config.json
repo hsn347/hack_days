@@ -1,0 +1,18 @@
+{
+  "server_ip": "101.46.140.232",
+  "server_port": 4000,
+  "uid": "MTIyMDg0NjY=",
+  "servername": "a29oX2dhbWVfMzA=",
+  "subid": "MTg5ODY1",
+  "index": 1,
+  "hmac_full": "4iP1NOxbg54=",
+  "username_raw": "MTIyMDg0NjY=@a29oX2dhbWVfMzA=#MTg5ODY1",
+  "mission_interval": 300,
+  "_notes": {
+    "uid_decoded": "12208466",
+    "servername_decoded": "koh_game_30",
+    "subid_decoded": "189865",
+    "captured_at": "2026-08-10"
+  }
+}
+

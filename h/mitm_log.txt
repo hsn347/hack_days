@@ -1,0 +1,6 @@
+[PROXY] Listening on 127.0.0.1:10002
+[PROXY] Forwarding to ('119.8.212.255', 10000)
+[PROXY] Log file: E:/osmanli/mitm_log.txt
+[PROXY] Run: adb -s emulator-5554 reverse tcp:10000 tcp:10002
+[PROXY] Then switch account in game
+

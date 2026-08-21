@@ -1,0 +1,10 @@
+__pycache__/
+apk_libs/
+bin/
+decompiled/
+lib/
+lua_src/
+h/*.apk
+h/*.zip
+h/*.so
+h/*.jar

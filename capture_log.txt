@@ -1,0 +1,5858 @@
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 73,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 73,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 74,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 74,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 75,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 75,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 76,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 76,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 77,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 77,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 78,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 78,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 79,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 79,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 80,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 80,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 81,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 81,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 82,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 82,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 83,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 83,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 84,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 84,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 85,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 85,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 86,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 86,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 87,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 87,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 88,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 88,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134407.4,
+            "1": 48556.4,
+            "2": 57234
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134407.4,
+            "1": 48556.4,
+            "2": 57234
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "pid": 10600784,
+  "time": 1787052193,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "owner": {},
+    "slaves": {}
+  },
+  "subcmd": "1"
+}
+
+━━━ <<< RECV cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "pid": 10600784,
+  "time": 1787052193,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "owner": {},
+    "slaves": {}
+  },
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 89,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 89,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 90,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 90,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 91,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 91,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 92,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 92,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 93,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 93,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 94,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 94,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 95,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 95,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 96,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 96,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134722.4,
+            "1": 48556.4,
+            "2": 57444
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134722.4,
+            "1": 48556.4,
+            "2": 57444
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052323,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134827.4,
+            "1": 48556.4,
+            "2": 57514
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052323,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134827.4,
+            "1": 48556.4,
+            "2": 57514
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052353,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134879.9,
+            "1": 48556.4,
+            "2": 57549
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052353,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134879.9,
+            "1": 48556.4,
+            "2": 57549
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052383,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134932.4,
+            "1": 48556.4,
+            "2": 57584
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "time": 1787052383,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134932.4,
+            "1": 48556.4,
+            "2": 57584
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1000 ━━━
+{
+  "cmd": "onemt_1000",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1081 ━━━
+{
+  "cmd": "onemt_1081",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 97,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3124 ━━━
+{
+  "cmd": "onemt_3124",
+  "_requestId": 97,
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 98,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=5053 ━━━
+{
+  "cmd": "onemt_5053",
+  "_requestId": 98,
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1015 ━━━
+{
+  "cmd": "onemt_1015",
+  "subcmd": "1",
+  "data": {
+    "num": 15,
+    "version": "1",
+    "channel": "googleplay"
+  }
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1007 ━━━
+{
+  "cmd": "onemt_1007",
+  "subcmd": "1000",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1065 ━━━
+{
+  "cmd": "onemt_1065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "58",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "83",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1010 ━━━
+{
+  "cmd": "onemt_1010",
+  "subcmd": "56",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 99,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 99,
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3080 ━━━
+{
+  "cmd": "onemt_3080",
+  "subcmd": "2",
+  "data": {
+    "isSelf": true,
+    "uids": [
+      10600784
+    ]
+  }
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 100,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3149 ━━━
+{
+  "cmd": "onemt_3149",
+  "_requestId": 100,
+  "subcmd": "7",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2033 ━━━
+{
+  "cmd": "onemt_2033",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1056 ━━━
+{
+  "cmd": "onemt_1056",
+  "subcmd": "5"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1058 ━━━
+{
+  "cmd": "onemt_1058",
+  "subcmd": "3"
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1043 ━━━
+{
+  "cmd": "onemt_1043",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1042 ━━━
+{
+  "cmd": "onemt_1042",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1002 ━━━
+{
+  "cmd": "onemt_1002",
+  "subcmd": "34",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1050 ━━━
+{
+  "cmd": "onemt_1050",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3079 ━━━
+{
+  "cmd": "onemt_3079",
+  "subcmd": "3",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1018 ━━━
+{
+  "cmd": "onemt_1018",
+  "subcmd": "4",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=1048 ━━━
+{
+  "cmd": "onemt_1048",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2021 ━━━
+{
+  "cmd": "onemt_2021",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2030 ━━━
+{
+  "cmd": "onemt_2030",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1016 ━━━
+{
+  "cmd": "onemt_1016",
+  "subcmd": "1",
+  "data": {
+    "key": "chatChannel"
+  }
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "9",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=1011 ━━━
+{
+  "cmd": "onemt_1011",
+  "subcmd": "15",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2065 ━━━
+{
+  "cmd": "onemt_2065",
+  "subcmd": "1",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 101,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 101,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 1
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=2069 ━━━
+{
+  "cmd": "onemt_2069",
+  "subcmd": "1",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3103 ━━━
+{
+  "cmd": "onemt_3103",
+  "subcmd": "5",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 102,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3111 ━━━
+{
+  "cmd": "onemt_3111",
+  "_requestId": 102,
+  "subcmd": "2",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=3133 ━━━
+{
+  "cmd": "onemt_3133",
+  "subcmd": "8",
+  "data": {}
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 103,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=2089 ━━━
+{
+  "cmd": "onemt_2089",
+  "_requestId": 103,
+  "subcmd": "1",
+  "data": {
+    "areaEnum": 9
+  }
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=3101 ━━━
+{
+  "cmd": "onemt_3101",
+  "subcmd": "1"
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 104,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=6010 ━━━
+{
+  "cmd": "onemt_6010",
+  "_requestId": 104,
+  "subcmd": "4",
+  "data": {
+    "isKid": true
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ >>> SEND cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "subcmd": "6",
+  "data": {
+    "uid": 10600784
+  }
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1022 ━━━
+{
+  "cmd": "onemt_1022",
+  "subcmd": "1",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "1698997747": {
+      "kindDom": 259,
+      "position": [
+        370,
+        581
+      ],
+      "id": 1698997747,
+      "time": 1698997647,
+      "name": "nsf ",
+      "positionType": 1
+    },
+    "1698997953": {
+      "kindDom": 259,
+      "position": [
+        520,
+        194
+      ],
+      "id": 1698997953,
+      "time": 1698997853,
+      "name": "zar   ",
+      "positionType": 1
+    },
+    "1699013259": {
+      "kindDom": 259,
+      "position": [
+        636,
+        463
+      ],
+      "id": 1699013259,
+      "time": 1699013159,
+      "name": "kvk ",
+      "positionType": 1
+    },
+    "1699049755": {
+      "kindDom": 259,
+      "position": [
+        112,
+        310
+      ],
+      "id": 1699049755,
+      "time": 1699049655,
+      "name": "kzl ",
+      "positionType": 1
+    },
+    "1699050103": {
+      "kindDom": 259,
+      "position": [
+        568,
+        475
+      ],
+      "id": 1699050103,
+      "time": 1699050003,
+      "name": "One ",
+      "positionType": 1
+    },
+    "1699317321": {
+      "kindDom": 172,
+      "position": [
+        294,
+        363
+      ],
+      "id": 1699317321,
+      "time": 1699317221,
+      "name": " (172)",
+      "positionType": 1
+    },
+    "1699318394": {
+      "kindDom": 172,
+      "position": [
+        332,
+        369
+      ],
+      "id": 1699318394,
+      "time": 1699318294,
+      "name": "(172)",
+      "positionType": 1
+    },
+    "1699484648": {
+      "kindDom": 259,
+      "position": [
+        194,
+        414
+      ],
+      "id": 1699484648,
+      "name": "aRb",
+      "time": 1699484548,
+      "positionType": 1
+    },
+    "1699521488": {
+      "kindDom": 259,
+      "position": [
+        79,
+        183
+      ],
+      "id": 1699521488,
+      "time": 1699521388,
+      "name": "war",
+      "positionType": 1
+    },
+    "1699521514": {
+      "kindDom": 259,
+      "position": [
+        139,
+        148
+      ],
+      "id": 1699521514,
+      "time": 1699521414,
+      "name": "has",
+      "positionType": 1
+    },
+    "1699522927": {
+      "kindDom": 259,
+      "position": [
+        113,
+        664
+      ],
+      "id": 1699522927,
+      "time": 1699522827,
+      "name": "kz1",
+      "positionType": 1
+    },
+    "1699546081": {
+      "time": 1699545981,
+      "position": [
+        299,
+        121
+      ],
+      "id": 1699546081,
+      "kindDom": 259,
+      "name": "259",
+      "positionType": 1
+    },
+    "1699631019": {
+      "kindDom": 172,
+      "position": [
+        315,
+        363
+      ],
+      "id": 1699631019,
+      "time": 1699630919,
+      "name": "MOHAMMAD DANISH(blu)",
+      "positionType": 1
+    },
+    "1699631507": {
+      "kindDom": 259,
+      "position": [
+        268,
+        645
+      ],
+      "id": 1699631507,
+      "time": 1699631407,
+      "name": "tek ",
+      "positionType": 1
+    },
+    "1699845553": {
+      "kindDom": 259,
+      "position": [
+        483,
+        291
+      ],
+      "id": 1699845553,
+      "time": 1699845453,
+      "name": "  ()(KVK)",
+      "positionType": 1
+    },
+    "1700244150": {
+      "kindDom": 259,
+      "position": [
+        95,
+        726
+      ],
+      "id": 1700244150,
+      "time": 1700244050,
+      "name": "ASM GUILDE ",
+      "positionType": 1
+    },
+    "1702249425": {
+      "kindDom": 259,
+      "position": [
+        301,
+        470
+      ],
+      "id": 1702249425,
+      "name": "  ()(KZL)",
+      "time": 1702249325,
+      "positionType": 1
+    },
+    "1705087517": {
+      "time": 1705087417,
+      "position": [
+        484,
+        329
+      ],
+      "id": 1705087517,
+      "kindDom": 259,
+      "name": "Asmer(KVK)",
+      "positionType": 1
+    },
+    "1706302523": {
+      "name": "  ()(KZL)",
+      "position": [
+        361,
+        427
+      ],
+      "id": 1706302523,
+      "kindDom": 259,
+      "time": 1706302423,
+      "positionType": 2
+    },
+    "1707065260": {
+      "kindDom": 259,
+      "position": [
+        63,
+        425
+      ],
+      "id": 1707065260,
+      "time": 1707065160,
+      "name": " ",
+      "positionType": 3
+    },
+    "1707220767": {
+      "kindDom": 259,
+      "position": [
+        326,
+        701
+      ],
+      "id": 1707220767,
+      "name": " ",
+      "time": 1707220667,
+      "positionType": 3
+    }
+  },
+  "pid": 10600784
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134984.9,
+            "1": 48556.4,
+            "2": 57619
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
+
+━━━ <<< RECV cmd=1030 ━━━
+{
+  "cmd": "onemt_1030",
+  "pid": 10600784,
+  "err": "0",
+  "data": {
+    "uid": 10600784,
+    "retdata": {
+      "stageScore": {
+        "163": {
+          "score": {
+            "0": 329932.7,
+            "1": 264132.2,
+            "2": 43867
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 49,
+            "kingdomPlace": 1,
+            "hostKid": 163,
+            "kingName": "46#MaRaL",
+            "kingdomName": "KGT FAMILY#163",
+            "kingdomFlag": 11,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 7267902,
+            "gentingWarTitleEndTime": 1785616209,
+            "kingdomLevel": 0
+          }
+        },
+        "259": {
+          "score": {
+            "0": 134984.9,
+            "1": 48556.4,
+            "2": 57619
+          },
+          "kingdom": {
+            "kingdomQuestId": 0,
+            "gentingWarWinKid": 254,
+            "kingdomPlace": 1,
+            "hostKid": 259,
+            "kingName": "Titil",
+            "kingdomName": "Arkadalar#259",
+            "kingdomFlag": 29,
+            "kingdomUnLock": {
+              "0": 0,
+              "1": 1,
+              "2": 2,
+              "3": 3,
+              "4": 4,
+              "6": 6,
+              "7": 7,
+              "8": 8,
+              "9": 9
+            },
+            "kingUid": 10606961,
+            "gentingWarTitleEndTime": 1785616210,
+            "kingdomLevel": 0
+          }
+        }
+      },
+      "stageAllianceScore": {
+        "0": {
+          "score": 0,
+          "rank": 0
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 0,
+          "rank": 0
+        }
+      },
+      "stagePsnScore": {
+        "0": {
+          "score": 27,
+          "rank": 54
+        },
+        "1": {
+          "score": 0,
+          "rank": 0
+        },
+        "2": {
+          "score": 18,
+          "rank": 28
+        }
+      }
+    }
+  },
+  "subcmd": "6"
+}
