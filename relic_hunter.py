@@ -2,8 +2,6 @@
 import json
 import zlib
 import time
-import sys
-import threading
 import subprocess
 
 XOR_KEY = "OSxHP.!-wd?'lao5"
@@ -107,13 +105,13 @@ function handleCmd(msg) {
 recv('cmd', handleCmd);
 """
 
-class Tester:
+class RelicHunter:
     def __init__(self):
         self._ready = False
         self._fd = -1
         self._script = None
         self._recv_buf = b''
-        self.all_responses = []
+        self.responses = []
 
     def _on_message(self, msg, data):
         if msg['type'] != 'send': return
@@ -143,59 +141,72 @@ class Tester:
             buf = buf[head+sz:]
             d = decode_pkt(pkt)
             if d:
-                self.all_responses.append(d)
+                self.responses.append(d)
         self._recv_buf = buf
 
-    def send(self, cmd, subcmd, data):
+    def test_cmd(self, cmd, subcmd, data, wait=0.8):
+        self.responses.clear()
         self._script.post({'type': 'cmd', 'cmd': str(cmd), 'subcmd': str(subcmd), 'data': data})
+        time.sleep(wait)
+        return list(self.responses)
 
-def run_tests():
-    t = Tester()
+def main():
+    h = RelicHunter()
     device = frida.get_device_manager().get_device("emulator-5554")
     session = device.attach("Empire")
-    t._script = session.create_script(JS_HOOK)
-    t._script.on('message', t._on_message)
-    t._script.load()
+    h._script = session.create_script(JS_HOOK)
+    h._script.on('message', h._on_message)
+    h._script.load()
 
-    for _ in range(20):
-        if t._ready: break
-        time.sleep(0.1)
-
-    if not t._ready:
-        print("[*] Tapping screen via adb...")
+    for _ in range(30):
+        if h._ready: break
         subprocess.run(["adb", "-s", "emulator-5554", "shell", "input", "tap", "500", "500"], capture_output=True)
-        for _ in range(30):
-            if t._ready: break
-            time.sleep(0.1)
+        time.sleep(0.3)
 
-    if not t._ready:
-        print("[!] Failed to connect")
+    if not h._ready:
+        print("[!] Not connected")
         return
 
-    print(f"[+] Connected! fd={t._fd}")
+    print(f"[+] Connected! fd={h._fd}")
 
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
-    ]
+    # 1. Test 1008/1 (Relics Module - Init / Query)
+    print("\n--- Testing 1008/1 (CMD_RELICS_EXPLORE_MODULE) ---")
+    res1008 = h.test_cmd('1008', '1', {})
+    for r in res1008:
+        print(f"1008/1 -> {json.dumps(r, ensure_ascii=False)}")
 
-    for cmd, subcmd, data in candidates:
-        print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
-        print(f"==========================================")
-        t.all_responses.clear()
-        t.send(cmd, subcmd, data)
-        time.sleep(1.5)
-        if t.all_responses:
-            for r in t.all_responses:
-                print(f" -> {json.dumps(r, ensure_ascii=False)}")
-        else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+    # 2. Test 1008/2
+    print("\n--- Testing 1008/2 ---")
+    res1008_2 = h.test_cmd('1008', '2', {})
+    for r in res1008_2:
+        print(f"1008/2 -> {json.dumps(r, ensure_ascii=False)}")
+
+    # 3. Test 2011/3 for all candidate mapTypes
+    candidate_types = [7, 8, 16, 17, 18, 19, 20, 24, 25, 27, 28, 30, 31, 32, 33, 34, 36, 37, 38, 39, 40]
+    print(f"\n--- Testing 2011/3 candidate mapTypes ---")
+    for mt in candidate_types:
+        for st in [0, 1]:
+            req = {
+                "mapType": mt,
+                "subType": st,
+                "x": 397,
+                "y": 268,
+                "num": 5,
+                "range": 500,
+                "minLv": 1,
+                "maxLv": 30,
+                "exclude": {}
+            }
+            res = h.test_cmd('2011', '3', req, wait=0.5)
+            for r in res:
+                if r.get('cmd') in ('2011', 'onemt_2011') and str(r.get('subcmd')) == '3':
+                    result = r.get('result', [])
+                    err = r.get('err', '0')
+                    cnt = len(result) if isinstance(result, (list, dict)) else 0
+                    if cnt > 0:
+                        print(f"🎯 FOUND RESULT! mapType={mt}, subType={st} -> Count={cnt} -> {json.dumps(result, ensure_ascii=False)}")
+                    elif err == '0':
+                        print(f"✅ Schema valid (err=0): mapType={mt}, subType={st}")
 
 if __name__ == '__main__':
-    run_tests()
+    main()

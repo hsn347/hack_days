@@ -174,28 +174,30 @@ def run_tests():
 
     print(f"[+] Connected! fd={t._fd}")
 
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
+    # Test candidate searches
+    tests = [
+        ("2011", "1", {"x": 485, "y": 289, "level": 1}),
+        ("2011", "1", {"x": 485, "y": 289, "level": 5}),
+        ("2011", "1", {"x": 485, "y": 289, "level": 10}),
+        ("2011", "4", {"x": 485, "y": 289, "level": 1}),
+        ("2011", "5", {}),
+        ("2011", "6", {}),
+        ("2011", "3", {"mapType": 2, "x": 485, "y": 289, "num": 5, "range": 200, "minLv": 1, "maxLv": 5, "exclude": {}}),
+        ("2011", "3", {"mapType": 6, "x": 485, "y": 289, "num": 5, "range": 200, "minLv": 1, "maxLv": 5, "exclude": {}}),
     ]
 
-    for cmd, subcmd, data in candidates:
+    for cmd, subcmd, data in tests:
         print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
+        print(f" testing CMD={cmd} SUBCMD={subcmd} DATA={data}")
         print(f"==========================================")
         t.all_responses.clear()
         t.send(cmd, subcmd, data)
-        time.sleep(1.5)
+        time.sleep(1.2)
         if t.all_responses:
             for r in t.all_responses:
                 print(f" -> {json.dumps(r, ensure_ascii=False)}")
         else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+            print(" -> [NO RESPONSE]")
 
 if __name__ == '__main__':
     run_tests()

@@ -107,7 +107,7 @@ function handleCmd(msg) {
 recv('cmd', handleCmd);
 """
 
-class Tester:
+class Scanner:
     def __init__(self):
         self._ready = False
         self._fd = -1
@@ -149,53 +149,55 @@ class Tester:
     def send(self, cmd, subcmd, data):
         self._script.post({'type': 'cmd', 'cmd': str(cmd), 'subcmd': str(subcmd), 'data': data})
 
-def run_tests():
-    t = Tester()
+def run_scan():
+    s = Scanner()
     device = frida.get_device_manager().get_device("emulator-5554")
     session = device.attach("Empire")
-    t._script = session.create_script(JS_HOOK)
-    t._script.on('message', t._on_message)
-    t._script.load()
+    s._script = session.create_script(JS_HOOK)
+    s._script.on('message', s._on_message)
+    s._script.load()
 
     for _ in range(20):
-        if t._ready: break
+        if s._ready: break
         time.sleep(0.1)
 
-    if not t._ready:
+    if not s._ready:
         print("[*] Tapping screen via adb...")
         subprocess.run(["adb", "-s", "emulator-5554", "shell", "input", "tap", "500", "500"], capture_output=True)
         for _ in range(30):
-            if t._ready: break
+            if s._ready: break
             time.sleep(0.1)
 
-    if not t._ready:
+    if not s._ready:
         print("[!] Failed to connect")
         return
 
-    print(f"[+] Connected! fd={t._fd}")
+    print(f"[+] Connected! Testing all mapType & subType values...")
 
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
-    ]
-
-    for cmd, subcmd, data in candidates:
-        print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
-        print(f"==========================================")
-        t.all_responses.clear()
-        t.send(cmd, subcmd, data)
-        time.sleep(1.5)
-        if t.all_responses:
-            for r in t.all_responses:
-                print(f" -> {json.dumps(r, ensure_ascii=False)}")
-        else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+    for m_type in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19]:
+        for s_type in [0, 1, 2, 3, 4, 5]:
+            req = {
+                "mapType": m_type,
+                "subType": s_type,
+                "x": 485,
+                "y": 289,
+                "num": 5,
+                "range": 500,
+                "minLv": 1,
+                "maxLv": 35,
+                "exclude": {}
+            }
+            s.all_responses.clear()
+            s.send("2011", "3", req)
+            time.sleep(0.4)
+            
+            for r in s.all_responses:
+                if r.get('cmd') == '2011' and r.get('subcmd') == '3':
+                    res = r.get('result')
+                    if res and len(res) > 0:
+                        print(f"🌟 FOUND! mapType={m_type} subType={s_type} -> {len(res)} results: {json.dumps(res[:2], ensure_ascii=False)}")
+                    elif isinstance(res, dict) and len(res) > 0:
+                        print(f"🌟 FOUND DICT! mapType={m_type} subType={s_type} -> {json.dumps(res, ensure_ascii=False)}")
 
 if __name__ == '__main__':
-    run_tests()
+    run_scan()

@@ -4678,3 +4678,75 @@
 [2026-08-21 01:23:45][INFO] <- cmd=1009 subcmd=30
 [2026-08-21 01:24:12][INFO] <- cmd=1009 subcmd=19
 [2026-08-21 01:24:42][INFO] -> cmd=1037 sess=3
+[2026-08-24 11:31:10][INFO] ==================================================
+[2026-08-24 11:31:10][INFO]  ONEMT Bot - بوت مهمة الميناء
+[2026-08-24 11:31:10][INFO] ==================================================
+[2026-08-24 11:31:10][INFO] [HTTP] Logging in via email/password...
+[2026-08-24 11:31:10][INFO] [Cache] Using cached session for johan2003@yopmail.com
+[2026-08-24 11:31:10][INFO] [HTTP] Got session: v4uCZ9Nj4sJHolyS2EwiH7D7qAda0bjoko5GQq5e...
+[2026-08-24 11:31:10][INFO] Login Server: 119.8.212.255:10000
+[2026-08-24 11:31:10][INFO] Login Server: 119.8.212.255:10000
+[2026-08-24 11:31:10][INFO] DH Handshake...
+[2026-08-24 11:31:10][INFO]   Challenge: 4g8Aw/9OpR8=
+[2026-08-24 11:31:10][INFO]   ClientKey sent: 2sVOs+5VRLA=
+[2026-08-24 11:31:10][INFO]   ServerKey: 9YaBM7Rdzmw=
+[2026-08-24 11:31:10][INFO]   Secret: b9bbf830db54d69a
+[2026-08-24 11:31:10][INFO]   HMAC sent: 1ZCpb655ncs=
+[2026-08-24 11:31:10][INFO]   Handshake resp: 200 challenge success
+[2026-08-24 11:31:10][INFO]   Token sent
+[2026-08-24 11:31:11][INFO]   Auth resp: 200 TWpVNUBhMjlvWDJkaGJXVmZNalk9QE1URTVMamd1TWpFekxqRXpNUT09QE5EQXdNQT09QE56WTBPREE9QE1UQTJNREEzTkRN
+[2026-08-24 11:31:11][INFO]   Gate: 119.8.213.131:4000
+[2026-08-24 11:31:11][INFO]   UID: 10600743 Server: koh_game_26
+[2026-08-24 11:31:11][INFO] Gate: 119.8.213.131:4000
+[2026-08-24 11:31:11][INFO] UID: 10600743 | Server: koh_game_26
+[2026-08-24 11:31:11][INFO] Gate: 119.8.213.131:4000
+[2026-08-24 11:31:11][INFO] [OK] Gate connected
+[2026-08-24 11:31:11][INFO] Gate handshake resp: b'\x00\x06200 OK'
+[2026-08-24 11:31:11][INFO] [OK] Gate authenticated!
+[2026-08-24 11:31:11][INFO] === مهمة الميناء ===
+[2026-08-24 11:31:11][INFO] -> cmd=1033 sess=1
+[2026-08-24 11:31:11][INFO] Waiting 300s...
+[2026-08-24 11:31:12][INFO] <- cmd=1009
+[2026-08-24 11:31:12][INFO] <- cmd=1033
+[2026-08-24 11:31:12][INFO] <- cmd=1009
+[2026-08-24 11:31:12][INFO] <- cmd=1009
+[2026-08-24 11:31:12][INFO] <- cmd=1009
+[2026-08-24 11:31:12][INFO] <- cmd=1009
+[2026-08-24 11:31:27][INFO] <- cmd=1009
+[2026-08-24 11:31:27][INFO] <- cmd=1009
+[2026-08-26 06:39:39][INFO] ==================================================
+[2026-08-26 06:39:39][INFO]  ONEMT Bot - بوت مهمة الميناء
+[2026-08-26 06:39:39][INFO] ==================================================
+[2026-08-26 06:39:39][INFO] [HTTP] Logging in via email/password...
+[2026-08-26 06:39:39][INFO] [Cache] Using cached session for hmzawyha44@gmail.com
+[2026-08-26 06:39:39][INFO] [HTTP] Got session: wzCZcveBYoDYsiNy5iA5GQsum1989Eh6UE4KFRJc...
+[2026-08-26 06:39:39][INFO] Login Server: 119.8.212.255:10000
+[2026-08-26 06:39:39][INFO] Login Server: 119.8.212.255:10000
+[2026-08-26 06:39:39][INFO] DH Handshake...
+[2026-08-26 06:39:39][INFO]   Challenge: J47KfEClsqw=
+[2026-08-26 06:39:39][INFO]   ClientKey sent: oNNQlkvR4t8=
+[2026-08-26 06:39:39][INFO]   ServerKey: 4BTx1xif6a4=
+[2026-08-26 06:39:39][INFO]   Secret: 7cd7211708158a7c
+[2026-08-26 06:39:39][INFO]   HMAC sent: Ye1dLvx/Dns=
+[2026-08-26 06:39:40][INFO]   Handshake resp: 200 challenge success
+[2026-08-26 06:39:40][INFO]   Token sent
+[2026-08-26 06:39:40][INFO]   Auth resp: 200 TWpVNUBhMjlvWDJkaGJXVmZNalk9QE1URTVMamd1TWpFekxqRXpNUT09QE5EQXdNQT09QE9UVXhNak09QE1UQTFPVGc1TVRN
+[2026-08-26 06:39:40][INFO]   Gate: 119.8.213.131:4000
+[2026-08-26 06:39:40][INFO]   UID: 10598913 Server: koh_game_26
+[2026-08-26 06:39:40][INFO] Gate: 119.8.213.131:4000
+[2026-08-26 06:39:40][INFO] UID: 10598913 | Server: koh_game_26
+[2026-08-26 06:39:40][INFO] Gate: 119.8.213.131:4000
+[2026-08-26 06:39:40][INFO] [OK] Gate connected
+[2026-08-26 06:39:40][INFO] Gate handshake resp: b'\x00\x06200 OK'
+[2026-08-26 06:39:40][INFO] [OK] Gate authenticated!
+[2026-08-26 06:39:40][INFO] === مهمة الميناء ===
+[2026-08-26 06:39:40][INFO] -> cmd=1033 sess=1
+[2026-08-26 06:39:40][INFO] Waiting 300s...
+[2026-08-26 06:39:40][INFO] <- cmd=1009
+[2026-08-26 06:39:40][INFO] <- cmd=1009
+[2026-08-26 06:39:40][INFO] <- cmd=1033
+[2026-08-26 06:39:40][INFO] <- cmd=1009
+[2026-08-26 06:39:40][INFO] <- cmd=1009
+[2026-08-26 06:39:50][INFO] <- cmd=1009
+[2026-08-26 06:39:53][INFO] <- cmd=1009
+[2026-08-26 06:39:54][INFO] Stopped

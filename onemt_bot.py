@@ -8,7 +8,7 @@
 3. TCP gate server → handshake → أوامر اللعبة
 
 python onemt_bot.py --email EMAIL --password PASS
-python onemt_bot.py --email johan2003@yopmail.com --password aalloo33
+python onemt_bot.py --email hmzawyha44@gmail.com --password aalloo33
 """
 
 import socket, json, time, struct, zlib, hashlib, hmac as hmac_mod, base64, urllib.request, urllib.parse
@@ -199,59 +199,18 @@ def decode_gate_response(pkt: bytes):
     ok      = pkt[-5]
     session = struct.unpack('>I', pkt[-4:])[0]
     raw     = pkt[:-5]
-    if not ok:
-        # لا ترمي الحزمة — حاول فكها على أي حال (بعض الحزم الكبيرة ok=0)
-        log.debug(f"[decode] ok=0 session={session} rawLen={len(raw)}")
-        # حاول Zlib أولاً
-        decompressed = False
-        for method in [lambda r: zlib.decompress(r, -15), lambda r: zlib.decompress(r), lambda r: zlib.decompress(r, 15+32)]:
-            try:
-                raw = method(raw)
-                decompressed = True
-                break
-            except: pass
-        if decompressed:
-            try:
-                c = json.loads(xor_crypt(raw))
-                if c.get('cmd','').startswith(CMD_PREFIX):
-                    c['cmd'] = c['cmd'][len(CMD_PREFIX):]
-                log.info(f"[decode] ✅ ok=0 لكن تم فك الضغط! cmd={c.get('cmd','?')} size={len(raw)}")
-                return {'ok': True, 'content': c, 'session': session}
-            except: pass
-        # حاول XOR مباشرة بدون Zlib
-        try:
-            c = json.loads(xor_crypt(raw))
-            if c.get('cmd','').startswith(CMD_PREFIX):
-                c['cmd'] = c['cmd'][len(CMD_PREFIX):]
-            log.info(f"[decode] ✅ ok=0 XOR مباشر! cmd={c.get('cmd','?')}")
-            return {'ok': True, 'content': c, 'session': session}
-        except: pass
-        log.warning(f"[decode] ❌ حزمة مرفوضة ok=0 session={session} rawLen={len(raw)} first20={raw[:20].hex()}")
-        return {'ok': False, 'session': session}
-    
-    # ok != 0 (الحزمة سليمة)
+    if not ok: return {'ok': False, 'session': session}
     if session == 0:
-        # حزمة مضغوطة — جرب كل طرق Zlib
-        original_raw = raw
-        for method_name, method in [
-            ("raw-15", lambda r: zlib.decompress(r, -15)),
-            ("raw",    lambda r: zlib.decompress(r)),
-            ("raw+32", lambda r: zlib.decompress(r, 15+32)),
-        ]:
-            try:
-                raw = method(original_raw)
-                log.debug(f"[decode] Zlib {method_name}: {len(original_raw)} → {len(raw)} bytes")
-                break
-            except Exception as e:
-                raw = original_raw
-                continue
+        try:    raw = zlib.decompress(raw, -15)
+        except:
+            try: raw = zlib.decompress(raw)
+            except: pass
     try:
         c = json.loads(xor_crypt(raw))
         if c.get('cmd','').startswith(CMD_PREFIX):
             c['cmd'] = c['cmd'][len(CMD_PREFIX):]
         return {'ok': True, 'content': c, 'session': session}
-    except Exception as e:
-        log.warning(f"[decode] JSON parse failed: {e} | rawLen={len(raw)} first50={xor_crypt(raw)[:50]}")
+    except:
         return {'ok': True, 'raw': xor_crypt(raw).decode('utf-8','replace')}
 
 # ============================================================
@@ -516,13 +475,12 @@ class GateBot:
                             if data.get('retdata'):
                                 self.castle_data['_lastTrainResult'] = data
                         
-                        # أي cmd آخر: نخزن الرد كاملاً مع الـ subcmd
+                        # أي cmd آخر: نخزن الرد كاملاً
                         else:
-                            subcmd = c.get('subcmd', '')
-                            self.castle_data[f'_cmd_{cmd}_{subcmd}'] = c
+                            self.castle_data[f'_cmd_{cmd}'] = c
                         
                         if cmd not in ('1037',):
-                            log.info(f"<- cmd={cmd} subcmd={c.get('subcmd', '')}")
+                            log.info(f"<- cmd={cmd}")
                         
                         # تحديث الملف
                         if not self.initial_data_received.is_set():
@@ -543,7 +501,7 @@ class GateBot:
         for item in notify_data:
             if not isinstance(item, dict): continue
             
-            # NOTIFY_CITY: موارد القلعة والمباني
+            # NOTIFY_CITY: موارد القلعة
             if notify_id == 'NOTIFY_CITY':
                 if 'saferes' in item:
                     self.castle_data['_resources'] = {
@@ -551,8 +509,6 @@ class GateBot:
                         'change': item.get('res', {}),
                         'max': item.get('maxRes', {}),
                     }
-                if 'build' in item:
-                    self.castle_data['_buildings'] = item.get('build', {})
             
             # NOTIFY_LORD: بيانات اللورد (القوة، الخسائر، إلخ)
             elif notify_id == 'NOTIFY_LORD':
@@ -608,7 +564,6 @@ class GateBot:
         
         # الأوامر الأولية حسب ترتيب اللعبة
         init_cmds = [
-            ("1001", "1",  {}),                          # بيانات المدينة والمباني (مهم جداً!)
             ("1011", "9",  {}),                          # بيانات عامة
             ("1011", "15", {}),                          # بيانات عامة
             ("1005", "5",  {"bid": "119"}),              # بيانات الجيش - ثكنة 119

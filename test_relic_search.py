@@ -3,7 +3,6 @@ import json
 import zlib
 import time
 import sys
-import threading
 import subprocess
 
 XOR_KEY = "OSxHP.!-wd?'lao5"
@@ -107,13 +106,13 @@ function handleCmd(msg) {
 recv('cmd', handleCmd);
 """
 
-class Tester:
+class BotTester:
     def __init__(self):
         self._ready = False
         self._fd = -1
         self._script = None
         self._recv_buf = b''
-        self.all_responses = []
+        self.responses = {}
 
     def _on_message(self, msg, data):
         if msg['type'] != 'send': return
@@ -142,60 +141,86 @@ class Tester:
             pkt = buf[head:head+sz]
             buf = buf[head+sz:]
             d = decode_pkt(pkt)
-            if d:
-                self.all_responses.append(d)
+            if d and 'subcmd' in d:
+                sub = str(d['subcmd'])
+                self.responses[sub] = d
         self._recv_buf = buf
 
-    def send(self, cmd, subcmd, data):
+    def query(self, cmd, subcmd, data, timeout=1.0):
+        self.responses.pop(str(subcmd), None)
         self._script.post({'type': 'cmd', 'cmd': str(cmd), 'subcmd': str(subcmd), 'data': data})
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if str(subcmd) in self.responses:
+                return self.responses[str(subcmd)]
+            time.sleep(0.02)
+        return None
 
-def run_tests():
-    t = Tester()
+def main():
+    bot = BotTester()
     device = frida.get_device_manager().get_device("emulator-5554")
     session = device.attach("Empire")
-    t._script = session.create_script(JS_HOOK)
-    t._script.on('message', t._on_message)
-    t._script.load()
+    bot._script = session.create_script(JS_HOOK)
+    bot._script.on('message', bot._on_message)
+    bot._script.load()
 
     for _ in range(20):
-        if t._ready: break
+        if bot._ready: break
         time.sleep(0.1)
 
-    if not t._ready:
-        print("[*] Tapping screen via adb...")
+    if not bot._ready:
+        print("[*] Tapping screen...")
         subprocess.run(["adb", "-s", "emulator-5554", "shell", "input", "tap", "500", "500"], capture_output=True)
         for _ in range(30):
-            if t._ready: break
+            if bot._ready: break
             time.sleep(0.1)
 
-    if not t._ready:
-        print("[!] Failed to connect")
+    if not bot._ready:
+        print("[!] Not connected")
         return
 
-    print(f"[+] Connected! fd={t._fd}")
+    print(f"[+] Connected to game! fd={bot._fd}")
 
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
-    ]
+    # Get Castle Coords
+    r_me = bot.query('1002', '9', {})
+    my_uid = r_me.get('pid', 0) if r_me else 0
+    r_castle = bot.query('1006', '25', {"uid": my_uid})
+    cx = r_castle['retData']['x'] if r_castle and 'retData' in r_castle else 397
+    cy = r_castle['retData']['y'] if r_castle and 'retData' in r_castle else 268
 
-    for cmd, subcmd, data in candidates:
-        print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
-        print(f"==========================================")
-        t.all_responses.clear()
-        t.send(cmd, subcmd, data)
-        time.sleep(1.5)
-        if t.all_responses:
-            for r in t.all_responses:
-                print(f" -> {json.dumps(r, ensure_ascii=False)}")
-        else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+    print(f"[+] Searching around ({cx}, {cy})... Testing mapTypes 1 to 50")
+
+    found = []
+    # Test all mapTypes
+    for mtype in range(1, 51):
+        for stype in [0, 1]:
+            payload = {
+                "mapType": mtype,
+                "subType": stype,
+                "num": 5,
+                "range": 500,
+                "minLv": 1,
+                "maxLv": 35,
+                "exclude": {},
+                "x": cx,
+                "y": cy
+            }
+            res = bot.query('2011', '3', payload, timeout=0.8)
+            if res:
+                err = res.get('err', '0')
+                result = res.get('result', [])
+                count = len(result) if isinstance(result, list) else (len(result) if isinstance(result, dict) else 0)
+                if count > 0:
+                    sample = result[0] if isinstance(result, list) else result
+                    print(f"🌟 MATCH! mapType={mtype:2d}, subType={stype} -> Count={count} -> Sample: {json.dumps(sample, ensure_ascii=False)}")
+                    found.append((mtype, stype, count, sample))
+                elif err == '0':
+                    # Server accepted mapType without error (schema is valid)
+                    pass
+
+    print("\n================ SUMMARY ================")
+    for m, s, c, samp in found:
+        print(f"mapType: {m}, subType: {s} -> {c} items found -> sample ID: {samp.get('id', samp)}")
 
 if __name__ == '__main__':
-    run_tests()
+    main()

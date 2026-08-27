@@ -2,8 +2,6 @@
 import json
 import zlib
 import time
-import sys
-import threading
 import subprocess
 
 XOR_KEY = "OSxHP.!-wd?'lao5"
@@ -107,13 +105,13 @@ function handleCmd(msg) {
 recv('cmd', handleCmd);
 """
 
-class Tester:
+class Diagnostic:
     def __init__(self):
         self._ready = False
         self._fd = -1
         self._script = None
         self._recv_buf = b''
-        self.all_responses = []
+        self.last_res = None
 
     def _on_message(self, msg, data):
         if msg['type'] != 'send': return
@@ -143,59 +141,60 @@ class Tester:
             buf = buf[head+sz:]
             d = decode_pkt(pkt)
             if d:
-                self.all_responses.append(d)
+                if d.get('cmd') in ('2011', '1008', '3066', 'onemt_2011'):
+                    self.last_res = d
         self._recv_buf = buf
 
-    def send(self, cmd, subcmd, data):
+    def query(self, cmd, subcmd, data, timeout=2.0):
+        self.last_res = None
         self._script.post({'type': 'cmd', 'cmd': str(cmd), 'subcmd': str(subcmd), 'data': data})
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if self.last_res:
+                return self.last_res
+            time.sleep(0.05)
+        return None
 
-def run_tests():
-    t = Tester()
+def test():
+    d = Diagnostic()
     device = frida.get_device_manager().get_device("emulator-5554")
     session = device.attach("Empire")
-    t._script = session.create_script(JS_HOOK)
-    t._script.on('message', t._on_message)
-    t._script.load()
+    d._script = session.create_script(JS_HOOK)
+    d._script.on('message', d._on_message)
+    d._script.load()
 
     for _ in range(20):
-        if t._ready: break
+        if d._ready: break
         time.sleep(0.1)
 
-    if not t._ready:
-        print("[*] Tapping screen via adb...")
+    if not d._ready:
         subprocess.run(["adb", "-s", "emulator-5554", "shell", "input", "tap", "500", "500"], capture_output=True)
         for _ in range(30):
-            if t._ready: break
+            if d._ready: break
             time.sleep(0.1)
 
-    if not t._ready:
-        print("[!] Failed to connect")
-        return
+    print(f"[+] Connected fd={d._fd}")
 
-    print(f"[+] Connected! fd={t._fd}")
-
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
+    # Test the user's verified queries:
+    # 1) Resources: mapType=5, subType=2
+    # 2) Rebels: mapType=35, subType=0
+    # 3) Stronghold: mapType=26, subType=0
+    # 4) Invaders: mapType=6, subType=0
+    known = [
+        ("Resources (Wood)", {"mapType": 5, "subType": 2, "num": 1, "minLv": 1, "maxLv": 6, "range": 100, "x": 397, "y": 268, "exclude": {}}),
+        ("Rebels", {"mapType": 35, "subType": 0, "num": 1, "minLv": 1, "maxLv": 30, "range": 100, "x": 397, "y": 268, "exclude": {}}),
+        ("Stronghold", {"mapType": 26, "subType": 0, "num": 1, "minLv": 1, "maxLv": 30, "range": 100, "x": 397, "y": 268, "exclude": {}}),
+        ("Invaders", {"mapType": 6, "subType": 0, "num": 1, "minLv": 1, "maxLv": 30, "range": 100, "x": 397, "y": 268, "exclude": {}}),
     ]
 
-    for cmd, subcmd, data in candidates:
-        print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
-        print(f"==========================================")
-        t.all_responses.clear()
-        t.send(cmd, subcmd, data)
-        time.sleep(1.5)
-        if t.all_responses:
-            for r in t.all_responses:
-                print(f" -> {json.dumps(r, ensure_ascii=False)}")
+    for label, payload in known:
+        res = d.query("2011", "3", payload)
+        print(f"\n--- {label} (mapType={payload['mapType']}, subType={payload['subType']}) ---")
+        if res:
+            print(f"Result count: {len(res.get('result', []))} | err: {res.get('err')}")
+            print(f"Data: {json.dumps(res, ensure_ascii=False)}")
         else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+            print("No response / timeout")
 
 if __name__ == '__main__':
-    run_tests()
+    test()

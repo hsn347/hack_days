@@ -1,10 +1,4 @@
-﻿import frida
-import json
-import zlib
-import time
-import sys
-import threading
-import subprocess
+﻿import frida, json, zlib, time, subprocess
 
 XOR_KEY = "OSxHP.!-wd?'lao5"
 
@@ -16,28 +10,21 @@ def decode_pkt(pkt: bytes):
     if len(pkt) < 4: return None
     body = pkt[2:-2]
     dec = xor_crypt(body, XOR_KEY)
-    text = None
     try:
-        text = zlib.decompress(dec, -15).decode('utf-8', errors='ignore')
+        return json.loads(zlib.decompress(dec, -15).decode('utf-8', errors='ignore'))
     except:
         try:
-            text = dec.decode('utf-8', errors='ignore')
+            return json.loads(dec.decode('utf-8', errors='ignore'))
         except:
-            pass
-    if text:
-        try:
-            return json.loads(text)
-        except:
-            pass
-    return None
+            return None
 
-JS_HOOK = """
+JS_HOOK = '''
 var libc = Process.getModuleByName('libc.so');
 var _fd = -1, _session = 0, _started = false;
 var XOR_KEY = "OSxHP.!-wd?'lao5";
 
 function buildPacket(cmd, subcmd, data) {
-    var raw = JSON.stringify({cmd: String(cmd), subcmd: String(subcmd), data: data});
+    var raw = JSON.stringify({cmd: "onemt_" + cmd, subcmd: String(subcmd), data: data});
     var enc = []; var k = XOR_KEY;
     for (var i = 0; i < raw.length; i++) enc.push(raw.charCodeAt(i) ^ k.charCodeAt(i % k.length));
     var len = enc.length + 4;
@@ -105,97 +92,52 @@ function handleCmd(msg) {
     recv('cmd', handleCmd);
 }
 recv('cmd', handleCmd);
-"""
+'''
 
-class Tester:
-    def __init__(self):
-        self._ready = False
-        self._fd = -1
-        self._script = None
-        self._recv_buf = b''
-        self.all_responses = []
-
-    def _on_message(self, msg, data):
+def test_heroes():
+    device = frida.get_device_manager().get_device("emulator-5554")
+    session = device.attach("Empire")
+    script = session.create_script(JS_HOOK)
+    
+    ready = [False]
+    responses = []
+    
+    def on_message(msg, data):
         if msg['type'] != 'send': return
         p = msg.get('payload', {})
         t = p.get('type','')
         if t == 'ready':
-            self._fd = p['fd']
-            self._ready = True
+            ready[0] = True
         elif t == 'data' and data:
-            self._recv_buf += bytes(data)
-            self._try_parse()
+            d = decode_pkt(bytes(data))
+            if d: responses.append(d)
 
-    def _try_parse(self):
-        buf = self._recv_buf
-        while len(buf) >= 2:
-            sz = buf[0]*256 + buf[1]
-            head = 2
-            if sz == 0xFFFF:
-                if len(buf) < 5: break
-                sz = buf[2]*65536 + buf[3]*256 + buf[4]
-                head = 5
-            if sz < 4 or sz > 200000:
-                buf = buf[1:]
-                continue
-            if len(buf) < head + sz: break
-            pkt = buf[head:head+sz]
-            buf = buf[head+sz:]
-            d = decode_pkt(pkt)
-            if d:
-                self.all_responses.append(d)
-        self._recv_buf = buf
-
-    def send(self, cmd, subcmd, data):
-        self._script.post({'type': 'cmd', 'cmd': str(cmd), 'subcmd': str(subcmd), 'data': data})
-
-def run_tests():
-    t = Tester()
-    device = frida.get_device_manager().get_device("emulator-5554")
-    session = device.attach("Empire")
-    t._script = session.create_script(JS_HOOK)
-    t._script.on('message', t._on_message)
-    t._script.load()
+    script.on('message', on_message)
+    script.load()
 
     for _ in range(20):
-        if t._ready: break
-        time.sleep(0.1)
-
-    if not t._ready:
-        print("[*] Tapping screen via adb...")
+        if ready[0]: break
         subprocess.run(["adb", "-s", "emulator-5554", "shell", "input", "tap", "500", "500"], capture_output=True)
-        for _ in range(30):
-            if t._ready: break
-            time.sleep(0.1)
+        time.sleep(0.2)
 
-    if not t._ready:
-        print("[!] Failed to connect")
-        return
+    print(f"[+] Connected = {ready[0]}")
+    if not ready[0]: return
 
-    print(f"[+] Connected! fd={t._fd}")
-
-    candidates = [
-        ("1007", "1000", {}),
-        ("1007", "16", {}),
-        ("1006", "22", {}),
-        ("1006", "42", {}),
-        ("1005", "1", {}),
-        ("1003", "1", {}),
-        ("1006", "1000", {"centerY": 0, "centerKid": 0, "centerX": 0}),
-    ]
-
-    for cmd, subcmd, data in candidates:
-        print(f"\n==========================================")
-        print(f" testing CMD={cmd} SUBCMD={subcmd}")
-        print(f"==========================================")
-        t.all_responses.clear()
-        t.send(cmd, subcmd, data)
-        time.sleep(1.5)
-        if t.all_responses:
-            for r in t.all_responses:
-                print(f" -> {json.dumps(r, ensure_ascii=False)}")
-        else:
-            print(" -> [NO RESPONSE / TIMEOUT]")
+    # Test 1000/1
+    print("\n--- Testing 1000/1 ---")
+    responses.clear()
+    script.post({'type': 'cmd', 'cmd': '1000', 'subcmd': '1', 'data': {}})
+    time.sleep(2.0)
+    for r in responses:
+        cmd = r.get('cmd', '')
+        sub = r.get('subcmd', '')
+        keys = list(r.get('retdata', r.get('data', {})).keys())
+        print(f"Response: cmd={cmd}, subcmd={sub}, keys count={len(keys)}")
+        data_dict = r.get('retdata', r.get('data', {}))
+        if 'heroCtrl' in data_dict:
+            h = data_dict['heroCtrl']
+            print(f"🌟 heroCtrl keys: {list(h.keys())}")
+            print(f"🌟 heroCtrl sample: {json.dumps(h, ensure_ascii=False, indent=2)}")
 
 if __name__ == '__main__':
-    run_tests()
+    test_heroes()
