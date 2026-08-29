@@ -1647,3 +1647,599 @@
 [2026-08-29 07:11:39][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
 [2026-08-29 07:11:39][ERROR] [nmrn65794@gmail.com] ❌ فشل إرسال المسيرة - كود الخطأ: 8009
 [2026-08-29 07:11:39][INFO] [nmrn65794@gmail.com] 🏁 ملخص المسيرات: تم إرسال 3 مسيرة/مسيرات بنجاح.
+[2026-08-29 07:22:48][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 07:22:49][INFO] DH Handshake...
+[2026-08-29 07:22:49][INFO]   Challenge: h+OysP7j0ZM=
+[2026-08-29 07:22:49][INFO]   ClientKey sent: 6GdB4wfwI44=
+[2026-08-29 07:22:49][INFO]   ServerKey: YCGrgvnIzqE=
+[2026-08-29 07:22:49][INFO]   Secret: 4bdce83a689019b7
+[2026-08-29 07:22:49][INFO]   HMAC sent: idHuHu9Tqwo=
+[2026-08-29 07:22:49][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 07:22:49][INFO]   Token sent
+[2026-08-29 07:22:49][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UWTVNelUwQE9UZ3pPRFF6QEBN
+[2026-08-29 07:22:49][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 07:22:49][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 07:22:49][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 07:22:49][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 08:49:31][WARNING] [Gate] recv: [WinError 10054] An existing connection was forcibly closed by the remote host
+[2026-08-29 08:56:26][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 08:56:26][INFO] DH Handshake...
+[2026-08-29 08:56:26][INFO]   Challenge: iknhvmiu/jc=
+[2026-08-29 08:56:26][INFO]   ClientKey sent: Eg0kiuKWLZY=
+[2026-08-29 08:56:26][INFO]   ServerKey: DzpfcY7A+KI=
+[2026-08-29 08:56:26][INFO]   Secret: 5a759cd9baac15a3
+[2026-08-29 08:56:26][INFO]   HMAC sent: 4hm9+PBZlm8=
+[2026-08-29 08:56:26][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 08:56:27][INFO]   Token sent
+[2026-08-29 08:56:27][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3dNVGMyQE9UZ3pPRFF6QEBN
+[2026-08-29 08:56:27][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 08:56:27][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 08:56:27][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 08:56:27][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 08:56:37][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 08:56:57][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 08:56:57][INFO] DH Handshake...
+[2026-08-29 08:56:57][INFO]   Challenge: lxerqecq650=
+[2026-08-29 08:56:57][INFO]   ClientKey sent: pw8lTCx7Upw=
+[2026-08-29 08:56:57][INFO]   ServerKey: D9kYOxgPv7I=
+[2026-08-29 08:56:57][INFO]   Secret: 3aad9c99700d0683
+[2026-08-29 08:56:57][INFO]   HMAC sent: 7NBUqJSpAh4=
+[2026-08-29 08:56:57][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 08:56:57][INFO]   Token sent
+[2026-08-29 08:56:57][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3dNVGd5QE9UZ3pPRFF6QEBN
+[2026-08-29 08:56:57][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 08:56:57][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 08:56:57][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 08:56:58][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 08:59:01][WARNING] [Gate] recv: [WinError 10054] An existing connection was forcibly closed by the remote host
+[2026-08-29 08:59:01][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 11:07:23][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:07:23][INFO] DH Handshake...
+[2026-08-29 11:07:23][INFO]   Challenge: LEQII+R0dWM=
+[2026-08-29 11:07:23][INFO]   ClientKey sent: 9E3qipBtddU=
+[2026-08-29 11:07:23][INFO]   ServerKey: pDiQeZ7Gm0o=
+[2026-08-29 11:07:23][INFO]   Secret: db667d5ea25fcd08
+[2026-08-29 11:07:23][INFO]   HMAC sent: Z2/PEGoSOdg=
+[2026-08-29 11:07:24][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:07:24][INFO]   Token sent
+[2026-08-29 11:07:25][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hNekUzQE9UZ3pPRFF6QEBN
+[2026-08-29 11:07:25][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:07:25][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:07:25][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:07:25][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:08:26][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 11:11:18][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:11:19][INFO] DH Handshake...
+[2026-08-29 11:11:19][INFO]   Challenge: dy3VZv+mLbw=
+[2026-08-29 11:11:19][INFO]   ClientKey sent: 1aVYayp8e9I=
+[2026-08-29 11:11:19][INFO]   ServerKey: BZN9zlRAByI=
+[2026-08-29 11:11:19][INFO]   Secret: 9e1fccf93a0dd70e
+[2026-08-29 11:11:19][INFO]   HMAC sent: JY9acKDNU0g=
+[2026-08-29 11:11:19][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:11:19][INFO]   Token sent
+[2026-08-29 11:11:20][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hNelUyQE9UZ3pPRFF6QEBN
+[2026-08-29 11:11:20][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:11:20][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:11:20][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:11:20][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:13:01][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:13:01][INFO] DH Handshake...
+[2026-08-29 11:13:01][INFO]   Challenge: KgIxG8+0uuc=
+[2026-08-29 11:13:01][INFO]   ClientKey sent: cELuqoveLHw=
+[2026-08-29 11:13:01][INFO]   ServerKey: h2+Dc/Uf/Ko=
+[2026-08-29 11:13:01][INFO]   Secret: 4f1464167532af89
+[2026-08-29 11:13:01][INFO]   HMAC sent: g5WHqttCpoI=
+[2026-08-29 11:13:02][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:13:02][INFO]   Token sent
+[2026-08-29 11:13:02][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hNemN6QE9UZ3pPRFF6QEBN
+[2026-08-29 11:13:02][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:13:02][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:13:02][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:13:02][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:14:00][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:14:00][INFO] DH Handshake...
+[2026-08-29 11:14:00][INFO]   Challenge: Yi3Rt9zzVj4=
+[2026-08-29 11:14:00][INFO]   ClientKey sent: dw6GRVEzD/w=
+[2026-08-29 11:14:01][INFO]   ServerKey: 4LWqZ/Oc7Gc=
+[2026-08-29 11:14:01][INFO]   Secret: 192c8166fb945c15
+[2026-08-29 11:14:01][INFO]   HMAC sent: 1GH2Fr+1cpg=
+[2026-08-29 11:14:01][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:14:01][INFO]   Token sent
+[2026-08-29 11:14:16][ERROR] [Login] nmrn65794@gmail.com: timed out
+[2026-08-29 11:17:45][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:17:45][INFO] DH Handshake...
+[2026-08-29 11:17:45][INFO]   Challenge: t6pEEXj8vzM=
+[2026-08-29 11:17:45][INFO]   ClientKey sent: xfWs9p7YnKg=
+[2026-08-29 11:17:45][INFO]   ServerKey: yn0eKXHWjEE=
+[2026-08-29 11:17:45][INFO]   Secret: 86f0647985487131
+[2026-08-29 11:17:45][INFO]   HMAC sent: d1J/kEclsGA=
+[2026-08-29 11:17:45][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:17:45][INFO]   Token sent
+[2026-08-29 11:17:46][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOREkyQE9UZ3pPRFF6QEBN
+[2026-08-29 11:17:46][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:17:46][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:17:46][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:17:46][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:18:01][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:18:01][INFO] DH Handshake...
+[2026-08-29 11:18:01][INFO]   Challenge: s8P3PpFV/mc=
+[2026-08-29 11:18:01][INFO]   ClientKey sent: sP03qb/AnWU=
+[2026-08-29 11:18:01][INFO]   ServerKey: cQIKDwiYHaE=
+[2026-08-29 11:18:01][INFO]   Secret: 631c698f23d0fd04
+[2026-08-29 11:18:01][INFO]   HMAC sent: hB8PODh3h34=
+[2026-08-29 11:18:02][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:18:02][INFO]   Token sent
+[2026-08-29 11:18:02][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOREk0QE9UZ3pPRFF6QEBN
+[2026-08-29 11:18:02][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:18:02][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:18:02][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:18:02][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:23:21][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 11:26:03][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:26:03][INFO] DH Handshake...
+[2026-08-29 11:26:03][INFO]   Challenge: UGPPAS5QvsQ=
+[2026-08-29 11:26:03][INFO]   ClientKey sent: 0hVn93pdiLI=
+[2026-08-29 11:26:03][INFO]   ServerKey: JrL5Lg6rk9M=
+[2026-08-29 11:26:03][INFO]   Secret: 335bd561719033a9
+[2026-08-29 11:26:03][INFO]   HMAC sent: mOCzhdUn/Ks=
+[2026-08-29 11:26:03][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:26:03][INFO]   Token sent
+[2026-08-29 11:26:04][INFO]   Auth resp: 200 TXpJNUBhMjlvWDJkaGJXVmZNakU9QE1URTVMamd1TWpFMExqRTJPUT09QE5EQXdNQT09QE1UYzVOVFU0QE1USXlNelF6TVRN
+[2026-08-29 11:26:04][INFO]   Gate: 119.8.214.169:4000
+[2026-08-29 11:26:04][INFO]   UID: 12234313 Server: koh_game_21
+[2026-08-29 11:26:04][INFO] [Login] ✓ zzoro8290@gmail.com → Gate 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:26:04][INFO] [Gate] ✓ 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:26:26][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:26:26][INFO] DH Handshake...
+[2026-08-29 11:26:26][INFO]   Challenge: iWQIO6GIQKw=
+[2026-08-29 11:26:26][INFO]   ClientKey sent: 5Co+pYW+++I=
+[2026-08-29 11:26:26][INFO]   ServerKey: 76ET5gS2DAw=
+[2026-08-29 11:26:26][INFO]   Secret: fc6ea29e1c705fe1
+[2026-08-29 11:26:26][INFO]   HMAC sent: daV+DRnTpVw=
+[2026-08-29 11:26:26][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:26:26][INFO]   Token sent
+[2026-08-29 11:26:27][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOVEkyQE9UZ3pPRFF6QEBN
+[2026-08-29 11:26:27][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:26:27][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:26:27][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:26:27][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:27:17][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:27:19][INFO] DH Handshake...
+[2026-08-29 11:27:22][INFO]   Challenge: 3ghk7MtG8iA=
+[2026-08-29 11:27:22][INFO]   ClientKey sent: KTaEg6dsTZ4=
+[2026-08-29 11:27:22][INFO]   ServerKey: grJOpLfc2rU=
+[2026-08-29 11:27:22][INFO]   Secret: 0f59ab40fe7bea03
+[2026-08-29 11:27:22][INFO]   HMAC sent: ImbRPWjAJKU=
+[2026-08-29 11:27:22][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:27:22][INFO]   Token sent
+[2026-08-29 11:27:37][ERROR] [Login] nmrn65794@gmail.com: timed out
+[2026-08-29 11:28:31][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:28:32][INFO] DH Handshake...
+[2026-08-29 11:28:35][INFO]   Challenge: E0n+L1HIrPU=
+[2026-08-29 11:28:35][INFO]   ClientKey sent: Nc1uQsD94xs=
+[2026-08-29 11:28:40][INFO]   ServerKey: LRX0nlrNiGk=
+[2026-08-29 11:28:40][INFO]   Secret: c5f6e7aff5554dad
+[2026-08-29 11:28:40][INFO]   HMAC sent: aLzhadr7sU0=
+[2026-08-29 11:28:41][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:28:41][INFO]   Token sent
+[2026-08-29 11:28:41][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOVFE1QE9UZ3pPRFF6QEBN
+[2026-08-29 11:28:41][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:28:41][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:28:41][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:28:41][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:29:52][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 11:30:13][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:30:13][INFO] DH Handshake...
+[2026-08-29 11:30:16][INFO]   Challenge: OY3AY/9faMU=
+[2026-08-29 11:30:16][INFO]   ClientKey sent: Hy5fvLBs8TI=
+[2026-08-29 11:30:16][INFO]   ServerKey: VMK5iUWfMrQ=
+[2026-08-29 11:30:16][INFO]   Secret: 519e651fdf1d3dcf
+[2026-08-29 11:30:16][INFO]   HMAC sent: XFPvL+nPwas=
+[2026-08-29 11:30:16][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:30:16][INFO]   Token sent
+[2026-08-29 11:30:17][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOVFl5QE56SXdPVGcxTlE9
+[2026-08-29 11:30:17][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:30:17][INFO]   UID: 7209855 Server: koh_game_4
+[2026-08-29 11:30:17][INFO] [Login] ✓ sumo-1234@hotmil.com → Gate 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:30:17][INFO] [Gate] ✓ 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:31:48][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:31:48][INFO] DH Handshake...
+[2026-08-29 11:31:48][INFO]   Challenge: QMvGEzlNqxg=
+[2026-08-29 11:31:48][INFO]   ClientKey sent: P98EZd2RQB0=
+[2026-08-29 11:31:49][INFO]   ServerKey: fRe9DK3mF1g=
+[2026-08-29 11:31:49][INFO]   Secret: bcbd8f3cb6b30d60
+[2026-08-29 11:31:49][INFO]   HMAC sent: z61PCoqrr4w=
+[2026-08-29 11:31:49][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:31:49][INFO]   Token sent
+[2026-08-29 11:31:49][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOVGM0QE9UZ3pPRFF6QEBN
+[2026-08-29 11:31:49][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:31:49][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:31:49][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:31:49][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:33:51][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:33:51][INFO] DH Handshake...
+[2026-08-29 11:33:51][INFO]   Challenge: i6TBuxNHHkA=
+[2026-08-29 11:33:51][INFO]   ClientKey sent: imts5fe9O+I=
+[2026-08-29 11:33:52][INFO]   ServerKey: tAimU+yL7cg=
+[2026-08-29 11:33:52][INFO]   Secret: 646f51115f0d2f30
+[2026-08-29 11:33:52][INFO]   HMAC sent: 5rQMxcqKOdQ=
+[2026-08-29 11:33:52][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:33:52][INFO]   Token sent
+[2026-08-29 11:33:52][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 11:33:52][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOakEwQE9UZ3pPRFF6QEBN
+[2026-08-29 11:33:52][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:33:52][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:33:52][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:33:52][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:34:27][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:34:27][INFO] DH Handshake...
+[2026-08-29 11:34:27][INFO]   Challenge: RpCUfx4akG8=
+[2026-08-29 11:34:27][INFO]   ClientKey sent: q33iRUmdgfw=
+[2026-08-29 11:34:27][INFO]   ServerKey: /wvjVesq+VI=
+[2026-08-29 11:34:27][INFO]   Secret: 7a4dfbf0564f6bcd
+[2026-08-29 11:34:27][INFO]   HMAC sent: 4YWb/InGqrA=
+[2026-08-29 11:34:28][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:34:28][INFO]   Token sent
+[2026-08-29 11:34:28][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOakV3QE9UZ3pPRFF6QEBN
+[2026-08-29 11:34:28][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:34:28][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:34:28][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:34:28][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:36:02][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:36:02][INFO] DH Handshake...
+[2026-08-29 11:36:02][INFO]   Challenge: 9Fkd1P//Ckw=
+[2026-08-29 11:36:02][INFO]   ClientKey sent: hpIC/beQ1qk=
+[2026-08-29 11:36:02][INFO]   ServerKey: OOalduYel2U=
+[2026-08-29 11:36:02][INFO]   Secret: a62d2bac61cada40
+[2026-08-29 11:36:02][INFO]   HMAC sent: 2gwLIDAD/tA=
+[2026-08-29 11:36:02][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:36:02][INFO]   Token sent
+[2026-08-29 11:36:03][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOak0wQE9UZ3pPRFF6QEBN
+[2026-08-29 11:36:03][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:36:03][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:36:03][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:36:03][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:37:03][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:37:04][INFO] DH Handshake...
+[2026-08-29 11:37:05][INFO]   Challenge: rSYGsKK6IkU=
+[2026-08-29 11:37:05][INFO]   ClientKey sent: LMoRj1gamSE=
+[2026-08-29 11:37:05][INFO]   ServerKey: xT8z9dMf01k=
+[2026-08-29 11:37:05][INFO]   Secret: 94653720d71887ea
+[2026-08-29 11:37:05][INFO]   HMAC sent: 3P4K+0QUL/8=
+[2026-08-29 11:37:06][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:37:06][INFO]   Token sent
+[2026-08-29 11:37:06][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOalE1QE9UZ3pPRFF6QEBN
+[2026-08-29 11:37:06][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:37:06][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:37:06][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:37:07][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:38:20][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:38:20][INFO] DH Handshake...
+[2026-08-29 11:38:20][INFO]   Challenge: 6t4wqus94HA=
+[2026-08-29 11:38:20][INFO]   ClientKey sent: Mxo52CW68yg=
+[2026-08-29 11:38:20][INFO]   ServerKey: BOSqs8mA+m4=
+[2026-08-29 11:38:20][INFO]   Secret: ea460673775db75f
+[2026-08-29 11:38:20][INFO]   HMAC sent: 0X6ucirHhTo=
+[2026-08-29 11:38:20][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:38:20][INFO]   Token sent
+[2026-08-29 11:38:35][ERROR] [Login] nmrn65794@gmail.com: timed out
+[2026-08-29 11:39:08][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:39:08][INFO] DH Handshake...
+[2026-08-29 11:39:09][INFO]   Challenge: hkL/sqxoWoI=
+[2026-08-29 11:39:09][INFO]   ClientKey sent: bK/nWc5jrjU=
+[2026-08-29 11:39:09][INFO]   ServerKey: hRu1sOLs8r4=
+[2026-08-29 11:39:09][INFO]   Secret: 00c73b36c7fe008a
+[2026-08-29 11:39:09][INFO]   HMAC sent: aLS4Ak5AaoY=
+[2026-08-29 11:39:10][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:39:10][INFO]   Token sent
+[2026-08-29 11:39:11][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOalkyQE56SXdPVGcxTlE9
+[2026-08-29 11:39:11][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:39:11][INFO]   UID: 7209855 Server: koh_game_4
+[2026-08-29 11:39:11][INFO] [Login] ✓ sumo-1234@hotmil.com → Gate 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:39:11][INFO] [Gate] ✓ 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:39:28][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:39:28][INFO] DH Handshake...
+[2026-08-29 11:39:28][INFO]   Challenge: AUtYcTU+a+8=
+[2026-08-29 11:39:28][INFO]   ClientKey sent: UhG21Wj7QXE=
+[2026-08-29 11:39:28][INFO]   ServerKey: /mP0RD6CAEI=
+[2026-08-29 11:39:28][INFO]   Secret: 3c042a89cb98a47d
+[2026-08-29 11:39:28][INFO]   HMAC sent: oRy5NE9Sq5Y=
+[2026-08-29 11:39:29][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:39:29][INFO]   Token sent
+[2026-08-29 11:39:30][INFO]   Auth resp: 200 TXpJNUBhMjlvWDJkaGJXVmZNakU9QE1URTVMamd1TWpFMExqRTJPUT09QE5EQXdNQT09QE1UYzVOamMwQE1USXlNelF6TVRN
+[2026-08-29 11:39:30][INFO]   Gate: 119.8.214.169:4000
+[2026-08-29 11:39:30][INFO]   UID: 12234313 Server: koh_game_21
+[2026-08-29 11:39:30][INFO] [Login] ✓ zzoro8290@gmail.com → Gate 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:39:30][INFO] [Gate] ✓ 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:39:56][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:39:56][INFO] DH Handshake...
+[2026-08-29 11:39:57][INFO]   Challenge: 0xEQkvwm+DY=
+[2026-08-29 11:39:57][INFO]   ClientKey sent: gviQC7QC2Wo=
+[2026-08-29 11:39:57][INFO]   ServerKey: Sidh+7qCRD8=
+[2026-08-29 11:39:57][INFO]   Secret: fa0ab405ca32b765
+[2026-08-29 11:39:57][INFO]   HMAC sent: WV62H0+L2MU=
+[2026-08-29 11:39:57][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:39:57][INFO]   Token sent
+[2026-08-29 11:39:57][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOamd4QE9UZ3pPRFF6QEBN
+[2026-08-29 11:39:57][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:39:57][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:39:57][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:39:57][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:40:40][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:40:40][INFO] DH Handshake...
+[2026-08-29 11:40:40][INFO]   Challenge: FW4PDrUOzew=
+[2026-08-29 11:40:40][INFO]   ClientKey sent: uCI+m4T8K8c=
+[2026-08-29 11:40:40][INFO]   ServerKey: Bb3qE0cVsJY=
+[2026-08-29 11:40:40][INFO]   Secret: f276b365821cf04a
+[2026-08-29 11:40:40][INFO]   HMAC sent: Qu3eW34+rXw=
+[2026-08-29 11:40:40][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:40:40][INFO]   Token sent
+[2026-08-29 11:40:41][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOamt3QE9UZ3pPRFF6QEBN
+[2026-08-29 11:40:41][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:40:41][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:40:41][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:40:41][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:41:10][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:41:10][INFO] DH Handshake...
+[2026-08-29 11:41:10][INFO]   Challenge: /+Yv8rJ1xlw=
+[2026-08-29 11:41:10][INFO]   ClientKey sent: QL+UXV05Eds=
+[2026-08-29 11:41:10][INFO]   ServerKey: tP42cqHMg7A=
+[2026-08-29 11:41:10][INFO]   Secret: 881bc49bf640c44c
+[2026-08-29 11:41:10][INFO]   HMAC sent: Y2eNzwCSud8=
+[2026-08-29 11:41:12][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:41:12][INFO]   Token sent
+[2026-08-29 11:41:13][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOamswQE9UZ3pPRFF6QEBN
+[2026-08-29 11:41:13][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:41:13][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:41:13][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:41:15][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:42:34][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:42:35][INFO] DH Handshake...
+[2026-08-29 11:42:36][INFO]   Challenge: ujXdIpVZxhA=
+[2026-08-29 11:42:36][INFO]   ClientKey sent: MzbRsqJF6bA=
+[2026-08-29 11:42:36][INFO]   ServerKey: VBcJ+oxDQI8=
+[2026-08-29 11:42:36][INFO]   Secret: 355312359f68e59d
+[2026-08-29 11:42:36][INFO]   HMAC sent: txzuQ9a9BXw=
+[2026-08-29 11:42:37][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:42:37][INFO]   Token sent
+[2026-08-29 11:42:37][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOekE1QE9UZ3pPRFF6QEBN
+[2026-08-29 11:42:37][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:42:37][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:42:37][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:42:38][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:43:15][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:43:18][INFO] DH Handshake...
+[2026-08-29 11:43:19][INFO]   Challenge: OUPrTfM9+mM=
+[2026-08-29 11:43:19][INFO]   ClientKey sent: L1KMM2bOQUc=
+[2026-08-29 11:43:20][INFO]   ServerKey: wGF7oDHU3Xg=
+[2026-08-29 11:43:20][INFO]   Secret: f6c8b0c1f126e19b
+[2026-08-29 11:43:20][INFO]   HMAC sent: 4WHmFHC02RA=
+[2026-08-29 11:43:21][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:43:21][INFO]   Token sent
+[2026-08-29 11:43:22][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOekU0QE9UZ3pPRFF6QEBN
+[2026-08-29 11:43:22][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:43:22][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:43:22][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:43:24][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:44:12][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:44:13][INFO] DH Handshake...
+[2026-08-29 11:44:14][INFO]   Challenge: zrdEeDx6NX0=
+[2026-08-29 11:44:14][INFO]   ClientKey sent: 1WHFUhqVYA8=
+[2026-08-29 11:44:14][INFO]   ServerKey: ps9Ey6vqp84=
+[2026-08-29 11:44:14][INFO]   Secret: 2461153fc127b8bc
+[2026-08-29 11:44:14][INFO]   HMAC sent: Go7m9uFtPAo=
+[2026-08-29 11:44:14][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:44:14][INFO]   Token sent
+[2026-08-29 11:44:15][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOek13QE56SXdPVGcxTlE9
+[2026-08-29 11:44:15][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:44:15][INFO]   UID: 7209855 Server: koh_game_4
+[2026-08-29 11:44:15][INFO] [Login] ✓ sumo-1234@hotmil.com → Gate 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:44:15][INFO] [Gate] ✓ 119.8.215.184:4000 uid=7209855
+[2026-08-29 11:44:22][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:44:23][INFO] DH Handshake...
+[2026-08-29 11:44:25][INFO]   Challenge: q8504ceUCmo=
+[2026-08-29 11:44:25][INFO]   ClientKey sent: LCO+sgjUg8w=
+[2026-08-29 11:44:26][INFO]   ServerKey: Uope8kQjlws=
+[2026-08-29 11:44:26][INFO]   Secret: 90381ea9d8ab95cb
+[2026-08-29 11:44:26][INFO]   HMAC sent: 0pXjiWUFHhI=
+[2026-08-29 11:44:27][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:44:27][INFO]   Token sent
+[2026-08-29 11:44:27][INFO]   Auth resp: 200 TXpJNUBhMjlvWDJkaGJXVmZNakU9QE1URTVMamd1TWpFMExqRTJPUT09QE5EQXdNQT09QE1UYzVOek00QE1USXlNelF6TVRN
+[2026-08-29 11:44:27][INFO]   Gate: 119.8.214.169:4000
+[2026-08-29 11:44:27][INFO]   UID: 12234313 Server: koh_game_21
+[2026-08-29 11:44:27][INFO] [Login] ✓ zzoro8290@gmail.com → Gate 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:44:28][INFO] [Gate] ✓ 119.8.214.169:4000 uid=12234313
+[2026-08-29 11:45:17][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:45:18][INFO] DH Handshake...
+[2026-08-29 11:45:19][INFO]   Challenge: o2xsz/71v5o=
+[2026-08-29 11:45:19][INFO]   ClientKey sent: 6gZ6DyIJeNc=
+[2026-08-29 11:45:20][INFO]   ServerKey: HAChCWTPkVM=
+[2026-08-29 11:45:20][INFO]   Secret: b507d4e5495b9992
+[2026-08-29 11:45:20][INFO]   HMAC sent: I7Du6mE8Cgg=
+[2026-08-29 11:45:21][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:45:21][INFO]   Token sent
+[2026-08-29 11:45:24][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOelF4QE9UZ3pPRFF6QEBN
+[2026-08-29 11:45:24][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:45:24][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:45:24][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:45:26][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:47:34][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:47:35][INFO] DH Handshake...
+[2026-08-29 11:47:36][INFO]   Challenge: vPvE9vJmC4s=
+[2026-08-29 11:47:36][INFO]   ClientKey sent: lUYZQEXnpeI=
+[2026-08-29 11:47:37][INFO]   ServerKey: K30i0JjkY+c=
+[2026-08-29 11:47:37][INFO]   Secret: 3cfa9c688efc7863
+[2026-08-29 11:47:37][INFO]   HMAC sent: MBC0EaCnZWo=
+[2026-08-29 11:47:38][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:47:38][INFO]   Token sent
+[2026-08-29 11:47:39][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOelU1QE9UZ3pPRFF6QEBN
+[2026-08-29 11:47:39][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:47:39][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:47:39][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:47:40][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 11:49:44][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 11:49:45][INFO] DH Handshake...
+[2026-08-29 11:49:45][INFO]   Challenge: X2HYTlarU/M=
+[2026-08-29 11:49:45][INFO]   ClientKey sent: U5qM1ukIohc=
+[2026-08-29 11:49:47][INFO]   ServerKey: IckppJnQcIA=
+[2026-08-29 11:49:47][INFO]   Secret: bc5992f596671513
+[2026-08-29 11:49:47][INFO]   HMAC sent: j2RkGq2H8nE=
+[2026-08-29 11:49:48][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 11:49:48][INFO]   Token sent
+[2026-08-29 11:49:50][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3hOemt4QE9UZ3pPRFF6QEBN
+[2026-08-29 11:49:50][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 11:49:50][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 11:49:50][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 11:49:51][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 14:54:54][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 14:55:08][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 14:55:12][INFO] DH Handshake...
+[2026-08-29 14:55:13][INFO]   Challenge: V0NHm8LtE4o=
+[2026-08-29 14:55:13][INFO]   ClientKey sent: 0CVjv1y0Reg=
+[2026-08-29 14:55:16][INFO]   ServerKey: /XhvcyJk584=
+[2026-08-29 14:55:16][INFO]   Secret: 7c09e8e58fc9f6c7
+[2026-08-29 14:55:16][INFO]   HMAC sent: rzF47cX03Yg=
+[2026-08-29 14:55:17][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 14:55:17][INFO]   Token sent
+[2026-08-29 14:55:19][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3pOelUyQE9UZ3pPRFF6QEBN
+[2026-08-29 14:55:19][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 14:55:19][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 14:55:19][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 14:55:23][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 14:56:13][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (1)...
+[2026-08-29 14:56:13][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502001]
+[2026-08-29 14:56:15][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:15][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=336-459-5-4-3506 عند (335, 458)
+[2026-08-29 14:56:16][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:16][INFO] [nmrn65794@gmail.com] ✅ تم إرسال المسيرة بنجاح! 🌾 Target=336-459-5-4-3506 | Heroes=[5502001]
+[2026-08-29 14:56:18][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (2)...
+[2026-08-29 14:56:18][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502002]
+[2026-08-29 14:56:18][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:19][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=337-460-5-4-3506 عند (336, 459)
+[2026-08-29 14:56:19][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:21][INFO] [nmrn65794@gmail.com] ✅ تم إرسال المسيرة بنجاح! 🌾 Target=337-460-5-4-3506 | Heroes=[5502002]
+[2026-08-29 14:56:22][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (3)...
+[2026-08-29 14:56:22][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502003]
+[2026-08-29 14:56:23][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:24][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=332-436-5-4-3506 عند (331, 435)
+[2026-08-29 14:56:25][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:25][INFO] [nmrn65794@gmail.com] ✅ تم إرسال المسيرة بنجاح! 🌾 Target=332-436-5-4-3506 | Heroes=[5502003]
+[2026-08-29 14:56:27][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (4)...
+[2026-08-29 14:56:27][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502004]
+[2026-08-29 14:56:28][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:28][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=360-437-5-4-3506 عند (359, 436)
+[2026-08-29 14:56:30][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:32][ERROR] [nmrn65794@gmail.com] ❌ فشل إرسال المسيرة - كود الخطأ: 8009
+[2026-08-29 14:56:32][INFO] [nmrn65794@gmail.com] 🏁 ملخص المسيرات: تم إرسال 3 مسيرة/مسيرات بنجاح.
+[2026-08-29 14:56:50][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (1)...
+[2026-08-29 14:56:50][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502001]
+[2026-08-29 14:56:51][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:51][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=351-471-5-4-3506 عند (350, 470)
+[2026-08-29 14:56:52][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:52][WARNING] [nmrn65794@gmail.com] ⚠️ البطل [5502001] مشغول بالفعل على السيرفر.
+[2026-08-29 14:56:52][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (2)...
+[2026-08-29 14:56:52][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502002]
+[2026-08-29 14:56:53][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:53][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=356-471-5-4-3506 عند (355, 470)
+[2026-08-29 14:56:53][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:53][WARNING] [nmrn65794@gmail.com] ⚠️ البطل [5502002] مشغول بالفعل على السيرفر.
+[2026-08-29 14:56:53][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (3)...
+[2026-08-29 14:56:53][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502003]
+[2026-08-29 14:56:54][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:54][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=363-474-5-4-3506 عند (362, 473)
+[2026-08-29 14:56:55][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:55][WARNING] [nmrn65794@gmail.com] ⚠️ البطل [5502003] مشغول بالفعل على السيرفر.
+[2026-08-29 14:56:55][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (4)...
+[2026-08-29 14:56:55][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502004]
+[2026-08-29 14:56:56][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 14:56:57][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=365-437-5-4-3506 عند (364, 436)
+[2026-08-29 14:56:58][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 14:56:59][ERROR] [nmrn65794@gmail.com] ❌ فشل إرسال المسيرة - كود الخطأ: 8009
+[2026-08-29 14:56:59][INFO] [nmrn65794@gmail.com] 🏁 ملخص المسيرات: تم إرسال 0 مسيرة/مسيرات بنجاح.
+[2026-08-29 14:57:04][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 15:02:01][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 15:02:02][INFO] DH Handshake...
+[2026-08-29 15:02:02][INFO]   Challenge: f05dXhJEgo0=
+[2026-08-29 15:02:02][INFO]   ClientKey sent: zMfo7u95HdM=
+[2026-08-29 15:02:03][INFO]   ServerKey: Gc5xqUYIf+Y=
+[2026-08-29 15:02:03][INFO]   Secret: ba936d8f2de1aaf4
+[2026-08-29 15:02:03][INFO]   HMAC sent: o11t1Z543yo=
+[2026-08-29 15:02:03][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 15:02:03][INFO]   Token sent
+[2026-08-29 15:02:04][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3pPRE0wQE9UZ3pPRFF6QEBN
+[2026-08-29 15:02:04][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 15:02:04][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 15:02:04][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 15:02:04][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 15:02:10][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (1)...
+[2026-08-29 15:02:23][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل قلعة متاح 5501): [5501002]
+[2026-08-29 15:02:24][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 15:02:25][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=344-440-5-4-3506 عند (343, 439)
+[2026-08-29 15:02:27][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 15:02:27][ERROR] [nmrn65794@gmail.com] ❌ فشل إرسال المسيرة - كود الخطأ: 8009
+[2026-08-29 15:02:27][INFO] [nmrn65794@gmail.com] 🏁 ملخص المسيرات: تم إرسال 0 مسيرة/مسيرات بنجاح.
+[2026-08-29 15:02:54][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 15:02:54][INFO] DH Handshake...
+[2026-08-29 15:02:55][INFO]   Challenge: Xv7Obu30Hpg=
+[2026-08-29 15:02:55][INFO]   ClientKey sent: ySiTDe94Fsk=
+[2026-08-29 15:02:55][INFO]   ServerKey: 1GHwiJDgdSo=
+[2026-08-29 15:02:55][INFO]   Secret: 8cd357df25db0c0a
+[2026-08-29 15:02:55][INFO]   HMAC sent: HCfpVJixvL4=
+[2026-08-29 15:02:55][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 15:02:55][INFO]   Token sent
+[2026-08-29 15:02:56][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3pPRFF6QE9UZ3pPRFF6QEBN
+[2026-08-29 15:02:56][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 15:02:56][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 15:02:56][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 15:02:56][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 15:02:59][INFO] [nmrn65794@gmail.com] ⚔️ محاولة إرسال المسيرة رقم (1)...
+[2026-08-29 15:02:59][INFO] [nmrn65794@gmail.com] 🌾 البطل المختار (بطل جمع يمتلك مهارة 5620): [5502004]
+[2026-08-29 15:03:01][INFO] [nmrn65794@gmail.com] 🔍 البحث عن حقل مورد (نوع=4, لفل=5-6)...
+[2026-08-29 15:03:02][INFO] [nmrn65794@gmail.com] 🎯 تم العثور على هدف: ID=332-478-5-4-3506 عند (331, 477)
+[2026-08-29 15:03:03][INFO] [nmrn65794@gmail.com] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...
+[2026-08-29 15:03:03][ERROR] [nmrn65794@gmail.com] ❌ فشل إرسال المسيرة - كود الخطأ: 8009
+[2026-08-29 15:03:03][INFO] [nmrn65794@gmail.com] 🏁 ملخص المسيرات: تم إرسال 0 مسيرة/مسيرات بنجاح.
+[2026-08-29 15:04:26][WARNING] [Gate] recv: [WinError 10054] An existing connection was forcibly closed by the remote host
+[2026-08-29 15:04:26][WARNING] [Gate] ⚠️ انقطع الاتصال بالحساب (السبب: other_device)
+[2026-08-29 15:14:30][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 15:14:31][INFO] DH Handshake...
+[2026-08-29 15:14:31][INFO]   Challenge: 0wfA6oLHPVU=
+[2026-08-29 15:14:31][INFO]   ClientKey sent: tTi93Mp844M=
+[2026-08-29 15:14:32][INFO]   ServerKey: 9LQEKyPCYKg=
+[2026-08-29 15:14:32][INFO]   Secret: b70d16f503339c00
+[2026-08-29 15:14:32][INFO]   HMAC sent: tQOC1PCUtOQ=
+[2026-08-29 15:14:32][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 15:14:32][INFO]   Token sent
+[2026-08-29 15:14:34][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UY3pPVGMzQE9UZ3pPRFF6QEBN
+[2026-08-29 15:14:34][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 15:14:34][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 15:14:34][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 15:14:34][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 15:21:18][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 15:21:18][INFO] DH Handshake...
+[2026-08-29 15:21:18][INFO]   Challenge: b3UKZSJzpDc=
+[2026-08-29 15:21:18][INFO]   ClientKey sent: PXcV14j1X/A=
+[2026-08-29 15:21:19][INFO]   ServerKey: Kn4KwwJHU2w=
+[2026-08-29 15:21:19][INFO]   Secret: f4c534677b94649a
+[2026-08-29 15:21:19][INFO]   HMAC sent: rWZb1846Brs=
+[2026-08-29 15:21:20][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 15:21:20][INFO]   Token sent
+[2026-08-29 15:21:20][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UYzBNRFUzQE9UZ3pPRFF6QEBN
+[2026-08-29 15:21:20][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 15:21:20][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 15:21:20][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 15:21:21][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843
+[2026-08-29 15:44:14][INFO] Login Server: 119.8.212.255:10000
+[2026-08-29 15:44:14][INFO] DH Handshake...
+[2026-08-29 15:44:15][INFO]   Challenge: H1iOZpAhEXE=
+[2026-08-29 15:44:15][INFO]   ClientKey sent: YJeW/jMadAk=
+[2026-08-29 15:44:15][INFO]   ServerKey: RHdEYTElnjs=
+[2026-08-29 15:44:15][INFO]   Secret: fe3162ea3b886afb
+[2026-08-29 15:44:15][INFO]   HMAC sent: IwcbM51EpFY=
+[2026-08-29 15:44:15][INFO]   Handshake resp: 200 challenge success
+[2026-08-29 15:44:15][INFO]   Token sent
+[2026-08-29 15:44:16][INFO]   Auth resp: 200 TWpNPUBhMjlvWDJkaGJXVmZOQT09QE1URTVMamd1TWpFMUxqRTROQT09QE5EQXdNQT09QE1UYzBNamsyQE9UZ3pPRFF6QEBN
+[2026-08-29 15:44:16][INFO]   Gate: 119.8.215.184:4000
+[2026-08-29 15:44:16][INFO]   UID: 983843 Server: koh_game_4
+[2026-08-29 15:44:16][INFO] [Login] ✓ nmrn65794@gmail.com → Gate 119.8.215.184:4000 uid=983843
+[2026-08-29 15:44:17][INFO] [Gate] ✓ 119.8.215.184:4000 uid=983843

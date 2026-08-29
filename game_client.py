@@ -151,6 +151,9 @@ class GateClient:
         self._alive   = False
         self._notifies: Dict[str, Callable] = {}
         self._recv_task = None
+        self.on_disconnect: Optional[Callable[[str], Any]] = None
+        self.kick_reason: Optional[str] = None
+        self._explicit_close: bool = False
 
     async def connect(self) -> bool:
         try:
@@ -184,8 +187,12 @@ class GateClient:
         self._alive = True
         self._recv_task = asyncio.create_task(self._recv_loop())
 
-        # إرسال طلب التهيئة 1000/1 فوراً لاستقبال بيانات الأبطال
-        self.send_nowait('1000', '1', {})
+        # إرسال طلب التهيئة 1000/1 مع session=0 وحزم المزامنة الأولية
+        pkt_init = pack_request('1000', '1', {}, session=0)
+        self._writer.write(pkt_init)
+        self._writer.write(pack_request('1009', '36', {}, session=10086))
+        self._writer.write(pack_request('1005', '1', {}, session=1))
+        await self._writer.drain()
         return True
 
     async def _recv_loop(self):
@@ -200,12 +207,26 @@ class GateClient:
         except Exception as e:
             if self._alive: log.warning(f"[Gate] recv: {e}")
         finally:
+            was_alive = self._alive
             self._alive = False
             for fut in list(self._pending.values()) + list(self._cmd_pending.values()):
                 if not fut.done():
                     fut.set_exception(ConnectionError("Gate disconnected"))
             self._pending.clear()
             self._cmd_pending.clear()
+            
+            if was_alive and not self._explicit_close:
+                if not self.kick_reason:
+                    self.kick_reason = "other_device"
+                log.warning(f"[Gate] ⚠️ انقطع الاتصال بالحساب (السبب: {self.kick_reason})")
+                if self.on_disconnect:
+                    try:
+                        if asyncio.iscoroutinefunction(self.on_disconnect):
+                            asyncio.create_task(self.on_disconnect(self.kick_reason))
+                        else:
+                            self.on_disconnect(self.kick_reason)
+                    except Exception:
+                        pass
 
     def _dispatch(self):
         pkts, self._buf = unpack_stream(self._buf)
@@ -227,6 +248,32 @@ class GateClient:
                     h_ctrl = retdata.get('heroCtrl', [])
                     if isinstance(h_ctrl, list) and h_ctrl:
                         self.heroes = list(h_ctrl)
+
+                # فحص إشعارات طرد السيرفر أو تسجيل الدخول من جهاز آخر
+                data_obj = c.get('data', {})
+                if isinstance(data_obj, dict):
+                    notify_id = str(data_obj.get('notifyID', ''))
+                    notify_data = data_obj.get('notifyData', [])
+                    if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
+                        if isinstance(notify_data, list):
+                            for item in notify_data:
+                                if isinstance(item, dict):
+                                    status = item.get('status')
+                                    if status == 'kick':
+                                        self.kick_reason = "other_device"
+                                    elif status == 'seal':
+                                        self.kick_reason = "account_sealed"
+                                    elif status == 'server_maintenance':
+                                        self.kick_reason = "server_maintenance"
+                        elif isinstance(notify_data, dict):
+                            status = notify_data.get('status')
+                            if status == 'kick': self.kick_reason = "other_device"
+                            elif status == 'seal': self.kick_reason = "account_sealed"
+
+                    if data_obj.get('status') == 'kick':
+                        self.kick_reason = "other_device"
+                    elif data_obj.get('status') == 'seal':
+                        self.kick_reason = "account_sealed"
 
             fut = None
             if sess != 0 and sess in self._pending:
@@ -297,6 +344,7 @@ class GateClient:
         self._notifies[notify_id] = handler
 
     async def close(self):
+        self._explicit_close = True
         self._alive = False
         if self._recv_task: self._recv_task.cancel()
         if self._writer:
@@ -320,8 +368,9 @@ class GameConnection:
     3. query() / send_nowait() / on_notify()
     """
 
-    def __init__(self, account: AccountSession):
+    def __init__(self, account: AccountSession, on_disconnect: Optional[Callable[[str], Any]] = None):
         self.account = account
+        self.on_disconnect = on_disconnect
         self.creds:  Optional[GateCredentials] = None
         self._gate:  Optional[GateClient]      = None
 
@@ -329,7 +378,12 @@ class GameConnection:
         self.creds = await async_login(self.account)
         if not self.creds: return False
         self._gate = GateClient(self.creds)
+        self._gate.on_disconnect = self.on_disconnect
         return await self._gate.connect()
+
+    @property
+    def kick_reason(self) -> Optional[str]:
+        return self._gate.kick_reason if self._gate else None
 
     async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15) -> Optional[dict]:
         if not self._gate or not self._gate.is_connected: return None

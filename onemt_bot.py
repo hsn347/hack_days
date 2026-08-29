@@ -201,37 +201,44 @@ def decode_gate_response(pkt: bytes):
     raw     = pkt[:-5]
     if not ok: return {'ok': False, 'session': session}
 
-    # محاولة فك الضغط بجميع صيغ zlib و gzip
-    candidate_raws = [raw]
-    for w in (-15, 47, 15, 31, 32):
+    # 1. تجربة فك الضغط المباشر (حزم التهيئة والبث المضغوطة تكون JSON نصي خالص مضغوط بـ zlib)
+    for w in (15, -15, 31, 32, 47):
         try:
-            candidate_raws.append(zlib.decompress(raw, w))
-            break
-        except: pass
-
-    for attempt in candidate_raws:
-        try:
-            dec_bytes = xor_crypt(attempt)
-            # جرب أيضاً فك الضغط بعد XOR
-            for w in (-15, 47, 15):
-                try:
-                    dec_bytes = zlib.decompress(dec_bytes, w)
-                    break
-                except: pass
-            
-            # استخراج محتوى JSON النظيف بين أول { وآخر }
-            s_idx = dec_bytes.find(b'{')
-            e_idx = dec_bytes.rfind(b'}')
+            inflated = zlib.decompress(raw, w)
+            s_idx = inflated.find(b'{')
+            e_idx = inflated.rfind(b'}')
             if s_idx != -1 and e_idx != -1:
-                json_bytes = dec_bytes[s_idx:e_idx+1]
+                json_bytes = inflated[s_idx:e_idx+1]
                 c = json.loads(json_bytes.decode('utf-8', errors='replace'))
                 if isinstance(c, dict):
                     cmd = str(c.get('cmd', ''))
                     if cmd.startswith(CMD_PREFIX):
                         c['cmd'] = cmd[len(CMD_PREFIX):]
                     return {'ok': True, 'content': c, 'session': session}
-        except:
+        except Exception:
             pass
+
+    # 2. فك التشفير العادي لحزم الطلبات والردود الفردية (XOR أولاً ثم فك ضغط اختياري)
+    try:
+        dec_bytes = xor_crypt(raw)
+        for w in (-15, 47, 15, 31, 32):
+            try:
+                dec_bytes = zlib.decompress(dec_bytes, w)
+                break
+            except Exception:
+                pass
+        s_idx = dec_bytes.find(b'{')
+        e_idx = dec_bytes.rfind(b'}')
+        if s_idx != -1 and e_idx != -1:
+            json_bytes = dec_bytes[s_idx:e_idx+1]
+            c = json.loads(json_bytes.decode('utf-8', errors='replace'))
+            if isinstance(c, dict):
+                cmd = str(c.get('cmd', ''))
+                if cmd.startswith(CMD_PREFIX):
+                    c['cmd'] = cmd[len(CMD_PREFIX):]
+                return {'ok': True, 'content': c, 'session': session}
+    except Exception:
+        pass
 
     return {'ok': True, 'raw': xor_crypt(raw).decode('utf-8', 'replace'), 'session': session}
 

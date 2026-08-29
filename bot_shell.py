@@ -92,6 +92,22 @@ class BotShell:
                 if self.email in self.accounts_map:
                     print(f"✨ تم اكتشاف واستيراد الحساب [{self.email}] تلقائياً من المحاكي!")
 
+    def _on_server_disconnect(self, reason: str):
+        """إشعار فوري عند طرد الحساب أو تسجيل الدخول من جهاز آخر"""
+        print(f"\n\n{'═'*65}")
+        if reason == "other_device":
+            print(f"  ⚠️  تنبيه: تم تسجيل الدخول إلى الحساب [{self.email}] من جهاز آخر!")
+            print(f"  🔌  تم إنهاء اتصال البوت بالسيرفر لتجنب التعارض مع جهازك.")
+        elif reason == "account_sealed":
+            print(f"  🚫  تنبيه: تم إغلاق أو حظر الحساب [{self.email}] من قبل السيرفر.")
+        elif reason == "server_maintenance":
+            print(f"  🛠️  تنبيه: سيرفر اللعبة دخل في وضع الصيانة الدورية.")
+        else:
+            print(f"  ⚠️  تنبيه: تم قطع الاتصال بالسيرفر للحساب [{self.email}] ({reason}).")
+        print(f"  💡  للإعادة: اكتب reconnect أو switch {self.email} أو login")
+        print(f"{'═'*65}\n")
+        print(f"Empire [{self.email}] (غير متصل)> ", end='', flush=True)
+
     async def start(self):
         """بدء الاتصال وتشغيل حلقة الأوامر التفاعلية"""
         if self.email not in self.accounts_map:
@@ -106,7 +122,7 @@ class BotShell:
         print(f"  🔌 جاري الاتصال الثابت بالسيرفر للحساب: {self.email}")
         print(f"{'═'*60}\n")
 
-        self.conn = GameConnection(acc)
+        self.conn = GameConnection(acc, on_disconnect=self._on_server_disconnect)
         if not await self.conn.connect():
             print("❌ فشل الاتصال بالسيرفر!")
             return
@@ -145,6 +161,7 @@ class BotShell:
 ║                     📌 الأوامر التفاعلية المتاحة                          ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  login <email> <password>  : تسجيل دخول سحابي فوري لأي حساب جديد        ║
+║  reconnect / rc            : إعادة الاتصال الفوري بالحساب الحالي        ║
 ║  attack / gather [خيارات]  : تشغيل مسيرات الجمع (مثال: attack -t 4 -m 5)║
 ║  port / harbor             : استلام مكافآت الميناء وصناديق الوقت اليومية║
 ║  heroes                    : عرض قائمة الأبطال وحالتهم الحالية          ║
@@ -166,7 +183,8 @@ class BotShell:
         loop = asyncio.get_running_loop()
         while self.is_running:
             try:
-                prompt = f"Empire [{self.email}]> "
+                conn_status = "" if (self.conn and self.conn.is_connected) else " (غير متصل)"
+                prompt = f"Empire [{self.email}]{conn_status}> "
                 # قراءة المدخلات في Thread منفصل لعدم تجميد شبكة الـ Async
                 line = await loop.run_in_executor(None, input, prompt)
                 line = line.strip()
@@ -183,33 +201,42 @@ class BotShell:
                     self._print_help()
                 elif cmd == 'reload':
                     self._cmd_reload()
+                elif cmd in ('reconnect', 'rc'):
+                    await self._cmd_reconnect()
                 elif cmd == 'login':
                     await self._cmd_auth_login(args)
-                elif cmd in ('attack', 'gather', 'march'):
-                    await self._cmd_attack(args)
-                elif cmd in ('port', 'harbor'):
-                    await self._cmd_port()
-                elif cmd == 'heroes':
-                    await self._cmd_heroes()
-                elif cmd == 'castle':
-                    await self._cmd_castle()
-                elif cmd == 'search':
-                    await self._cmd_search(args)
-                elif cmd == 'query':
-                    await self._cmd_query(args)
                 elif cmd in ('accounts', 'list'):
                     self._cmd_list_accounts()
                 elif cmd in ('sync', 'import'):
                     self._cmd_sync_accounts()
                 elif cmd == 'add':
                     self._cmd_add_account(args)
-                elif cmd == 'run':
-                    await self._cmd_run_script(args)
                 elif cmd == 'switch':
                     if args:
                         await self._cmd_switch(args[0])
                     else:
                         print("الاستخدام: switch email@domain.com")
+                elif cmd in ('attack', 'gather', 'march', 'port', 'harbor', 'heroes', 'castle', 'search', 'query', 'run'):
+                    # التحقق من أن الاتصال قائم قبل إرسال أوامر اللعبة
+                    if not self.conn or not self.conn.is_connected:
+                        print(f"\n❌ الحساب [{self.email}] غير متصل حالياً بالسيرفر (تم تسجيل الدخول من جهاز آخر أو انقطع الاتصال).")
+                        print("💡 اكتب reconnect لإعادة الاتصال فوراً، أو switch للتبديل لحساب آخر.\n")
+                        continue
+
+                    if cmd in ('attack', 'gather', 'march'):
+                        await self._cmd_attack(args)
+                    elif cmd in ('port', 'harbor'):
+                        await self._cmd_port()
+                    elif cmd == 'heroes':
+                        await self._cmd_heroes()
+                    elif cmd == 'castle':
+                        await self._cmd_castle()
+                    elif cmd == 'search':
+                        await self._cmd_search(args)
+                    elif cmd == 'query':
+                        await self._cmd_query(args)
+                    elif cmd == 'run':
+                        await self._cmd_run_script(args)
                 else:
                     print(f"⚠️ أمر غير معروف: '{cmd}'. اكتب help لعرض الأوامر.")
 
@@ -218,6 +245,25 @@ class BotShell:
             except Exception as e:
                 print(f"❌ خطأ أثناء تنفيذ الأمر: {e}")
                 traceback.print_exc()
+
+    async def _cmd_reconnect(self):
+        """إعادة الاتصال الفوري بالحساب الحالي"""
+        print(f"\n🔄 جاري إعادة الاتصال بالسيرفر للحساب [{self.email}]...")
+        if self.conn:
+            await self.conn.close()
+
+        self._load_cache()
+        if self.email not in self.accounts_map:
+            print(f"❌ الحساب '{self.email}' غير مسجل في session_cache.json")
+            return
+
+        info = self.accounts_map[self.email]
+        acc = AccountSession(self.email, info['userId'], info['sessionId'])
+        self.conn = GameConnection(acc, on_disconnect=self._on_server_disconnect)
+        if await self.conn.connect():
+            print(f"✅ تم إعادة الاتصال بنجاح! UID={self.conn.uid} | Kingdom={self.conn.kingdom_id}\n")
+        else:
+            print(f"❌ فشل إعادة الاتصال بالحساب: {self.email}\n")
 
     async def _cmd_auth_login(self, args: list):
         """تسجيل دخول حساب جديد مباشرة عبر السيرفر بالإيميل وكلمة المرور فقط"""
@@ -288,8 +334,12 @@ class BotShell:
     def _cmd_reload(self):
         """إعادة تحميل الملفات الساخنة دون قطع الاتصال"""
         try:
+            import onemt_bot
+            import game_client
+            importlib.reload(onemt_bot)
+            importlib.reload(game_client)
             importlib.reload(Attack_)
-            print("🔄 تم إعادة تحميل ملف [Attack_.py] بنجاح! التعديلات أصبحت سارية فوراً.")
+            print("🔄 تم إعادة تحميل ملفات [Attack_.py, game_client.py, onemt_bot.py] بنجاح!")
         except Exception as e:
             print(f"❌ خطأ أثناء إعادة التحميل: {e}")
 
@@ -361,12 +411,17 @@ class BotShell:
             hid = str(h.get('id', ''))
             state = h.get('status', {}).get('state', 0)
             state_desc = "🟢 متاح (Idle)" if state == 0 else f"🔴 مشغول (State={state})"
+            lvl = h.get('lv', 1)
             
             # تصنيف البطل
             if hid.startswith('5502'):
                 htype = "🌾 تطوير وتنمية (5502)"
             elif hid.startswith('5501'):
                 htype = "⚔️ عسكري أساسي (5501)"
+            elif hid.startswith('5503'):
+                htype = "🎖️ بطل عام/استثنائي (5503)"
+            elif hid.startswith('5504'):
+                htype = "👑 بطل أسطوري (5504)"
             else:
                 htype = f"⭐ بطل ({hid[:4]})"
 
@@ -375,7 +430,7 @@ class BotShell:
             has_5620 = any(s.startswith('5620') for s in sids)
             skill_mark = " [✨ مهارة جمع 5620]" if has_5620 else ""
 
-            print(f" • بطل {hid} | {htype:<22} | {state_desc} {skill_mark}")
+            print(f" • بطل {hid} | {htype:<25} | Lvl {lvl:<3} | {state_desc} {skill_mark}")
             if sids:
                 print(f"    └── المهارات: {sids}")
         print()
@@ -504,7 +559,7 @@ class BotShell:
         acc = AccountSession(self.email, info['userId'], info['sessionId'])
 
         print(f"\n🔄 جاري التبديل إلى الحساب: {self.email}...")
-        self.conn = GameConnection(acc)
+        self.conn = GameConnection(acc, on_disconnect=self._on_server_disconnect)
         if await self.conn.connect():
             print(f"✅ تم الاتصال بنجاح بالحساب الجديد: {self.email} (UID={self.conn.uid})\n")
         else:

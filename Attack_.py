@@ -176,19 +176,22 @@ class CastleGatherer:
             if self.heroes:
                 return
 
-        # 2. محاولة استعلام بيانات الحساب اللحظية من السيرفر (1000/1)
-        try:
-            r_init = await self.conn.query('1000', '1', {}, timeout=2)
-            if r_init:
-                retdata = r_init.get('data', {}).get('retdata', {}) or r_init.get('retdata', {})
-                h_ctrl = retdata.get('heroCtrl', [])
-                if isinstance(h_ctrl, list) and h_ctrl:
-                    self.heroes = list(h_ctrl)
-                    return
-        except Exception:
-            pass
+        # 2. إرسال طلب التهيئة 1000/1 مع session=0 والانتظار اللحظي لاستقبال الأبطال
+        if self.conn._gate and self.conn._gate._writer and self.conn._gate.is_connected:
+            try:
+                from onemt_bot import pack_request
+                pkt_init = pack_request('1000', '1', {}, session=0)
+                self.conn._gate._writer.write(pkt_init)
+                await self.conn._gate._writer.drain()
+                for _ in range(15):
+                    await asyncio.sleep(0.2)
+                    if self.conn._gate.heroes:
+                        self.heroes = list(self.conn._gate.heroes)
+                        return
+            except Exception:
+                pass
 
-        # 3. جلب جميع أبطال التشكيلات السريعة (3080/2)
+        # 3. جلب جميع أبطال التشكيلات السريعة (3080/2) كخطة احتياطية
         try:
             r_3080 = await self.conn.query('3080', '2', {'isSelf': True, 'uids': [uid_int]}, timeout=3)
             if r_3080 and 'data' in r_3080:
@@ -202,7 +205,7 @@ class CastleGatherer:
         except Exception:
             pass
 
-        # 4. جلب جميع الأبطال من تشكيلات الجيش (1005/7 لجميع الخانات من 1 إلى 10)
+        # 4. جلب جميع الأبطال من تشكيلات الجيش (1005/7 لجميع الخانات من 1 إلى 10) كخطة احتياطية
         for ctype in range(1, 11):
             try:
                 form_res = await self.conn.query('1005', '7', {"compiletype": ctype}, timeout=2)
@@ -303,28 +306,65 @@ class CastleGatherer:
             if r_map and 'data' in r_map:
                 kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
 
-        # جلب تشكيل الجيش
-        r_form = await self.conn.query('1005', '7', {"compiletype": 1})
+        # جلب القوات الحقيقية المتوفرة حالياً في القلعة (1005/1)
+        available_troops = {}
+        r_army = await self.conn.query('1005', '1', {})
+        if r_army and 'data' in r_army:
+            total_army_map = r_army['data'].get('totalArmy', {})
+            for tid_str, count_str in total_army_map.items():
+                if str(tid_str).isdigit() and str(count_str).isdigit():
+                    tid = int(tid_str)
+                    available_troops[tid] = int(count_str)
+
+        # خصم الجنود الذين أرسلناهم في مسيرات سابقة داخل نفس الجلسة
+        for tid, used_cnt in getattr(self, 'used_army', {}).items():
+            if tid in available_troops:
+                available_troops[tid] = max(0, available_troops[tid] - used_cnt)
+
+        # جلب تشكيل الجيش المحفوظ كمرجع
+        pets_list = []
         compile_army = {}
+        r_form = await self.conn.query('1005', '7', {"compiletype": 1})
         if r_form and 'data' in r_form:
             compile_army = r_form['data'].get('compileArmy', {})
+            pets_list = r_form['data'].get('compilePets', [])
 
-        if not compile_army:
-            r_form2 = await self.conn.query('1005', '7', {"compiletype": 2})
-            if r_form2 and 'data' in r_form2:
-                compile_army = r_form2['data'].get('compileArmy', {})
-
-        # تجهيز قائمة الجيش مع توزيع متوازن يسمح بإرسال عدة مسيرات متتالية
+        # تجهيز قائمة الجيش مع التحقق من توفر كل نوع في القلعة وعدم طلب أكثر من المتوفر
         army_list = []
+        target_march_soldiers = 15000
+        needed = target_march_soldiers
+
         if compile_army:
             for k, v in compile_army.items():
-                v_int = int(v)
-                if v_int > 0:
-                    army_count = min(v_int, 20000)
-                    army_list.append({"id": int(k), "num": army_count})
+                if str(k).isdigit():
+                    tid = int(k)
+                    v_int = int(v)
+                    avail = available_troops.get(tid, 0)
+                    if avail > 0:
+                        take = min(v_int, avail, needed)
+                        if take > 0:
+                            army_list.append({"id": tid, "num": take})
+                            available_troops[tid] -= take
+                            needed -= take
+                            if needed <= 0:
+                                break
+
+        # إذا لم تكن التشكيلة كافية، نكمل من أكثر القوات توفراً في القلعة (عربات 701/711، مشاة 409/411، فرسان 610/611)
+        if needed > 0:
+            sorted_troops = sorted(available_troops.items(), key=lambda x: x[1], reverse=True)
+            for tid, avail in sorted_troops:
+                if avail <= 0:
+                    continue
+                take = min(avail, needed)
+                army_list.append({"id": tid, "num": take})
+                available_troops[tid] -= take
+                needed -= take
+                if needed <= 0:
+                    break
 
         if not army_list:
-            army_list = [{"id": 501, "num": 1000}]
+            log.warning(f"[{email}] ⚠️ لا توجد قوات كافية متوفرة في القلعة لإرسال مسيرة!")
+            return "NO_ARMY"
 
         # جلب بيانات مورد البناء
         r_build = await self.conn.query('1006', '15', {
@@ -355,7 +395,7 @@ class CastleGatherer:
                 },
                 "army": army_list
             },
-            "pets": []
+            "pets": pets_list if isinstance(pets_list, list) else []
         }
 
         log.info(f"[{email}] 🚀 إرسال أمر المسيرة إلى السيرفر (1007/2)...")
@@ -367,10 +407,19 @@ class CastleGatherer:
                 log.info(f"[{email}] ✅ تم إرسال المسيرة بنجاح! 🌾 Target={target_id} | Heroes={selected_heroes}")
                 for hid in selected_heroes:
                     self.busy_heroes.add(hid)
+                # تسجيل القوات المستخدمة
+                if not hasattr(self, 'used_army'):
+                    self.used_army = {}
+                for item in army_list:
+                    tid = item['id']
+                    self.used_army[tid] = self.used_army.get(tid, 0) + item['num']
                 return "SUCCESS"
             elif err in ('8004', '9007004'):
                 log.info(f"[{email}] 🛑 اكتملت طوابير المسيرات للقلعة (تم الوصول للحد الأقصى من المسيرات - كود {err}).")
                 return "QUEUE_FULL"
+            elif err == '8009':
+                log.warning(f"[{email}] ⚠️ الجنود المطلوب إرسالهم غير كافيين أو غير متاحين بالقلعة (كود 8009).")
+                return "INSUFFICIENT_ARMY"
             elif err == '9007020':
                 log.warning(f"[{email}] ⚠️ البطل {selected_heroes} مشغول بالفعل على السيرفر.")
                 for hid in selected_heroes:
