@@ -284,7 +284,7 @@ def add_to_exclude_history(uid, target_id):
 
 def run_bot(bot):
     type_R = 5
-    r0 = bot.query('2058', '20', {"heroId": 5501010})
+    r0 = bot.query('2058', '20', {"heroId":5501005,"uid":10615183})
     if r0:
         print(json.dumps(r0, ensure_ascii=False, indent=2)) 
 

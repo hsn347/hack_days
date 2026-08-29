@@ -200,18 +200,40 @@ def decode_gate_response(pkt: bytes):
     session = struct.unpack('>I', pkt[-4:])[0]
     raw     = pkt[:-5]
     if not ok: return {'ok': False, 'session': session}
-    if session == 0:
-        try:    raw = zlib.decompress(raw, -15)
+
+    # محاولة فك الضغط بجميع صيغ zlib و gzip
+    candidate_raws = [raw]
+    for w in (-15, 47, 15, 31, 32):
+        try:
+            candidate_raws.append(zlib.decompress(raw, w))
+            break
+        except: pass
+
+    for attempt in candidate_raws:
+        try:
+            dec_bytes = xor_crypt(attempt)
+            # جرب أيضاً فك الضغط بعد XOR
+            for w in (-15, 47, 15):
+                try:
+                    dec_bytes = zlib.decompress(dec_bytes, w)
+                    break
+                except: pass
+            
+            # استخراج محتوى JSON النظيف بين أول { وآخر }
+            s_idx = dec_bytes.find(b'{')
+            e_idx = dec_bytes.rfind(b'}')
+            if s_idx != -1 and e_idx != -1:
+                json_bytes = dec_bytes[s_idx:e_idx+1]
+                c = json.loads(json_bytes.decode('utf-8', errors='replace'))
+                if isinstance(c, dict):
+                    cmd = str(c.get('cmd', ''))
+                    if cmd.startswith(CMD_PREFIX):
+                        c['cmd'] = cmd[len(CMD_PREFIX):]
+                    return {'ok': True, 'content': c, 'session': session}
         except:
-            try: raw = zlib.decompress(raw)
-            except: pass
-    try:
-        c = json.loads(xor_crypt(raw))
-        if c.get('cmd','').startswith(CMD_PREFIX):
-            c['cmd'] = c['cmd'][len(CMD_PREFIX):]
-        return {'ok': True, 'content': c, 'session': session}
-    except:
-        return {'ok': True, 'raw': xor_crypt(raw).decode('utf-8','replace')}
+            pass
+
+    return {'ok': True, 'raw': xor_crypt(raw).decode('utf-8', 'replace'), 'session': session}
 
 # ============================================================
 # HTTP Login (onemt SDK)

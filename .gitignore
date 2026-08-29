@@ -8,3 +8,5 @@ h/*.apk
 h/*.zip
 h/*.so
 h/*.jar
+split_install.apk
+base_temp.apk

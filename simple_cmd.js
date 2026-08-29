@@ -13,7 +13,7 @@
 // أمثلة: 
 // var CMD='1001'; var SUBCMD='1';  var DATA={};    
 // var CMD='1007'; var SUBCMD='16';  var DATA={};                         // جلب UID اللاعب
-var CMD='2058'; var SUBCMD='21';  var DATA={};                         // مزامنة طوابير الخريطة المحلية
+var CMD='2058'; var SUBCMD='20';  var DATA={"heroId": 4110219};                         // مزامنة طوابير الخريطة المحلية
 // var CMD='1010'; var SUBCMD='43'; var DATA={};   ء                      // سجل التحالف
 // var CMD='1010'; var SUBCMD='81'; var DATA={uid:10598913};             // حالة التبرعات
 // var CMD='1004'; var SUBCMD='1';  var DATA={};                         // الحقيبة

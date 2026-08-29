@@ -1,0 +1,778 @@
+
+====================================================
+  >>> #1 cmd=2058 subcmd=21 [SEND]
+====================================================
+{
+  "cmd": "2058",
+  "subcmd": "21"
+}
+
+====================================================
+  <<< #2 cmd=2058 subcmd=21 err=0 
+====================================================
+{
+  "cmd": "2058",
+  "pid": 10615183,
+  "time": 1787839973,
+  "source": "c",
+  "err": "0",
+  "data": {
+    "mapBook": {},
+    "quests": {
+      "4110219": {
+        "dynamicId": 732,
+        "lNum": 1,
+        "id": 4110219,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110233": {
+        "dynamicId": 733,
+        "lNum": 20,
+        "id": 4110233,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110658": {
+        "dynamicId": 734,
+        "lNum": 10,
+        "id": 4110658,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110234": {
+        "dynamicId": 735,
+        "lNum": 25,
+        "id": 4110234,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110221": {
+        "dynamicId": 736,
+        "lNum": 1,
+        "id": 4110221,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110231": {
+        "dynamicId": 737,
+        "lNum": 10,
+        "id": 4110231,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110649": {
+        "dynamicId": 738,
+        "lNum": 1,
+        "id": 4110649,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110651": {
+        "dynamicId": 739,
+        "lNum": 1,
+        "id": 4110651,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110657": {
+        "dynamicId": 740,
+        "lNum": 5,
+        "id": 4110657,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110220": {
+        "dynamicId": 746,
+        "lNum": 1,
+        "id": 4110220,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110230": {
+        "dynamicId": 742,
+        "lNum": 5,
+        "id": 4110230,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110218": {
+        "dynamicId": 748,
+        "lNum": 1,
+        "id": 4110218,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110652": {
+        "dynamicId": 744,
+        "lNum": 3,
+        "id": 4110652,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 4
+      },
+      "4110650": {
+        "dynamicId": 743,
+        "lNum": 1,
+        "id": 4110650,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110659": {
+        "dynamicId": 745,
+        "lNum": 15,
+        "id": 4110659,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110223": {
+        "dynamicId": 747,
+        "lNum": 5,
+        "id": 4110223,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 2
+      },
+      "4110222": {
+        "dynamicId": 741,
+        "lNum": 1,
+        "id": 4110222,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110232": {
+        "dynamicId": 749,
+        "lNum": 15,
+        "id": 4110232,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      }
+    }
+  },
+  "subcmd": "21"
+}
+
+====================================================
+  <<< #3 cmd=1009 subcmd=19 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_SERVER_TIME",
+    "notifyData": [
+      {
+        "time": 1787839995.53
+      }
+    ]
+  },
+  "subcmd": "19"
+}
+
+====================================================
+  <<< #4 cmd=1009 subcmd=201 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "err": "0",
+  "subcmd": "201",
+  "data": {
+    "notifyID": "NOTIFY_MAP_SYNC",
+    "notifyData": [
+      {
+        "msgType": 13,
+        "data": {
+          "id": "10615183-35556",
+          "to": {
+            "lvBgColor": 1,
+            "level": 6,
+            "subMapType": 2,
+            "objId": 3306,
+            "type": 5,
+            "mapId": 259,
+            "remind": 756000,
+            "id": "475-304-5-2-3306",
+            "outputSpeed": 110400,
+            "y": 303,
+            "x": 474,
+            "size": 1,
+            "createTime": 1787781602,
+            "mapType": 5,
+            "settingId": 42,
+            "status": 1,
+            "outputNum": 756000
+          }
+        }
+      }
+    ]
+  }
+}
+
+====================================================
+  <<< #5 cmd=1009 subcmd=202 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+    "notifyData": [
+      {
+        "data": {
+          "statusStartTime": 1787839996,
+          "effectId": 80530020,
+          "buffList": [
+            {
+              "source": 5,
+              "effect": 585.05,
+              "id": 0,
+              "beginTime": 1787839996,
+              "time": 31536000,
+              "effectType": 17
+            },
+            {
+              "beginTime": 1787839996,
+              "time": 31536000,
+              "effect": 610.4968
+            },
+            {
+              "beginTime": 1787839996,
+              "time": 31536000,
+              "effect": 130
+            }
+          ],
+          "isLocalQueue": true,
+          "kingdomId": 259,
+          "moveTimeSpan": [
+            {
+              "time": 283,
+              "distancePrecent": 1
+            }
+          ],
+          "queueType": 4,
+          "camp": 0,
+          "isMainQueue": true,
+          "playerFc": 2004273,
+          "status": 2,
+          "startTime": 1787839713,
+          "matrixType": 3,
+          "teamId": 1041418,
+          "statusEndTime": 1787850596.5925,
+          "battleShipSpecialEffect": 0,
+          "to": {
+            "mapType": 5,
+            "x": 475,
+            "id": "475-304-5-2-3306",
+            "y": 304,
+            "objId": 3306,
+            "subMapType": 2
+          },
+          "id": "10615183-35556",
+          "endTime": 1787839996,
+          "moveLineType": 3,
+          "uid": 10615183,
+          "createTime": 1787839713,
+          "isLegendLord": false,
+          "alliance": 1041418,
+          "lordName": "..........خ",
+          "from": {
+            "avatar": "91000008",
+            "runePages": {
+              "10615183": [
+                1
+              ]
+            },
+            "pets": {
+              "10615183": [
+                {
+                  "id": 1264,
+                  "lv": 120,
+                  "step": 2,
+                  "equipShow": false
+                }
+              ]
+            },
+            "aid": 1041418,
+            "castleLv": 60,
+            "teamId": 1041418,
+            "mapType": 4,
+            "heros": {
+              "10615183": [
+                {
+                  "tactics": {},
+                  "formation": {},
+                  "power": 2959.904,
+                  "equip": {},
+                  "lv": 10,
+                  "id": 5502005,
+                  "star": 5
+                },
+                {
+                  "tactics": {},
+                  "formation": {},
+                  "power": 3157.304,
+                  "equip": {},
+                  "lv": 40,
+                  "id": 5502010,
+                  "star": 5
+                }
+              ]
+            },
+            "id": "488-291-4-0-10615183",
+            "army": [
+              {
+                "id": 701,
+                "num": 22148
+              }
+            ],
+            "y": 291,
+            "uid": 10615183,
+            "name": "..........خ",
+            "totalFc": 4745660,
+            "allianceAbb": "RGF",
+            "level": 45,
+            "x": 488,
+            "headid": 1504
+          },
+          "isNoticeWorking": false,
+          "data": {
+            "coller": {
+              "collStartTime": 1787839996,
+              "leagueName": "RGF",
+              "playerName": "..........خ",
+              "army": [
+                {
+                  "id": 701,
+                  "num": 22148
+                }
+              ],
+              "uid": 10615183,
+              "sourceKid": 259,
+              "collTimeSpan": [
+                {
+                  "speed": 256740.36672,
+                  "time": 10600.592477022,
+                  "plus": 1.3255468
+                }
+              ],
+              "queueId": "10615183-35556",
+              "leagueID": 1041418
+            }
+          },
+          "collEndTime": 1787850596.5925,
+          "mapId": 259
+        },
+        "msgType": 3,
+        "teamId": 1041418
+      }
+    ]
+  },
+  "subcmd": "202"
+}
+
+====================================================
+  <<< #6 cmd=1009 subcmd=19 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "subcmd": "19",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_SERVER_TIME",
+    "notifyData": [
+      {
+        "time": 1787840055.53
+      }
+    ]
+  },
+  "time": 1787840055
+}
+
+====================================================
+  <<< #7 cmd=1009 subcmd=19 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "subcmd": "19",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_SERVER_TIME",
+    "notifyData": [
+      {
+        "time": 1787840115.53
+      }
+    ]
+  },
+  "time": 1787840115
+}
+
+====================================================
+  <<< #8 cmd=2058 subcmd=21 err=0 
+====================================================
+{
+  "cmd": "2058",
+  "subcmd": "21",
+  "time": 1787840161,
+  "source": "c",
+  "err": "0",
+  "data": {
+    "mapBook": {},
+    "quests": {
+      "4110219": {
+        "dynamicId": 732,
+        "lNum": 1,
+        "id": 4110219,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110233": {
+        "dynamicId": 733,
+        "lNum": 20,
+        "id": 4110233,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110658": {
+        "dynamicId": 734,
+        "lNum": 10,
+        "id": 4110658,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110234": {
+        "dynamicId": 735,
+        "lNum": 25,
+        "id": 4110234,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110221": {
+        "dynamicId": 736,
+        "lNum": 1,
+        "id": 4110221,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110231": {
+        "dynamicId": 737,
+        "lNum": 10,
+        "id": 4110231,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110649": {
+        "dynamicId": 738,
+        "lNum": 1,
+        "id": 4110649,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110651": {
+        "dynamicId": 739,
+        "lNum": 1,
+        "id": 4110651,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110657": {
+        "dynamicId": 740,
+        "lNum": 5,
+        "id": 4110657,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110220": {
+        "dynamicId": 746,
+        "lNum": 1,
+        "id": 4110220,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110230": {
+        "dynamicId": 742,
+        "lNum": 5,
+        "id": 4110230,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110218": {
+        "dynamicId": 748,
+        "lNum": 1,
+        "id": 4110218,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110652": {
+        "dynamicId": 744,
+        "lNum": 3,
+        "id": 4110652,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 4
+      },
+      "4110650": {
+        "dynamicId": 743,
+        "lNum": 1,
+        "id": 4110650,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110659": {
+        "dynamicId": 745,
+        "lNum": 15,
+        "id": 4110659,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110223": {
+        "dynamicId": 747,
+        "lNum": 5,
+        "id": 4110223,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 2
+      },
+      "4110222": {
+        "dynamicId": 741,
+        "lNum": 1,
+        "id": 4110222,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110232": {
+        "dynamicId": 749,
+        "lNum": 15,
+        "id": 4110232,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      }
+    }
+  },
+  "pid": 10615183
+}
+
+====================================================
+  <<< #9 cmd=1009 subcmd=19 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "subcmd": "19",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_SERVER_TIME",
+    "notifyData": [
+      {
+        "time": 1787840175.53
+      }
+    ]
+  },
+  "time": 1787840175
+}
+
+====================================================
+  <<< #10 cmd=2058 subcmd=21 err=0 
+====================================================
+{
+  "cmd": "2058",
+  "subcmd": "21",
+  "source": "c",
+  "err": "0",
+  "data": {
+    "mapBook": {},
+    "heroId": 4110219,
+    "quests": {
+      "4110219": {
+        "dynamicId": 732,
+        "lNum": 1,
+        "id": 4110219,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110233": {
+        "dynamicId": 733,
+        "lNum": 20,
+        "id": 4110233,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110658": {
+        "dynamicId": 734,
+        "lNum": 10,
+        "id": 4110658,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110234": {
+        "dynamicId": 735,
+        "lNum": 25,
+        "id": 4110234,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110221": {
+        "dynamicId": 736,
+        "lNum": 1,
+        "id": 4110221,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110231": {
+        "dynamicId": 737,
+        "lNum": 10,
+        "id": 4110231,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      },
+      "4110649": {
+        "dynamicId": 738,
+        "lNum": 1,
+        "id": 4110649,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110651": {
+        "dynamicId": 739,
+        "lNum": 1,
+        "id": 4110651,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110657": {
+        "dynamicId": 740,
+        "lNum": 5,
+        "id": 4110657,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110220": {
+        "dynamicId": 746,
+        "lNum": 1,
+        "id": 4110220,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110230": {
+        "dynamicId": 742,
+        "lNum": 5,
+        "id": 4110230,
+        "startTime": 1699719413,
+        "cNum": 5,
+        "status": 4
+      },
+      "4110218": {
+        "dynamicId": 748,
+        "lNum": 1,
+        "id": 4110218,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110652": {
+        "dynamicId": 744,
+        "lNum": 3,
+        "id": 4110652,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 4
+      },
+      "4110650": {
+        "dynamicId": 743,
+        "lNum": 1,
+        "id": 4110650,
+        "startTime": 1699719413,
+        "cNum": 1,
+        "status": 4
+      },
+      "4110659": {
+        "dynamicId": 745,
+        "lNum": 15,
+        "id": 4110659,
+        "startTime": 1699719413,
+        "cNum": 7,
+        "status": 2
+      },
+      "4110223": {
+        "dynamicId": 747,
+        "lNum": 5,
+        "id": 4110223,
+        "startTime": 1699719413,
+        "cNum": 3,
+        "status": 2
+      },
+      "4110222": {
+        "dynamicId": 741,
+        "lNum": 1,
+        "id": 4110222,
+        "startTime": 1699719413,
+        "cNum": 0,
+        "status": 2
+      },
+      "4110232": {
+        "dynamicId": 749,
+        "lNum": 15,
+        "id": 4110232,
+        "startTime": 1699719413,
+        "cNum": 8,
+        "status": 2
+      }
+    }
+  },
+  "pid": 10615183
+}
+
+====================================================
+  <<< #11 cmd=2058 subcmd=20 
+====================================================
+{
+  "cmd": "2058",
+  "subcmd": "20",
+  "time": 1787840207,
+  "source": "c",
+  "data": {
+    "heroData": {},
+    "heroId": 4110219
+  },
+  "pid": 10615183
+}
