@@ -137,6 +137,9 @@ class GateClient:
     يستخدم نفس كريبتو onemt_bot.py (xor_crypt, pack_request, etc.)
     """
 
+    # ── ثوابت حماية الحساب من الحظر ──────────────────────────────
+    RATE_LIMIT_DELAY = 0.8   # ثانية بين كل طلب API (حماية أساسية من الحظر)
+
     def __init__(self, creds: GateCredentials):
         self.creds    = creds
         self._session = 1
@@ -144,18 +147,31 @@ class GateClient:
         self._writer  = None
         self._pending: Dict[int, asyncio.Future] = {}
         self._cmd_pending: Dict[Tuple[str, str], asyncio.Future] = {}
-        self.cached_packets: Dict[Tuple[str, str], dict] = {}
-        self.heroes: List[dict] = []
-        self._buf     = b""
+        self.heroes: list = []
+        self.init_data: dict = {}
+        self.spy_mode: bool = False
+        self._buf = b""
+        self.cached_packets: dict = {}
+        self.local_queues: list = []
+        self.kick_reason: str = ""
         self._lock    = asyncio.Lock()
         self._alive   = False
         self._notifies: Dict[str, Callable] = {}
+        self._packet_listeners: List[Callable] = []
         self._recv_task = None
+        self._heartbeat_task = None
+        self._init_flow_task = None
         self.on_disconnect: Optional[Callable[[str], Any]] = None
-        self.kick_reason: Optional[str] = None
         self._explicit_close: bool = False
+        self._last_query_time: float = 0.0  # توقيت آخر طلب API
+
+    @property
+    def is_connected(self) -> bool:
+        return self._alive and self._writer is not None
 
     async def connect(self) -> bool:
+        if self._alive:
+            return True
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self.creds.gate_ip, self.creds.gate_port),
@@ -186,24 +202,56 @@ class GateClient:
 
         self._alive = True
         self._recv_task = asyncio.create_task(self._recv_loop())
-
-        # إرسال طلب التهيئة 1000/1 مع session=0 وحزم المزامنة الأولية
-        pkt_init = pack_request('1000', '1', {}, session=0)
-        self._writer.write(pkt_init)
-        self._writer.write(pack_request('1009', '36', {}, session=10086))
-        self._writer.write(pack_request('1005', '1', {}, session=1))
-        await self._writer.drain()
+        self._init_flow_task = asyncio.create_task(self._init_flow())
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         return True
+
+    async def _heartbeat_loop(self):
+        """إرسال ping دوري للسيرفر كل 25 ثانية للإبقاء على الاتصال حياً"""
+        # انتظار انتهاء _init_flow أولاً (في 5 خطوات من 3 ثوان)
+        for _ in range(15):
+            if not self._alive:
+                return
+            await asyncio.sleep(1)
+        while self._alive:
+            try:
+                self.send_nowait('1009', '36', {})
+                # نوم قصير متقطع بدلاً من sleep(30) واحدة حتى نستجيب لـ _alive=False فوراً
+                for _ in range(25):
+                    if not self._alive:
+                        return
+                    await asyncio.sleep(1)
+            except Exception:
+                break
+
+    async def _init_flow(self):
+        """إرسال طلبات التهيئة وتدفق بيانات السيرفر الأولية"""
+        try:
+            # الانتظار قليلاً حتى يُكمل خادم الـ Gate ربط الجلسة داخلياً وتجنب خطأ 16001
+            await asyncio.sleep(0.6)
+            if not self._alive: return
+            pkt_init = pack_request('1000', '1', {}, session=0)
+            self._writer.write(pkt_init)
+            await self._writer.drain()
+            for _ in range(6):
+                await asyncio.sleep(0.5)
+                if not self._alive: break
+                self.send_nowait('1009', '36', {})
+                self.send_nowait('1005', '1', {})
+        except Exception:
+            pass
+
 
     async def _recv_loop(self):
         try:
             while self._alive:
-                chunk = await asyncio.wait_for(self._reader.read(65536), timeout=120)
+                chunk = await asyncio.wait_for(self._reader.read(65536), timeout=90)
                 if not chunk: break
                 self._buf += chunk
                 self._dispatch()
         except asyncio.TimeoutError:
-            pass
+            if self._alive:
+                log.warning("[Gate] ⏰ انتهت مهلة الاستقبال (90s) — الاتصال قد ينقطع")
         except Exception as e:
             if self._alive: log.warning(f"[Gate] recv: {e}")
         finally:
@@ -217,7 +265,8 @@ class GateClient:
             
             if was_alive and not self._explicit_close:
                 if not self.kick_reason:
-                    self.kick_reason = "other_device"
+                    # انقطاع شبكي غير متوقع — ليس بالضرورة دخولاً من جهاز آخر
+                    self.kick_reason = "connection_lost"
                 log.warning(f"[Gate] ⚠️ انقطع الاتصال بالحساب (السبب: {self.kick_reason})")
                 if self.on_disconnect:
                     try:
@@ -239,21 +288,42 @@ class GateClient:
             sub  = str(c.get('subcmd', '')) if isinstance(c, dict) else ''
             cmd_key = (cmd, sub)
 
+            # وضع التجسس على الحزم (Spy Mode)
+            if self.spy_mode:
+                summary = f"👁️ [SPY S2C] CMD={cmd}/{sub} (session={sess})"
+                if isinstance(c, dict) and 'data' in c:
+                    d_keys = list(c['data'].keys()) if isinstance(c['data'], dict) else type(c['data'])
+                    summary += f" | data keys: {d_keys}"
+                print(summary)
+
             # تخزين الحزمة في الذاكرة المؤقتة
             if isinstance(c, dict) and cmd:
                 self.cached_packets[cmd_key] = c
-                # إذا كانت الحزمة تحتوي على heroCtrl، حفظ الأبطال فوراً
+                # حفظ بيانات التهيئة والأبطال فوراً
                 retdata = c.get('data', {}).get('retdata', {}) or c.get('retdata', {})
-                if isinstance(retdata, dict) and 'heroCtrl' in retdata:
-                    h_ctrl = retdata.get('heroCtrl', [])
-                    if isinstance(h_ctrl, list) and h_ctrl:
-                        self.heroes = list(h_ctrl)
+                if isinstance(retdata, dict) and retdata:
+                    self.init_data.update(retdata)
+                    if 'heroCtrl' in retdata:
+                        h_ctrl = retdata.get('heroCtrl', [])
+                        if isinstance(h_ctrl, list) and h_ctrl:
+                            self.heroes = list(h_ctrl)
+                    # حفظ نسخة JSON محلية تلقائياً للمطور في مجلد dumps
+                    if len(retdata) > 5:
+                        try:
+                            os.makedirs('dumps', exist_ok=True)
+                            safe_name = str(getattr(self.creds, 'email', None) or getattr(self.creds, 'uid', 'acc')).replace('@', '_at_')
+                            dump_file = os.path.join('dumps', f"{safe_name}_login_init.json")
+                            with open(dump_file, 'w', encoding='utf-8') as df:
+                                json.dump(retdata, df, indent=2, ensure_ascii=False)
+                        except Exception:
+                            pass
 
-                # فحص إشعارات طرد السيرفر أو تسجيل الدخول من جهاز آخر
                 data_obj = c.get('data', {})
                 if isinstance(data_obj, dict):
                     notify_id = str(data_obj.get('notifyID', ''))
                     notify_data = data_obj.get('notifyData', [])
+                    if notify_id == 'NOTIFY_LOCAL_QUEUE_SYNC' and isinstance(notify_data, list):
+                        self.local_queues = notify_data
                     if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
                         if isinstance(notify_data, list):
                             for item in notify_data:
@@ -299,25 +369,50 @@ class GateClient:
                     if nid and nid in self._notifies:
                         asyncio.create_task(self._notifies[nid](c))
 
-    async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15) -> Optional[dict]:
-        """إرسال أمر والانتظار للرد"""
+            # General packet listeners
+            if self._packet_listeners:
+                for listener in list(self._packet_listeners):
+                    try:
+                        if asyncio.iscoroutinefunction(listener):
+                            asyncio.create_task(listener(cmd, sub, c))
+                        else:
+                            listener(cmd, sub, c)
+                    except Exception:
+                        pass
+
+    def add_packet_listener(self, listener: Callable):
+        if listener not in self._packet_listeners:
+            self._packet_listeners.append(listener)
+
+    def remove_packet_listener(self, listener: Callable):
+        if listener in self._packet_listeners:
+            self._packet_listeners.remove(listener)
+
+    async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15, client_data: list = None) -> Optional[dict]:
+        """إرسال أمر والانتظار للرد — مع حماية تلقائية من السرعة الزائدة."""
         if not self._alive: return None
         str_cmd = str(cmd)
         str_sub = str(subcmd)
         cmd_key = (str_cmd, str_sub)
 
-        # استرجاع فوري إذا كانت الحزمة مخزنة مسبقاً وغير فارغة
-        if cmd_key in self.cached_packets and not data and self.cached_packets[cmd_key]:
-            return self.cached_packets[cmd_key]
+        # 🛡️ حماية من الحظر: تأخير تلقائي بين الطلبات
+        now = time.time()
+        elapsed = now - self._last_query_time
+        if elapsed < self.RATE_LIMIT_DELAY:
+            await asyncio.sleep(self.RATE_LIMIT_DELAY - elapsed)
+        self._last_query_time = time.time()
 
         sess = self._session
         self._session += 1
-        pkt = pack_request(str_cmd, str_sub, data or {}, sess)
+        pkt = pack_request(str_cmd, str_sub, data or {}, sess, client_data)
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[sess] = fut
         self._cmd_pending[cmd_key] = fut
+
+        if self.spy_mode:
+            print(f"📡 [SPY C2S] CMD={cmd}/{subcmd} (session={sess}) | data={data}")
 
         async with self._lock:
             self._writer.write(pkt)
@@ -338,6 +433,8 @@ class GateClient:
         if not self._alive or not self._writer: return
         sess = self._session
         self._session += 1
+        if self.spy_mode:
+            print(f"🚀 [SPY C2S] NOWAIT CMD={cmd}/{subcmd} (session={sess}) | data={data}")
         self._writer.write(pack_request(cmd, str(subcmd), data or {}, sess))
 
     def on_notify(self, notify_id: str, handler: Callable):
@@ -346,7 +443,10 @@ class GateClient:
     async def close(self):
         self._explicit_close = True
         self._alive = False
-        if self._recv_task: self._recv_task.cancel()
+        # إلغاء جميع المهام الخلفية فوراً
+        for task in (self._recv_task, self._heartbeat_task, self._init_flow_task):
+            if task and not task.done():
+                task.cancel()
         if self._writer:
             try: self._writer.close(); await self._writer.wait_closed()
             except: pass
@@ -373,27 +473,67 @@ class GameConnection:
         self.on_disconnect = on_disconnect
         self.creds:  Optional[GateCredentials] = None
         self._gate:  Optional[GateClient]      = None
+        self._spy_mode: bool                   = False
+        self._packet_listeners: List[Callable] = []
+
+    @property
+    def init_data(self) -> dict:
+        return self._gate.init_data if self._gate else {}
+
+    @property
+    def cached_packets(self) -> dict:
+        return self._gate.cached_packets if self._gate else {}
+
+    @property
+    def local_queues(self) -> list:
+        return self._gate.local_queues if self._gate else []
+
+    @property
+    def spy_mode(self) -> bool:
+        return self._gate.spy_mode if self._gate else self._spy_mode
+
+    @spy_mode.setter
+    def spy_mode(self, val: bool):
+        self._spy_mode = bool(val)
+        if self._gate:
+            self._gate.spy_mode = bool(val)
 
     async def connect(self) -> bool:
         self.creds = await async_login(self.account)
         if not self.creds: return False
+        if hasattr(self.creds, 'email') or not getattr(self.creds, 'email', None):
+            self.creds.email = self.account.email
         self._gate = GateClient(self.creds)
         self._gate.on_disconnect = self.on_disconnect
+        self._gate.spy_mode = self._spy_mode
+        self._gate._packet_listeners = list(self._packet_listeners)
         return await self._gate.connect()
 
     @property
     def kick_reason(self) -> Optional[str]:
         return self._gate.kick_reason if self._gate else None
 
-    async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15) -> Optional[dict]:
+    async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15, client_data: list = None) -> Optional[dict]:
         if not self._gate or not self._gate.is_connected: return None
-        return await self._gate.query(cmd, subcmd, data, timeout)
+        return await self._gate.query(cmd, subcmd, data, timeout, client_data)
 
     def send_nowait(self, cmd: str, subcmd: str, data: dict = None):
         if self._gate: self._gate.send_nowait(cmd, subcmd, data)
 
     def on_notify(self, notify_id: str, handler: Callable):
         if self._gate: self._gate.on_notify(notify_id, handler)
+
+    def add_packet_listener(self, listener: Callable):
+        if listener not in self._packet_listeners:
+            self._packet_listeners.append(listener)
+        if self._gate:
+            self._gate.add_packet_listener(listener)
+
+    def remove_packet_listener(self, listener: Callable):
+        if listener in self._packet_listeners:
+            self._packet_listeners.remove(listener)
+        if self._gate:
+            self._gate.remove_packet_listener(listener)
 
     async def close(self):
         if self._gate: await self._gate.close()

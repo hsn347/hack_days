@@ -1,0 +1,1257 @@
+{
+  "21001": {
+    "id": 21001,
+    "name_ar": "فأس قاطع",
+    "name_en": ""
+  },
+  "21002": {
+    "id": 21002,
+    "name_ar": "تناوب المحاصيل",
+    "name_en": ""
+  },
+  "21003": {
+    "id": 21003,
+    "name_ar": "قبو",
+    "name_en": "Cellar"
+  },
+  "21004": {
+    "id": 21004,
+    "name_ar": "منشار مزدوج",
+    "name_en": "Double Saw"
+  },
+  "21005": {
+    "id": 21005,
+    "name_ar": "محراث الماشية",
+    "name_en": "Granary"
+  },
+  "21006": {
+    "id": 21006,
+    "name_ar": "فرن صهر المعادن",
+    "name_en": "Furnace"
+  },
+  "21007": {
+    "id": 21007,
+    "name_ar": "عربة المعادن",
+    "name_en": ""
+  },
+  "21008": {
+    "id": 21008,
+    "name_ar": "معول الحديد",
+    "name_en": "Pickaxe"
+  },
+  "21009": {
+    "id": 21009,
+    "name_ar": "إستخراج الياقوت",
+    "name_en": "Refinery"
+  },
+  "21010": {
+    "id": 21010,
+    "name_ar": "تكرير الذهب",
+    "name_en": "Purifier"
+  },
+  "21011": {
+    "id": 21011,
+    "name_ar": "فأس قاطع II",
+    "name_en": "Sharp Axe II"
+  },
+  "21012": {
+    "id": 21012,
+    "name_ar": "تناوب المحاصيل II",
+    "name_en": "Ploughing II"
+  },
+  "21014": {
+    "id": 21014,
+    "name_ar": "المنشار المزدوج II",
+    "name_en": "Double Saw II"
+  },
+  "21015": {
+    "id": 21015,
+    "name_ar": "محراث الماشية II",
+    "name_en": "Granary II"
+  },
+  "21016": {
+    "id": 21016,
+    "name_ar": "فرن صهر المعادن II",
+    "name_en": "Furnace II"
+  },
+  "21017": {
+    "id": 21017,
+    "name_ar": "عربة المعادن II",
+    "name_en": "Iron Cart II"
+  },
+  "21018": {
+    "id": 21018,
+    "name_ar": "معول الحديد II",
+    "name_en": "Pickaxe II"
+  },
+  "21019": {
+    "id": 21019,
+    "name_ar": "إستخراج الياقوت II",
+    "name_en": "Refinery II"
+  },
+  "21020": {
+    "id": 21020,
+    "name_ar": "تكرير الذهب II",
+    "name_en": "Purifier II"
+  },
+  "22001": {
+    "id": 22001,
+    "name_ar": "عربة الإمداد",
+    "name_en": "Supply Cart"
+  },
+  "22002": {
+    "id": 22002,
+    "name_ar": "هجوم",
+    "name_en": "Flank"
+  },
+  "22003": {
+    "id": 22003,
+    "name_ar": "الشفاء",
+    "name_en": "Heal"
+  },
+  "22004": {
+    "id": 22004,
+    "name_ar": "الهندسة المدنية",
+    "name_en": "Engineering"
+  },
+  "22005": {
+    "id": 22005,
+    "name_ar": "منشآت طبية",
+    "name_en": ""
+  },
+  "22006": {
+    "id": 22006,
+    "name_ar": "علم الأعشاب",
+    "name_en": ""
+  },
+  "22007": {
+    "id": 22007,
+    "name_ar": "مقويات",
+    "name_en": "Ration"
+  },
+  "22008": {
+    "id": 22008,
+    "name_ar": "هجوم II",
+    "name_en": "Flank II"
+  },
+  "22009": {
+    "id": 22009,
+    "name_ar": "الشفاء II",
+    "name_en": "Heal II"
+  },
+  "22010": {
+    "id": 22010,
+    "name_ar": "عربة الإمداد II",
+    "name_en": "Supply Cart II"
+  },
+  "22011": {
+    "id": 22011,
+    "name_ar": "الهندسة المدنية II",
+    "name_en": "Engineering II"
+  },
+  "22012": {
+    "id": 22012,
+    "name_ar": "منشآت طبية II",
+    "name_en": "Treatment II"
+  },
+  "22013": {
+    "id": 22013,
+    "name_ar": "علم الأعشاب II",
+    "name_en": "Herbology II"
+  },
+  "22014": {
+    "id": 22014,
+    "name_ar": "مقويات II",
+    "name_en": ""
+  },
+  "23001": {
+    "id": 23001,
+    "name_ar": "تقوية الأسوار",
+    "name_en": "Rampart"
+  },
+  "23002": {
+    "id": 23002,
+    "name_ar": "ثغرة",
+    "name_en": ""
+  },
+  "23003": {
+    "id": 23003,
+    "name_ar": "الأسوار",
+    "name_en": "Battlement"
+  },
+  "23004": {
+    "id": 23004,
+    "name_ar": "قوة الفخ",
+    "name_en": "Deadfall"
+  },
+  "23005": {
+    "id": 23005,
+    "name_ar": "كيروسين",
+    "name_en": "Blazer"
+  },
+  "23006": {
+    "id": 23006,
+    "name_ar": "دفاع القلعة",
+    "name_en": "technology_name_23007"
+  },
+  "23007": {
+    "id": 23007,
+    "name_ar": "حجارة مكسورة",
+    "name_en": "Smash"
+  },
+  "23008": {
+    "id": 23008,
+    "name_ar": "خشب ضخم",
+    "name_en": "Crush"
+  },
+  "23009": {
+    "id": 23009,
+    "name_ar": "الرافعة",
+    "name_en": "Crane"
+  },
+  "23010": {
+    "id": 23010,
+    "name_ar": "إسعافات أولية",
+    "name_en": "technology_name_23011"
+  },
+  "23011": {
+    "id": 23011,
+    "name_ar": "تقوية الأسوار II",
+    "name_en": "Rampart II"
+  },
+  "23012": {
+    "id": 23012,
+    "name_ar": "ثغرة II",
+    "name_en": "Embrasure II"
+  },
+  "23013": {
+    "id": 23013,
+    "name_ar": "الأسوار II",
+    "name_en": "Battlement II"
+  },
+  "23014": {
+    "id": 23014,
+    "name_ar": "دفاع القلعة II",
+    "name_en": "Fort II"
+  },
+  "23015": {
+    "id": 23015,
+    "name_ar": "حجارة مكسورة II",
+    "name_en": "Smash II"
+  },
+  "23016": {
+    "id": 23016,
+    "name_ar": "كيروسين II",
+    "name_en": ""
+  },
+  "23017": {
+    "id": 23017,
+    "name_ar": "خشب ضخم II",
+    "name_en": "Crush II"
+  },
+  "23018": {
+    "id": 23018,
+    "name_ar": "الرافعة II",
+    "name_en": "Crane II"
+  },
+  "24001": {
+    "id": 24001,
+    "name_ar": "تجنيد",
+    "name_en": "Recruitment"
+  },
+  "24002": {
+    "id": 24002,
+    "name_ar": "مهارة المبارزة",
+    "name_en": ""
+  },
+  "24003": {
+    "id": 24003,
+    "name_ar": "مهارة الرماية",
+    "name_en": "Archery"
+  },
+  "24004": {
+    "id": 24004,
+    "name_ar": "الفروسية",
+    "name_en": "Horsemanship"
+  },
+  "24005": {
+    "id": 24005,
+    "name_ar": "تقنية العربة",
+    "name_en": "Driving"
+  },
+  "24006": {
+    "id": 24006,
+    "name_ar": "رسم الخرائط",
+    "name_en": "Mapping"
+  },
+  "24007": {
+    "id": 24007,
+    "name_ar": "درع الحراشف",
+    "name_en": "Cover"
+  },
+  "24008": {
+    "id": 24008,
+    "name_ar": "درع",
+    "name_en": "Barde"
+  },
+  "24009": {
+    "id": 24009,
+    "name_ar": "درع صلب",
+    "name_en": "Shell"
+  },
+  "24010": {
+    "id": 24010,
+    "name_ar": "درع مصفح",
+    "name_en": "Armoring"
+  },
+  "24011": {
+    "id": 24011,
+    "name_ar": "فيلق",
+    "name_en": "Legion"
+  },
+  "24012": {
+    "id": 24012,
+    "name_ar": "صحة المشاة",
+    "name_en": "Infantry Boost"
+  },
+  "24013": {
+    "id": 24013,
+    "name_ar": "صحة الرماة عن البعد",
+    "name_en": "Marksman Boost"
+  },
+  "24014": {
+    "id": 24014,
+    "name_ar": "صحة الفرسان",
+    "name_en": "Cavalry Boost"
+  },
+  "24015": {
+    "id": 24015,
+    "name_ar": "متانة العربات",
+    "name_en": "Chariot Boost"
+  },
+  "24016": {
+    "id": 24016,
+    "name_ar": "القيادة",
+    "name_en": "Leadership"
+  },
+  "24017": {
+    "id": 24017,
+    "name_ar": "فيلق II",
+    "name_en": ""
+  },
+  "24018": {
+    "id": 24018,
+    "name_ar": "مهارة المبارزة II",
+    "name_en": "Swordplay II"
+  },
+  "24019": {
+    "id": 24019,
+    "name_ar": "مهارة الرماية II",
+    "name_en": "Archery II"
+  },
+  "24020": {
+    "id": 24020,
+    "name_ar": "الفروسية II",
+    "name_en": "Horsemanship II"
+  },
+  "24021": {
+    "id": 24021,
+    "name_ar": "تقنية العربة II",
+    "name_en": "Driving II"
+  },
+  "24022": {
+    "id": 24022,
+    "name_ar": "تجنيد II",
+    "name_en": "Recruitment II"
+  },
+  "24023": {
+    "id": 24023,
+    "name_ar": "درع الحراشف II",
+    "name_en": "Cover II"
+  },
+  "24024": {
+    "id": 24024,
+    "name_ar": "",
+    "name_en": "Barde II"
+  },
+  "24025": {
+    "id": 24025,
+    "name_ar": "درع صلب II",
+    "name_en": "Shell II"
+  },
+  "24026": {
+    "id": 24026,
+    "name_ar": "درع مصفح II",
+    "name_en": "Armoring II"
+  },
+  "24027": {
+    "id": 24027,
+    "name_ar": "رسم الخرائط II",
+    "name_en": "Mapping II"
+  },
+  "24028": {
+    "id": 24028,
+    "name_ar": "technology_name_24029",
+    "name_en": "Infantry Boost II"
+  },
+  "24029": {
+    "id": 24029,
+    "name_ar": "صحة الرماة عن بعد II",
+    "name_en": "Marksman Boost II"
+  },
+  "24030": {
+    "id": 24030,
+    "name_ar": "technology_name_24031",
+    "name_en": "Cavalry Boost II"
+  },
+  "24031": {
+    "id": 24031,
+    "name_ar": "متانة العربات II",
+    "name_en": "Chariot Boost II"
+  },
+  "24032": {
+    "id": 24032,
+    "name_ar": "القيادة II",
+    "name_en": "Leadership II"
+  },
+  "24033": {
+    "id": 24033,
+    "name_ar": "فيلق III",
+    "name_en": "Legion III"
+  },
+  "24034": {
+    "id": 24034,
+    "name_ar": "مهارة المبارزة III",
+    "name_en": "Swordplay III"
+  },
+  "24035": {
+    "id": 24035,
+    "name_ar": "مهارة الرماية III",
+    "name_en": "Archery III"
+  },
+  "24036": {
+    "id": 24036,
+    "name_ar": "الفروسية III",
+    "name_en": "Horsemanship III"
+  },
+  "24037": {
+    "id": 24037,
+    "name_ar": "تقنية العربة III",
+    "name_en": "Driving III"
+  },
+  "24038": {
+    "id": 24038,
+    "name_ar": "تجنيد III",
+    "name_en": "Recruitment III"
+  },
+  "24039": {
+    "id": 24039,
+    "name_ar": "درع الحراشف III",
+    "name_en": ""
+  },
+  "24040": {
+    "id": 24040,
+    "name_ar": "درع III",
+    "name_en": ""
+  },
+  "24041": {
+    "id": 24041,
+    "name_ar": "درع صلب III",
+    "name_en": ""
+  },
+  "24042": {
+    "id": 24042,
+    "name_ar": "درع مصفح III",
+    "name_en": "Armoring III"
+  },
+  "24043": {
+    "id": 24043,
+    "name_ar": "رسم الخرائط III",
+    "name_en": "Mapping III"
+  },
+  "24044": {
+    "id": 24044,
+    "name_ar": "صحة المشاة III",
+    "name_en": "Infantry Boost III"
+  },
+  "24045": {
+    "id": 24045,
+    "name_ar": "صحة الرماة عن البعد III",
+    "name_en": "Marksman Boost III"
+  },
+  "24046": {
+    "id": 24046,
+    "name_ar": "صحة الفرسان III",
+    "name_en": "Cavalry Boost III"
+  },
+  "24047": {
+    "id": 24047,
+    "name_ar": "متانة العربات III",
+    "name_en": "Chariot Boost III"
+  },
+  "24048": {
+    "id": 24048,
+    "name_ar": "القيادة III",
+    "name_en": "Leadership III"
+  },
+  "24101": {
+    "id": 24101,
+    "name_ar": "سلب الجمع المبتدئ",
+    "name_en": "Tile Snatch"
+  },
+  "24102": {
+    "id": 24102,
+    "name_ar": "تهديد الجمع المبتدئ",
+    "name_en": "Basic Collector Intimidation"
+  },
+  "24103": {
+    "id": 24103,
+    "name_ar": "تشجيع الجمع المبتدئ",
+    "name_en": "Basic Raid Encouragement"
+  },
+  "24104": {
+    "id": 24104,
+    "name_ar": "تعويض الجمع المبتدئ",
+    "name_en": "Invisible Hand"
+  },
+  "24105": {
+    "id": 24105,
+    "name_ar": "علاج جنود المشاة",
+    "name_en": "Revive Infantry"
+  },
+  "24106": {
+    "id": 24106,
+    "name_ar": "علاج الفرسان",
+    "name_en": "Revive Cavalry"
+  },
+  "24107": {
+    "id": 24107,
+    "name_ar": "شفاء الرامي عن البعد",
+    "name_en": "Revive Marksmen"
+  },
+  "24108": {
+    "id": 24108,
+    "name_ar": "علاج العربات",
+    "name_en": "Revive Chariots"
+  },
+  "24109": {
+    "id": 24109,
+    "name_ar": "سلب الجمع المتوسط",
+    "name_en": "Tile Snatch II"
+  },
+  "24110": {
+    "id": 24110,
+    "name_ar": "تهديد الجمع المتوسط",
+    "name_en": "Enhanced Collector Intimidation"
+  },
+  "24111": {
+    "id": 24111,
+    "name_ar": "تشجيع الجمع المتوسط",
+    "name_en": "Enhanced Raid Encouragement"
+  },
+  "24112": {
+    "id": 24112,
+    "name_ar": "تعويض الجمع المتوسط",
+    "name_en": "Invisible Hand II"
+  },
+  "24113": {
+    "id": 24113,
+    "name_ar": "تسريع تدريب جنود المشاة",
+    "name_en": "Rush Infantry"
+  },
+  "24114": {
+    "id": 24114,
+    "name_ar": "تسريع تدريب الفرسان",
+    "name_en": "Rush Cavalry"
+  },
+  "24115": {
+    "id": 24115,
+    "name_ar": "تسريع تدريب الرامي عن البعد",
+    "name_en": "Rush Marksmen"
+  },
+  "24116": {
+    "id": 24116,
+    "name_ar": "تسريع تدريب العربات",
+    "name_en": "Rush Chariots"
+  },
+  "24117": {
+    "id": 24117,
+    "name_ar": "السلب الكبير",
+    "name_en": "Extra Share"
+  },
+  "24118": {
+    "id": 24118,
+    "name_ar": "التهديدات الهجومية",
+    "name_en": "Siege Intimidation"
+  },
+  "24201": {
+    "id": 24201,
+    "name_ar": "نداء جنود النخبة I",
+    "name_en": "Veteran's Call"
+  },
+  "24202": {
+    "id": 24202,
+    "name_ar": "تشكيلة جنود النخبة I",
+    "name_en": "Veteran's Formation"
+  },
+  "24203": {
+    "id": 24203,
+    "name_ar": "هجوم جنود النخبة I",
+    "name_en": "Veteran's Blade"
+  },
+  "24204": {
+    "id": 24204,
+    "name_ar": "دفاع جنود النخبة I",
+    "name_en": "Veteran's Shield"
+  },
+  "24205": {
+    "id": 24205,
+    "name_ar": "صحة جنود النخبة I",
+    "name_en": "Veteran's Endurance"
+  },
+  "24206": {
+    "id": 24206,
+    "name_ar": "تحويل القوة الخارقة I",
+    "name_en": "Vital Alchemy"
+  },
+  "24207": {
+    "id": 24207,
+    "name_ar": "الحد الأقصى للطاقة I",
+    "name_en": "Vital Storage"
+  },
+  "24208": {
+    "id": 24208,
+    "name_ar": "نداء جنود النخبة II",
+    "name_en": "Veteran's Call II"
+  },
+  "24209": {
+    "id": 24209,
+    "name_ar": "تشكيلة جنود النخبة II",
+    "name_en": "Veteran's Formation II"
+  },
+  "24210": {
+    "id": 24210,
+    "name_ar": "هجوم جنود النخبة II",
+    "name_en": "Veteran's Blade II"
+  },
+  "24211": {
+    "id": 24211,
+    "name_ar": "دفاع جنود النخبة II",
+    "name_en": "Veteran's Shield II"
+  },
+  "24212": {
+    "id": 24212,
+    "name_ar": "صحة جنود النخبة II",
+    "name_en": "Veteran's Endurance II"
+  },
+  "24213": {
+    "id": 24213,
+    "name_ar": "تحويل القوة الخارقة II",
+    "name_en": "Vital Alchemy II"
+  },
+  "24214": {
+    "id": 24214,
+    "name_ar": "الحد الأقصى للطاقة II",
+    "name_en": "Vital Storage II"
+  },
+  "24301": {
+    "id": 24301,
+    "name_ar": "زيادة الدفاع في مملكتك I",
+    "name_en": "Holding Down the Fort I"
+  },
+  "24302": {
+    "id": 24302,
+    "name_ar": "زيادة الدفاع في حرب فتح الممالكI",
+    "name_en": "Behind Enemy Lines I"
+  },
+  "24303": {
+    "id": 24303,
+    "name_ar": "زيادة الدفاع في حرب الهرم I",
+    "name_en": "Eye of Horus I"
+  },
+  "24304": {
+    "id": 24304,
+    "name_ar": "زيادة الصحة في مملكتك I",
+    "name_en": "Home Front I"
+  },
+  "24305": {
+    "id": 24305,
+    "name_ar": "زيادة الصحة في حرب فتح الممالكI",
+    "name_en": "Seasoned Campaigner I"
+  },
+  "24306": {
+    "id": 24306,
+    "name_ar": "زيادة صحة في حرب الهرم I",
+    "name_en": "Ra's Blessing I"
+  },
+  "24307": {
+    "id": 24307,
+    "name_ar": "زيادة الهجوم في مملكتك I",
+    "name_en": "Where the Heart Is I"
+  },
+  "24308": {
+    "id": 24308,
+    "name_ar": "زيادة الهجوم في حرب فتح الممالك I",
+    "name_en": "Raiding Party I"
+  },
+  "24309": {
+    "id": 24309,
+    "name_ar": "زيادة الهجوم في حرب الهرم I",
+    "name_en": "Chariots I"
+  },
+  "24310": {
+    "id": 24310,
+    "name_ar": "زيادة الدفاع فى مملكتك II",
+    "name_en": "Holding Down the Fort II"
+  },
+  "24311": {
+    "id": 24311,
+    "name_ar": "زيادة الدفاع في حرب فتح الممالكII",
+    "name_en": "Behind Enemy Lines II"
+  },
+  "24312": {
+    "id": 24312,
+    "name_ar": "زيادة الدفاع في حرب الهرم II",
+    "name_en": "Eye of Horus II"
+  },
+  "24313": {
+    "id": 24313,
+    "name_ar": "زيادة الصحة في مملكتك II",
+    "name_en": "Home Front II"
+  },
+  "24314": {
+    "id": 24314,
+    "name_ar": "زيادة الصحة في حرب فتح الممالكII",
+    "name_en": "Seasoned Campaigner II"
+  },
+  "24315": {
+    "id": 24315,
+    "name_ar": "زيادة الصحة في حرب الهرم II",
+    "name_en": "Ra's Blessing II"
+  },
+  "24316": {
+    "id": 24316,
+    "name_ar": "زيادة الهجوم في مملكتك II",
+    "name_en": "Where the Heart Is II"
+  },
+  "24317": {
+    "id": 24317,
+    "name_ar": "زيادة الهجوم في حرب فتح الممالكII",
+    "name_en": "Raiding Party II"
+  },
+  "24318": {
+    "id": 24318,
+    "name_ar": "زيادة الهجوم في حرب الهرم II",
+    "name_en": "Chariots II"
+  },
+  "24319": {
+    "id": 24319,
+    "name_ar": "زيادة الحد الأقصى للمسيرة في حرب الهرم",
+    "name_en": "Nubian Mercenaries"
+  },
+  "24320": {
+    "id": 24320,
+    "name_ar": "زيادة الحد الأقصى للمسيرة في حرب فتح الممالك",
+    "name_en": ""
+  },
+  "25001": {
+    "id": 25001,
+    "name_ar": "شن الهجوم",
+    "name_en": "Sally Forth"
+  },
+  "25002": {
+    "id": 25002,
+    "name_ar": "الحراسة",
+    "name_en": "Crouching Tigers"
+  },
+  "25003": {
+    "id": 25003,
+    "name_ar": "التشجيع",
+    "name_en": "Motivation"
+  },
+  "25004": {
+    "id": 25004,
+    "name_ar": "إمكانات التطوير",
+    "name_en": "Development Potential"
+  },
+  "25005": {
+    "id": 25005,
+    "name_ar": "إمكانات المعركة",
+    "name_en": "Battle Potential"
+  },
+  "25006": {
+    "id": 25006,
+    "name_ar": "إمكانات  الدعم",
+    "name_en": "Assistance Potential"
+  },
+  "25007": {
+    "id": 25007,
+    "name_ar": "الرقيب",
+    "name_en": "technology_name_25008"
+  },
+  "25008": {
+    "id": 25008,
+    "name_ar": "قوة الإدراك (التطوير)",
+    "name_en": "Wits for Development"
+  },
+  "25009": {
+    "id": 25009,
+    "name_ar": "قوة الإدراك (المعركة)",
+    "name_en": "Wits for Battle"
+  },
+  "25010": {
+    "id": 25010,
+    "name_ar": "قوة الإدراك (الدعم)",
+    "name_en": "Wits for Assistance"
+  },
+  "26001": {
+    "id": 26001,
+    "name_ar": "تكتيكات الحشد",
+    "name_en": "Tactics of a Rally"
+  },
+  "26002": {
+    "id": 26002,
+    "name_ar": "خبير فن المبارزة",
+    "name_en": "Masterful Blades"
+  },
+  "26003": {
+    "id": 26003,
+    "name_ar": "خبير فن الفروسية",
+    "name_en": "Masterful Equestrian Skill"
+  },
+  "26004": {
+    "id": 26004,
+    "name_ar": "خبير فن التدمير",
+    "name_en": "Masterful Wall Destroyers"
+  },
+  "26005": {
+    "id": 26005,
+    "name_ar": "خبير فن الرماية",
+    "name_en": "Masterful Archery"
+  },
+  "26006": {
+    "id": 26006,
+    "name_ar": "technology_name_26007",
+    "name_en": "Expansion of the Embassy"
+  },
+  "26007": {
+    "id": 26007,
+    "name_ar": "خبير درع الحراشف",
+    "name_en": "Master's Scale Armor"
+  },
+  "26008": {
+    "id": 26008,
+    "name_ar": "خبير الدرع الصلب",
+    "name_en": "Master's Plate Armor"
+  },
+  "26009": {
+    "id": 26009,
+    "name_ar": "خبير الدرع المصفح",
+    "name_en": "Master's Armor"
+  },
+  "26010": {
+    "id": 26010,
+    "name_ar": "خبير الدرع السلسلي",
+    "name_en": "Master's Chain Armor"
+  },
+  "26011": {
+    "id": 26011,
+    "name_ar": "خبير في فن القيادة",
+    "name_en": "Master's Command"
+  },
+  "26012": {
+    "id": 26012,
+    "name_ar": "خبير صحة المشاة",
+    "name_en": "Masterful Infantry Boost"
+  },
+  "26013": {
+    "id": 26013,
+    "name_ar": "خبير صحة الفرسان",
+    "name_en": "Masterful Cavalry Boost"
+  },
+  "26014": {
+    "id": 26014,
+    "name_ar": "خبير صحة العربات",
+    "name_en": "Masterful Chariot Boost"
+  },
+  "26015": {
+    "id": 26015,
+    "name_ar": "خبير صحة الرماة",
+    "name_en": "Masterful Archer Boost"
+  },
+  "26016": {
+    "id": 26016,
+    "name_ar": "القتال الفردي",
+    "name_en": "Solo Performance"
+  },
+  "26017": {
+    "id": 26017,
+    "name_ar": "الخبير المخضرم في فن المبارزة",
+    "name_en": "Grand Master's Blades"
+  },
+  "26018": {
+    "id": 26018,
+    "name_ar": "الخبير المخضرم في فن الفروسية",
+    "name_en": "Grand Master's Equestrian Skill"
+  },
+  "26019": {
+    "id": 26019,
+    "name_ar": "الخبير المخضرم في فن التدمير",
+    "name_en": "Grand Master's Wall Destroyers"
+  },
+  "26020": {
+    "id": 26020,
+    "name_ar": "الخبير المخضرم في فن الرماية",
+    "name_en": "Grand Master's Archery"
+  },
+  "26021": {
+    "id": 26021,
+    "name_ar": "القتال الجماعي",
+    "name_en": "Team Performance"
+  },
+  "26022": {
+    "id": 26022,
+    "name_ar": "الخبير المخضرم في درع الحراشف",
+    "name_en": "Grand Master's Scale Armor"
+  },
+  "26023": {
+    "id": 26023,
+    "name_ar": "الخبير المخضرم في الدرع الصلب",
+    "name_en": "Grand Master's Plate Armor"
+  },
+  "26024": {
+    "id": 26024,
+    "name_ar": "الخبير المخضرم في الدرع المصفح",
+    "name_en": "Grand Master's Armor"
+  },
+  "26025": {
+    "id": 26025,
+    "name_ar": "الخبير المخضرم في الدرع السلسلي",
+    "name_en": "Grand Master's Chain Armor"
+  },
+  "26026": {
+    "id": 26026,
+    "name_ar": "الخبير المخضرم في فن القيادة",
+    "name_en": "Grand Master's Command"
+  },
+  "26027": {
+    "id": 26027,
+    "name_ar": "الخبير المخضرم في صحة المشاة",
+    "name_en": "Grand Master's Infantry Boost"
+  },
+  "26028": {
+    "id": 26028,
+    "name_ar": "الخبير المخضرم في صحة الفرسان",
+    "name_en": "Grand Master's Cavalry Boost"
+  },
+  "26029": {
+    "id": 26029,
+    "name_ar": "الخبير المخضرم في صحة العربات",
+    "name_en": "Grand Master's Chariot Boost"
+  },
+  "26030": {
+    "id": 26030,
+    "name_ar": "الخبير المخضرم في صحة الرماة",
+    "name_en": "Grand Master's Archer Boost"
+  },
+  "26031": {
+    "id": 26031,
+    "name_ar": "خبير المشاة",
+    "name_en": "Infantry Specialist"
+  },
+  "26032": {
+    "id": 26032,
+    "name_ar": "خبير الفرسان",
+    "name_en": "Cavalry Specialist"
+  },
+  "26033": {
+    "id": 26033,
+    "name_ar": "خبير العربات",
+    "name_en": "Chariot Specialist"
+  },
+  "26034": {
+    "id": 26034,
+    "name_ar": "خبير الرماة",
+    "name_en": "Archery Specialist"
+  },
+  "110001": {
+    "id": 110001,
+    "name_ar": "تقليص الموارد .حرب",
+    "name_en": "Alchemy"
+  },
+  "110002": {
+    "id": 110002,
+    "name_ar": "اتقان التطوير.حرب",
+    "name_en": "University"
+  },
+  "110003": {
+    "id": 110003,
+    "name_ar": "اتقان الشؤون العسكرية .حرب",
+    "name_en": "Standing Army"
+  },
+  "110004": {
+    "id": 110004,
+    "name_ar": "اتقان التحصينات .حرب",
+    "name_en": ""
+  },
+  "110005": {
+    "id": 110005,
+    "name_ar": "الهندسة الانشائية .حرب",
+    "name_en": "Sapper I"
+  },
+  "110006": {
+    "id": 110006,
+    "name_ar": "تقليل موارد البناء .حرب",
+    "name_en": ""
+  },
+  "110007": {
+    "id": 110007,
+    "name_ar": "هندسة البحث العلمية .حرب",
+    "name_en": "Librarian I"
+  },
+  "110008": {
+    "id": 110008,
+    "name_ar": "درع الحراشف .حربI",
+    "name_en": "Mail I"
+  },
+  "110009": {
+    "id": 110009,
+    "name_ar": "درع مصفح .حربI",
+    "name_en": ""
+  },
+  "110010": {
+    "id": 110010,
+    "name_ar": "درع سلاسل.حربI",
+    "name_en": "Pavise I"
+  },
+  "110011": {
+    "id": 110011,
+    "name_ar": "درع صلب .حربI",
+    "name_en": ""
+  },
+  "110012": {
+    "id": 110012,
+    "name_ar": "صحة المشاة .حربI",
+    "name_en": "Elite Infantry I"
+  },
+  "110013": {
+    "id": 110013,
+    "name_ar": "صحة الفرسان .حربI",
+    "name_en": "Elite Cavalry I"
+  },
+  "110014": {
+    "id": 110014,
+    "name_ar": "صحة الرامي عن البعد .حربI",
+    "name_en": "Elite Marksmen I"
+  },
+  "110015": {
+    "id": 110015,
+    "name_ar": "صحة جنود العربات .حربI",
+    "name_en": "Elite Chariot I"
+  },
+  "110016": {
+    "id": 110016,
+    "name_ar": "مبارزة .حربI",
+    "name_en": "Duelling I"
+  },
+  "110017": {
+    "id": 110017,
+    "name_ar": "فروسية .حربI",
+    "name_en": "Furusiyya I"
+  },
+  "110018": {
+    "id": 110018,
+    "name_ar": "مهارة الرمي .حربI",
+    "name_en": "Marksmanship I"
+  },
+  "110019": {
+    "id": 110019,
+    "name_ar": "مهارة قيادة العربات .حربI",
+    "name_en": "Metallurgy I"
+  },
+  "110020": {
+    "id": 110020,
+    "name_ar": "تجنيد .حربI",
+    "name_en": "Garrisons I"
+  },
+  "110021": {
+    "id": 110021,
+    "name_ar": "علاج .حربI",
+    "name_en": ""
+  },
+  "110022": {
+    "id": 110022,
+    "name_ar": "هجوم الجندي .حربI",
+    "name_en": "Old Campaigner I"
+  },
+  "110023": {
+    "id": 110023,
+    "name_ar": "جروح المعارك .حربI",
+    "name_en": "Battle Scars I"
+  },
+  "110024": {
+    "id": 110024,
+    "name_ar": "غريزة البقاء .حربI",
+    "name_en": "Survival Instincts I"
+  },
+  "110025": {
+    "id": 110025,
+    "name_ar": "بوق السرعة . حرب",
+    "name_en": "Clarion Call"
+  },
+  "110026": {
+    "id": 110026,
+    "name_ar": "تحويل الطاقة .حرب",
+    "name_en": "Pure Vitality"
+  },
+  "110027": {
+    "id": 110027,
+    "name_ar": "قيادة .حرب",
+    "name_en": "Rallying Call"
+  },
+  "110028": {
+    "id": 110028,
+    "name_ar": "انتاج الموارد .حرب",
+    "name_en": "Streamlining"
+  },
+  "110029": {
+    "id": 110029,
+    "name_ar": "إستخراج البلور.حرب",
+    "name_en": ""
+  },
+  "110030": {
+    "id": 110030,
+    "name_ar": "الجمع السريع .حرب",
+    "name_en": ""
+  },
+  "110031": {
+    "id": 110031,
+    "name_ar": "استخراج الذهب .حرب",
+    "name_en": "Prospecting"
+  },
+  "110032": {
+    "id": 110032,
+    "name_ar": "جنود النخبة الماهرة .حرب",
+    "name_en": "Tricks of the Trade"
+  },
+  "110033": {
+    "id": 110033,
+    "name_ar": "مهارة القيادة .حرب",
+    "name_en": "Military Academy"
+  },
+  "110034": {
+    "id": 110034,
+    "name_ar": "انقان الشؤون الخاصة .حرب",
+    "name_en": "Strategy"
+  },
+  "110035": {
+    "id": 110035,
+    "name_ar": "اتقان الهندسة الإنشائية .حربII",
+    "name_en": ""
+  },
+  "110036": {
+    "id": 110036,
+    "name_ar": "اتقان تقليل استهلاك الموارد .حربII",
+    "name_en": "Artisan II"
+  },
+  "110037": {
+    "id": 110037,
+    "name_ar": "اتقان هندسة البحث العلمي . حربII",
+    "name_en": "Librarian II"
+  },
+  "110038": {
+    "id": 110038,
+    "name_ar": "درع الخراشف .حربII",
+    "name_en": "Mail II"
+  },
+  "110039": {
+    "id": 110039,
+    "name_ar": "درع مصفح .حربII",
+    "name_en": "Barding II"
+  },
+  "110040": {
+    "id": 110040,
+    "name_ar": "درع سلاسل .حربII",
+    "name_en": ""
+  },
+  "110041": {
+    "id": 110041,
+    "name_ar": "درع صلب .حربII",
+    "name_en": "Plating II"
+  },
+  "110042": {
+    "id": 110042,
+    "name_ar": "صحة المشاة .حربII",
+    "name_en": "Elite Infantry II"
+  },
+  "110043": {
+    "id": 110043,
+    "name_ar": "صحة الفرسان .حربII",
+    "name_en": "Elite Cavalry II"
+  },
+  "110044": {
+    "id": 110044,
+    "name_ar": "صحة الرامي عن البعد .حربII",
+    "name_en": "Elite Marksmen II"
+  },
+  "110045": {
+    "id": 110045,
+    "name_ar": "صحة جنود العربات .حربII",
+    "name_en": "Elite Chariot II"
+  },
+  "110046": {
+    "id": 110046,
+    "name_ar": "مبارزة .حربII",
+    "name_en": "Duelling II"
+  },
+  "110047": {
+    "id": 110047,
+    "name_ar": "فروسية.حربII",
+    "name_en": "Furusiyya II"
+  },
+  "110048": {
+    "id": 110048,
+    "name_ar": "مهارة الرمي .حربII",
+    "name_en": "Marksmanship II"
+  },
+  "110049": {
+    "id": 110049,
+    "name_ar": "مهارة قيادة العربات . حربII",
+    "name_en": "Metallurgy II"
+  },
+  "110050": {
+    "id": 110050,
+    "name_ar": "تجنيد .حربII",
+    "name_en": "Garrisons II"
+  },
+  "110051": {
+    "id": 110051,
+    "name_ar": "علاج .حربII",
+    "name_en": "Surgery II"
+  },
+  "110052": {
+    "id": 110052,
+    "name_ar": "هجوم الجندي .حربII",
+    "name_en": "Old Campaigner II"
+  },
+  "110053": {
+    "id": 110053,
+    "name_ar": "صحة الجندي .حربII",
+    "name_en": "Survival Instincts II"
+  },
+  "110054": {
+    "id": 110054,
+    "name_ar": "دفاع الجندي .حربII",
+    "name_en": "Battle Scars II"
+  },
+  "110055": {
+    "id": 110055,
+    "name_ar": "جندي باسل .حرب",
+    "name_en": "Retirement Plan"
+  },
+  "110056": {
+    "id": 110056,
+    "name_ar": "قوة القيادة .حرب",
+    "name_en": "Coordination"
+  }
+}

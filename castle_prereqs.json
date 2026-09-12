@@ -1,0 +1,794 @@
+{
+  "1": {
+    "level": 1,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "2": {
+    "level": 2,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "3": {
+    "level": 3,
+    "preCond": {
+      "102": 2
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "4": {
+    "level": 4,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "5": {
+    "level": 5,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "6": {
+    "level": 6,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "7": {
+    "level": 7,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "8": {
+    "level": 8,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "9": {
+    "level": 9,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "10": {
+    "level": 10,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "11": {
+    "level": 11,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "12": {
+    "level": 12,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "13": {
+    "level": 13,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "14": {
+    "level": 14,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "15": {
+    "level": 15,
+    "preCond": {
+      "102": 14
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "16": {
+    "level": 16,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "17": {
+    "level": 17,
+    "preCond": {
+      "102": 16
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "18": {
+    "level": 18,
+    "preCond": {
+      "102": 17
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "19": {
+    "level": 19,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "20": {
+    "level": 20,
+    "preCond": {
+      "102": 19
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "21": {
+    "level": 21,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "22": {
+    "level": 22,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "23": {
+    "level": 23,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "24": {
+    "level": 24,
+    "preCond": {
+      "102": 23
+    },
+    "costTime": 0,
+    "costRes": {}
+  },
+  "25": {
+    "level": 25,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "26": {
+    "level": 26,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "27": {
+    "level": 27,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "28": {
+    "level": 28,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "29": {
+    "level": 29,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "30": {
+    "level": 30,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "31": {
+    "level": 31,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "32": {
+    "level": 32,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "33": {
+    "level": 33,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "34": {
+    "level": 34,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "35": {
+    "level": 35,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "36": {
+    "level": 36,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "37": {
+    "level": 37,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "38": {
+    "level": 38,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "39": {
+    "level": 39,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "40": {
+    "level": 40,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "41": {
+    "level": 41,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "42": {
+    "level": 42,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "43": {
+    "level": 43,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "44": {
+    "level": 44,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "45": {
+    "level": 45,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "46": {
+    "level": 46,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "47": {
+    "level": 47,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "48": {
+    "level": 48,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "49": {
+    "level": 49,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "50": {
+    "level": 50,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "51": {
+    "level": 51,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "52": {
+    "level": 52,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "53": {
+    "level": 53,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "54": {
+    "level": 54,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "55": {
+    "level": 55,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "56": {
+    "level": 56,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "57": {
+    "level": 57,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "58": {
+    "level": 58,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "59": {
+    "level": 59,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "60": {
+    "level": 60,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "61": {
+    "level": 61,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "62": {
+    "level": 62,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "63": {
+    "level": 63,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "64": {
+    "level": 64,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "65": {
+    "level": 65,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "66": {
+    "level": 66,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "67": {
+    "level": 67,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "68": {
+    "level": 68,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "69": {
+    "level": 69,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "70": {
+    "level": 70,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "71": {
+    "level": 71,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "72": {
+    "level": 72,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "73": {
+    "level": 73,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "74": {
+    "level": 74,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "75": {
+    "level": 75,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "76": {
+    "level": 76,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "77": {
+    "level": 77,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "78": {
+    "level": 78,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "79": {
+    "level": 79,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "80": {
+    "level": 80,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "81": {
+    "level": 81,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "82": {
+    "level": 82,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "83": {
+    "level": 83,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "84": {
+    "level": 84,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "85": {
+    "level": 85,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "86": {
+    "level": 86,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "87": {
+    "level": 87,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "88": {
+    "level": 88,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "89": {
+    "level": 89,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "90": {
+    "level": 90,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "91": {
+    "level": 91,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "92": {
+    "level": 92,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "93": {
+    "level": 93,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "94": {
+    "level": 94,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "95": {
+    "level": 95,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "96": {
+    "level": 96,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "97": {
+    "level": 97,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "98": {
+    "level": 98,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "99": {
+    "level": 99,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "100": {
+    "level": 100,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "101": {
+    "level": 101,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "102": {
+    "level": 102,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "103": {
+    "level": 103,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "104": {
+    "level": 104,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "105": {
+    "level": 105,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "106": {
+    "level": 106,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "107": {
+    "level": 107,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "108": {
+    "level": 108,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "109": {
+    "level": 109,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "110": {
+    "level": 110,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "111": {
+    "level": 111,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "112": {
+    "level": 112,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "113": {
+    "level": 113,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "114": {
+    "level": 114,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "115": {
+    "level": 115,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "116": {
+    "level": 116,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "117": {
+    "level": 117,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "118": {
+    "level": 118,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "119": {
+    "level": 119,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "120": {
+    "level": 120,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "121": {
+    "level": 121,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "122": {
+    "level": 122,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "123": {
+    "level": 123,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "124": {
+    "level": 124,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "125": {
+    "level": 125,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "126": {
+    "level": 126,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "127": {
+    "level": 127,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "128": {
+    "level": 128,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "129": {
+    "level": 129,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  },
+  "130": {
+    "level": 130,
+    "preCond": {},
+    "costTime": 0,
+    "costRes": {}
+  }
+}

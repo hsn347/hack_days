@@ -162,6 +162,9 @@ class BotShell:
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  login <email> <password>  : تسجيل دخول سحابي فوري لأي حساب جديد        ║
 ║  reconnect / rc            : إعادة الاتصال الفوري بالحساب الحالي        ║
+║  dump [filename.json]      : تصدير وحفظ كامل بيانات الحساب والحزم لـ JSON║
+║  data / modules [اسم_القسم]: استعراض أقسام بيانات الحساب (220+ قسم)      ║
+║  spy [on/off]              : تشغيل/إيقاف مراقبة الحزم اللحظية بالطرفية  ║
 ║  attack / gather [خيارات]  : تشغيل مسيرات الجمع (مثال: attack -t 4 -m 5)║
 ║  port / harbor             : استلام مكافآت الميناء وصناديق الوقت اليومية║
 ║  heroes                    : عرض قائمة الأبطال وحالتهم الحالية          ║
@@ -216,6 +219,12 @@ class BotShell:
                         await self._cmd_switch(args[0])
                     else:
                         print("الاستخدام: switch email@domain.com")
+                elif cmd in ('dump', 'export', 'save'):
+                    self._cmd_dump(args)
+                elif cmd in ('data', 'modules', 'inspect'):
+                    self._cmd_data(args)
+                elif cmd == 'spy':
+                    self._cmd_spy(args)
                 elif cmd in ('attack', 'gather', 'march', 'port', 'harbor', 'heroes', 'castle', 'search', 'query', 'run'):
                     # التحقق من أن الاتصال قائم قبل إرسال أوامر اللعبة
                     if not self.conn or not self.conn.is_connected:
@@ -504,6 +513,85 @@ class BotShell:
         print(f"📡 إرسال الطلب ({cmd}/{subcmd})...")
         r = await self.conn.query(cmd, subcmd, data, timeout=10)
         print(f"📥 الرد:\n{json.dumps(r, ensure_ascii=False, indent=2)}\n")
+
+    def _cmd_dump(self, args: list):
+        """تصدير كامل بيانات الحساب الحالية والحزم إلى ملف JSON في dumps/"""
+        os.makedirs('dumps', exist_ok=True)
+        safe_name = self.email.replace('@', '_at_')
+        filename = args[0] if args else f"{safe_name}_full_dump.json"
+        if not filename.endswith('.json'):
+            filename += '.json'
+        
+        filepath = os.path.join('dumps', filename)
+        dump_obj = {
+            "email": self.email,
+            "uid": getattr(self.conn, 'uid', None),
+            "timestamp": time.time(),
+            "init_data_modules_count": len(self.conn.init_data),
+            "init_data": self.conn.init_data,
+            "cached_packets_count": len(self.conn.cached_packets),
+            "cached_packets": {f"{k[0]}_{k[1]}": v for k, v in self.conn.cached_packets.items()}
+        }
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(dump_obj, f, indent=2, ensure_ascii=False)
+        
+        size_kb = os.path.getsize(filepath) / 1024
+        print(f"\n💾 تم تصدير بيانات الحساب بالكامل بنجاح!")
+        print(f" • المسار: {filepath}")
+        print(f" • الحجم: {size_kb:.1f} KB | الوحدات المحفوظة: {len(self.conn.init_data)} وحدة")
+        print(f"💡 يمكنك فتح الملف مباشرة في VS Code للبحث واستكشاف أي بيانات!\n")
+
+    def _cmd_data(self, args: list):
+        """عرض واستكشاف أقسام ووحدات بيانات الحساب (220+ وحدة)"""
+        init_data = self.conn.init_data
+        if not init_data:
+            print("⚠️ لم يتم استلام بيانات التهيئة 1000/1 بعد. اكتب reconnect أو انتظر لحظة.")
+            return
+
+        if not args:
+            print(f"\n{'═'*65}")
+            print(f"  📦 وحدات وأقسام بيانات الحساب ({len(init_data)} وحدة متاحة):")
+            print(f"{'═'*65}")
+            
+            # ترتيب الوحدات وعرض ملخص سريع
+            sorted_keys = sorted(init_data.keys())
+            for i, k in enumerate(sorted_keys, 1):
+                val = init_data[k]
+                cnt = len(val) if isinstance(val, (dict, list)) else type(val).__name__
+                print(f" {i:<3}. {k:<30} (عناصر: {cnt})")
+            print(f"\n💡 لعرض محتوى أي قسم بالتفصيل، اكتب: data <اسم_القسم> (مثال: data buildingCtrl أو data itemCtrl)\n")
+        else:
+            module_name = args[0].strip()
+            # بحث تقريبي
+            matched_key = None
+            for k in init_data:
+                if k.lower() == module_name.lower():
+                    matched_key = k
+                    break
+            if not matched_key:
+                for k in init_data:
+                    if module_name.lower() in k.lower():
+                        matched_key = k
+                        break
+
+            if matched_key:
+                val = init_data[matched_key]
+                print(f"\n📄 محتوى القسم [{matched_key}]:")
+                print(json.dumps(val, ensure_ascii=False, indent=2))
+                print()
+            else:
+                print(f"❌ القسم '{module_name}' غير موجود في بيانات الحساب.")
+                print(f"💡 اكتب data بدون خيارات لعرض كل الأقسام المتاحة.")
+
+    def _cmd_spy(self, args: list):
+        """تفعيل/إيقاف وضع مراقبة وتسجيل الحزم الحية"""
+        if args and args[0].lower() in ('off', 'stop', '0', 'false'):
+            self.conn.spy_mode = False
+            print("👁️ تم إيقاف وضع مراقبة الحزم (Spy Mode Off).")
+        else:
+            self.conn.spy_mode = True
+            print("👁️ تم تفعيل وضع مراقبة الحزم (Spy Mode On)!")
+            print("💡 سيتم الآن طباعة كل حزمة ترسلها أو يستقبلها البوت مباشرة في التيرمنال.")
 
     async def _cmd_run_script(self, args: list):
         """تشغيل ملف بايثون خارجي وتمرير كائن الاتصال النشط له"""

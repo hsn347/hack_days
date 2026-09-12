@@ -172,8 +172,10 @@ def xor_crypt(data: bytes) -> bytes:
     key = XOR_KEY.encode()
     return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
 
-def pack_request(cmd: str, subcmd: str = "2", data: dict = None, session: int = 1) -> bytes:
+def pack_request(cmd: str, subcmd: str = "2", data: dict = None, session: int = 1, client_data: list = None) -> bytes:
     msg   = {"cmd": CMD_PREFIX + cmd, "subcmd": subcmd, "data": data or {}}
+    if client_data is not None:
+        msg["clientData"] = client_data
     xored = xor_crypt(json.dumps(msg, ensure_ascii=False, separators=(',',':')).encode())
     size  = len(xored) + 4
     return struct.pack('>H', size) + xored + struct.pack('>I', session)

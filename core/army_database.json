@@ -1,0 +1,924 @@
+{
+  "401": {
+    "armyID": 401,
+    "costRes": {
+      "1002": 45,
+      "1003": 15
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 1,
+    "trainingTime": 20,
+    "costFood": 0.08
+  },
+  "402": {
+    "armyID": 402,
+    "costRes": {
+      "1002": 100
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 4,
+    "trainingTime": 25,
+    "costFood": 0.17
+  },
+  "403": {
+    "armyID": 403,
+    "costRes": {
+      "1002": 120,
+      "1003": 30
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 7,
+    "trainingTime": 32,
+    "costFood": 0.25
+  },
+  "404": {
+    "armyID": 404,
+    "costRes": {
+      "1002": 170,
+      "1004": 5
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 10,
+    "trainingTime": 45,
+    "costFood": 0.33
+  },
+  "405": {
+    "armyID": 405,
+    "costRes": {
+      "1002": 165,
+      "1003": 55,
+      "1004": 10
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 13,
+    "trainingTime": 65,
+    "costFood": 0.42
+  },
+  "406": {
+    "armyID": 406,
+    "costRes": {
+      "1002": 240,
+      "1004": 20
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 16,
+    "trainingTime": 80,
+    "costFood": 0.5
+  },
+  "407": {
+    "armyID": 407,
+    "costRes": {
+      "1002": 190,
+      "1003": 90,
+      "1004": 20
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 19,
+    "trainingTime": 100,
+    "costFood": 0.58
+  },
+  "408": {
+    "armyID": 408,
+    "costRes": {
+      "1002": 310,
+      "1004": 25,
+      "1005": 5
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 22,
+    "trainingTime": 120,
+    "costFood": 0.67
+  },
+  "409": {
+    "armyID": 409,
+    "costRes": {
+      "1002": 205,
+      "1003": 135,
+      "1004": 30,
+      "1005": 5
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 26,
+    "trainingTime": 145,
+    "costFood": 0.75
+  },
+  "410": {
+    "armyID": 410,
+    "costRes": {
+      "1002": 650,
+      "1004": 80,
+      "1005": 20
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 30,
+    "trainingTime": 180,
+    "costFood": 0.83
+  },
+  "411": {
+    "armyID": 411,
+    "costRes": {
+      "1002": 720,
+      "1003": 400,
+      "1004": 50,
+      "1005": 25
+    },
+    "armyType": 2,
+    "barrackID": 118,
+    "barrackLevel": 80,
+    "trainingTime": 220,
+    "costFood": 0.92
+  },
+  "412": {
+    "armyID": 412,
+    "costRes": {
+      "1002": 975,
+      "1004": 120,
+      "1005": 30
+    },
+    "armyType": 1,
+    "barrackID": 118,
+    "barrackLevel": 130,
+    "trainingTime": 280,
+    "costFood": 1.0
+  },
+  "501": {
+    "armyID": 501,
+    "costRes": {
+      "1002": 45,
+      "1003": 10
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 1,
+    "trainingTime": 21,
+    "costFood": 0.08
+  },
+  "502": {
+    "armyID": 502,
+    "costRes": {
+      "1002": 100
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 4,
+    "trainingTime": 26,
+    "costFood": 0.17
+  },
+  "503": {
+    "armyID": 503,
+    "costRes": {
+      "1002": 130,
+      "1003": 25
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 7,
+    "trainingTime": 33,
+    "costFood": 0.25
+  },
+  "504": {
+    "armyID": 504,
+    "costRes": {
+      "1002": 150,
+      "1004": 10
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 10,
+    "trainingTime": 47,
+    "costFood": 0.33
+  },
+  "505": {
+    "armyID": 505,
+    "costRes": {
+      "1002": 230,
+      "1003": 25,
+      "1004": 5
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 13,
+    "trainingTime": 68,
+    "costFood": 0.42
+  },
+  "506": {
+    "armyID": 506,
+    "costRes": {
+      "1002": 270,
+      "1004": 15
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 16,
+    "trainingTime": 84,
+    "costFood": 0.5
+  },
+  "507": {
+    "armyID": 507,
+    "costRes": {
+      "1002": 250,
+      "1003": 35,
+      "1004": 5,
+      "1005": 5
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 19,
+    "trainingTime": 105,
+    "costFood": 0.58
+  },
+  "508": {
+    "armyID": 508,
+    "costRes": {
+      "1002": 290,
+      "1004": 25,
+      "1005": 5
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 22,
+    "trainingTime": 126,
+    "costFood": 0.67
+  },
+  "509": {
+    "armyID": 509,
+    "costRes": {
+      "1002": 320,
+      "1003": 45,
+      "1004": 10,
+      "1005": 10
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 26,
+    "trainingTime": 152,
+    "costFood": 0.75
+  },
+  "510": {
+    "armyID": 510,
+    "costRes": {
+      "1002": 660,
+      "1004": 80,
+      "1005": 20
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 30,
+    "trainingTime": 189,
+    "costFood": 0.83
+  },
+  "511": {
+    "armyID": 511,
+    "costRes": {
+      "1002": 1200,
+      "1003": 200,
+      "1004": 20,
+      "1005": 20
+    },
+    "armyType": 4,
+    "barrackID": 116,
+    "barrackLevel": 80,
+    "trainingTime": 229,
+    "costFood": 0.92
+  },
+  "512": {
+    "armyID": 512,
+    "costRes": {
+      "1002": 990,
+      "1004": 120,
+      "1005": 30
+    },
+    "armyType": 3,
+    "barrackID": 116,
+    "barrackLevel": 130,
+    "trainingTime": 280,
+    "costFood": 1.0
+  },
+  "601": {
+    "armyID": 601,
+    "costRes": {
+      "1002": 55
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 1,
+    "trainingTime": 22,
+    "costFood": 0.08
+  },
+  "602": {
+    "armyID": 602,
+    "costRes": {
+      "1002": 90,
+      "1003": 10
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 4,
+    "trainingTime": 27,
+    "costFood": 0.17
+  },
+  "603": {
+    "armyID": 603,
+    "costRes": {
+      "1002": 130,
+      "1003": 15
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 7,
+    "trainingTime": 35,
+    "costFood": 0.25
+  },
+  "604": {
+    "armyID": 604,
+    "costRes": {
+      "1002": 185,
+      "1003": 20
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 10,
+    "trainingTime": 49,
+    "costFood": 0.33
+  },
+  "605": {
+    "armyID": 605,
+    "costRes": {
+      "1002": 240,
+      "1003": 25,
+      "1004": 5
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 13,
+    "trainingTime": 71,
+    "costFood": 0.42
+  },
+  "606": {
+    "armyID": 606,
+    "costRes": {
+      "1002": 295,
+      "1003": 35,
+      "1004": 5
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 16,
+    "trainingTime": 88,
+    "costFood": 0.5
+  },
+  "607": {
+    "armyID": 607,
+    "costRes": {
+      "1002": 255,
+      "1003": 45,
+      "1004": 5,
+      "1005": 5
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 19,
+    "trainingTime": 110,
+    "costFood": 0.58
+  },
+  "608": {
+    "armyID": 608,
+    "costRes": {
+      "1002": 215,
+      "1003": 55,
+      "1004": 5,
+      "1005": 10
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 22,
+    "trainingTime": 132,
+    "costFood": 0.67
+  },
+  "609": {
+    "armyID": 609,
+    "costRes": {
+      "1002": 300,
+      "1003": 70,
+      "1004": 10,
+      "1005": 10
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 26,
+    "trainingTime": 159,
+    "costFood": 0.75
+  },
+  "610": {
+    "armyID": 610,
+    "costRes": {
+      "1002": 310,
+      "1003": 150,
+      "1004": 30,
+      "1005": 40
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 30,
+    "trainingTime": 198,
+    "costFood": 0.83
+  },
+  "611": {
+    "armyID": 611,
+    "costRes": {
+      "1002": 480,
+      "1003": 240,
+      "1004": 60,
+      "1005": 40
+    },
+    "armyType": 6,
+    "barrackID": 117,
+    "barrackLevel": 80,
+    "trainingTime": 238,
+    "costFood": 0.92
+  },
+  "612": {
+    "armyID": 612,
+    "costRes": {
+      "1002": 465,
+      "1003": 225,
+      "1004": 45,
+      "1005": 60
+    },
+    "armyType": 5,
+    "barrackID": 117,
+    "barrackLevel": 130,
+    "trainingTime": 280,
+    "costFood": 1.0
+  },
+  "701": {
+    "armyID": 701,
+    "costRes": {
+      "1002": 35,
+      "1003": 25
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 1,
+    "trainingTime": 19,
+    "costFood": 0.08
+  },
+  "702": {
+    "armyID": 702,
+    "costRes": {
+      "1002": 60,
+      "1003": 40
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 4,
+    "trainingTime": 23,
+    "costFood": 0.17
+  },
+  "703": {
+    "armyID": 703,
+    "costRes": {
+      "1002": 85,
+      "1003": 60
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 7,
+    "trainingTime": 30,
+    "costFood": 0.25
+  },
+  "704": {
+    "armyID": 704,
+    "costRes": {
+      "1002": 110,
+      "1003": 80,
+      "1004": 5
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 10,
+    "trainingTime": 42,
+    "costFood": 0.33
+  },
+  "705": {
+    "armyID": 705,
+    "costRes": {
+      "1002": 130,
+      "1003": 115,
+      "1004": 5
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 13,
+    "trainingTime": 61,
+    "costFood": 0.42
+  },
+  "706": {
+    "armyID": 706,
+    "costRes": {
+      "1002": 165,
+      "1003": 145,
+      "1004": 5
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 16,
+    "trainingTime": 76,
+    "costFood": 0.5
+  },
+  "707": {
+    "armyID": 707,
+    "costRes": {
+      "1002": 175,
+      "1003": 160,
+      "1004": 10
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 19,
+    "trainingTime": 95,
+    "costFood": 0.58
+  },
+  "708": {
+    "armyID": 708,
+    "costRes": {
+      "1002": 210,
+      "1003": 165,
+      "1004": 15,
+      "1005": 5
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 22,
+    "trainingTime": 114,
+    "costFood": 0.67
+  },
+  "709": {
+    "armyID": 709,
+    "costRes": {
+      "1002": 255,
+      "1003": 210,
+      "1004": 15,
+      "1005": 5
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 26,
+    "trainingTime": 137,
+    "costFood": 0.75
+  },
+  "710": {
+    "armyID": 710,
+    "costRes": {
+      "1002": 600,
+      "1003": 480,
+      "1004": 40,
+      "1005": 20
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 30,
+    "trainingTime": 171,
+    "costFood": 0.83
+  },
+  "711": {
+    "armyID": 711,
+    "costRes": {
+      "1002": 750,
+      "1003": 600,
+      "1004": 46,
+      "1005": 24
+    },
+    "armyType": 8,
+    "barrackID": 119,
+    "barrackLevel": 80,
+    "trainingTime": 211,
+    "costFood": 0.92
+  },
+  "712": {
+    "armyID": 712,
+    "costRes": {
+      "1002": 900,
+      "1003": 720,
+      "1004": 60,
+      "1005": 30
+    },
+    "armyType": 7,
+    "barrackID": 119,
+    "barrackLevel": 130,
+    "trainingTime": 280,
+    "costFood": 1.0
+  },
+  "801": {
+    "armyID": 801,
+    "costRes": {
+      "1002": 250
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 1,
+    "trainingTime": 25,
+    "costFood": 0.0
+  },
+  "802": {
+    "armyID": 802,
+    "costRes": {
+      "1002": 590
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 6,
+    "trainingTime": 40,
+    "costFood": 0.0
+  },
+  "803": {
+    "armyID": 803,
+    "costRes": {
+      "1002": 470,
+      "1004": 80
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 12,
+    "trainingTime": 70,
+    "costFood": 0.0
+  },
+  "804": {
+    "armyID": 804,
+    "costRes": {
+      "1002": 330,
+      "1004": 100,
+      "1005": 15
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 18,
+    "trainingTime": 130,
+    "costFood": 0.0
+  },
+  "805": {
+    "armyID": 805,
+    "costRes": {
+      "1002": 950,
+      "1004": 100,
+      "1005": 25
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 24,
+    "trainingTime": 250,
+    "costFood": 0.0
+  },
+  "811": {
+    "armyID": 811,
+    "costRes": {
+      "1002": 125,
+      "1003": 120
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 2,
+    "trainingTime": 25,
+    "costFood": 0.0
+  },
+  "812": {
+    "armyID": 812,
+    "costRes": {
+      "1002": 285,
+      "1003": 290
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 8,
+    "trainingTime": 40,
+    "costFood": 0.0
+  },
+  "813": {
+    "armyID": 813,
+    "costRes": {
+      "1002": 285,
+      "1003": 295,
+      "1004": 65
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 14,
+    "trainingTime": 70,
+    "costFood": 0.0
+  },
+  "814": {
+    "armyID": 814,
+    "costRes": {
+      "1002": 295,
+      "1003": 295,
+      "1004": 80,
+      "1005": 10
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 20,
+    "trainingTime": 130,
+    "costFood": 0.0
+  },
+  "815": {
+    "armyID": 815,
+    "costRes": {
+      "1002": 475,
+      "1003": 475,
+      "1004": 100,
+      "1005": 25
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 27,
+    "trainingTime": 250,
+    "costFood": 0.0
+  },
+  "821": {
+    "armyID": 821,
+    "costRes": {
+      "1003": 245
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 3,
+    "trainingTime": 25,
+    "costFood": 0.0
+  },
+  "822": {
+    "armyID": 822,
+    "costRes": {
+      "1003": 595
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 10,
+    "trainingTime": 40,
+    "costFood": 0.0
+  },
+  "823": {
+    "armyID": 823,
+    "costRes": {
+      "1003": 590,
+      "1004": 60
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 16,
+    "trainingTime": 70,
+    "costFood": 0.0
+  },
+  "824": {
+    "armyID": 824,
+    "costRes": {
+      "1003": 320,
+      "1004": 75,
+      "1005": 25
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 22,
+    "trainingTime": 130,
+    "costFood": 0.0
+  },
+  "825": {
+    "armyID": 825,
+    "costRes": {
+      "1003": 950,
+      "1004": 100,
+      "1005": 25
+    },
+    "armyType": 9,
+    "barrackID": 120,
+    "barrackLevel": 30,
+    "trainingTime": 250,
+    "costFood": 0.0
+  },
+  "20000001": {
+    "armyID": 20000001,
+    "costRes": {},
+    "armyType": 1,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000002": {
+    "armyID": 20000002,
+    "costRes": {},
+    "armyType": 2,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000003": {
+    "armyID": 20000003,
+    "costRes": {},
+    "armyType": 3,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000004": {
+    "armyID": 20000004,
+    "costRes": {},
+    "armyType": 4,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000005": {
+    "armyID": 20000005,
+    "costRes": {},
+    "armyType": 5,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000006": {
+    "armyID": 20000006,
+    "costRes": {},
+    "armyType": 6,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000007": {
+    "armyID": 20000007,
+    "costRes": {},
+    "armyType": 7,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000008": {
+    "armyID": 20000008,
+    "costRes": {},
+    "armyType": 8,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000009": {
+    "armyID": 20000009,
+    "costRes": {},
+    "armyType": 3,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000010": {
+    "armyID": 20000010,
+    "costRes": {},
+    "armyType": 2,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000011": {
+    "armyID": 20000011,
+    "costRes": {},
+    "armyType": 1,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000012": {
+    "armyID": 20000012,
+    "costRes": {},
+    "armyType": 4,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  },
+  "20000013": {
+    "armyID": 20000013,
+    "costRes": {},
+    "armyType": 5,
+    "barrackID": 0,
+    "barrackLevel": 0,
+    "trainingTime": 0,
+    "costFood": 0.0
+  }
+}

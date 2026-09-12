@@ -1,0 +1,532 @@
+
+====================================================
+  >>> #1 cmd=2011 subcmd=4 [SEND]
+====================================================
+{
+  "cmd": "2011",
+  "subcmd": "4",
+  "data": {
+    "bossType": 9
+  }
+}
+
+====================================================
+  <<< #2 cmd=2011 subcmd=4 err=0 
+====================================================
+{
+  "cmd": "2011",
+  "time": 1788969702,
+  "subcmd": "4",
+  "err": "0",
+  "source": "c",
+  "rspdata": {
+    "y": 240,
+    "x": 676,
+    "bossType": 9
+  },
+  "data": {
+    "bossType": 9
+  },
+  "pid": 988773
+}
+
+====================================================
+  >>> #3 cmd=1006 subcmd=1000 [SEND]
+====================================================
+{
+  "cmd": "1006",
+  "_requestId": 10,
+  "subcmd": "1000",
+  "data": {
+    "centerY": 239,
+    "centerKid": 23,
+    "centerX": 675
+  }
+}
+
+====================================================
+  <<< #4 cmd=1006 subcmd=1000 err=0 
+====================================================
+{
+  "pid": 988773,
+  "data": {
+    "kingdomClass": 1,
+    "centerY": 240,
+    "centerKid": 23,
+    "centerX": 676
+  },
+  "cmd": "1006",
+  "delPieceIds": {
+    "23": [
+      700024,
+      700025,
+      700026,
+      680026,
+      690026
+    ]
+  },
+  "subcmd": "1000",
+  "err": "0",
+  "_requestId": 10,
+  "addPieceIds": {
+    "23": [
+      670024,
+      670025,
+      680023,
+      690023,
+      670023
+    ]
+  },
+  "source": "c"
+}
+
+====================================================
+  <<< #5 cmd=1009 subcmd=201 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "err": "0",
+  "subcmd": "201",
+  "data": {
+    "notifyID": "NOTIFY_MAP_SYNC",
+    "notifyData": [
+      {
+        "msgType": 1,
+        "data": {
+          "23": {
+            "680023": [
+              {
+                "id": "672-229-5-2-3302",
+                "resource": {}
+              },
+              {
+                "id": "680-224-5-1-3202",
+                "resource": {}
+              },
+              {
+                "id": "674-224-6-0-3017",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "676-225-6-0-3010",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "676-222-6-0-3027",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "679-223-6-0-3029",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "relics": {},
+                "id": "680-222-7-0-3701"
+              },
+              {
+                "id": "677-227-6-0-3005",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "675-229-5-3-3403",
+                "resource": {}
+              },
+              {
+                "id": "680-225-6-0-3017",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "672-227-5-2-3302",
+                "resource": {}
+              },
+              {
+                "id": "671-226-5-5-3602",
+                "resource": {}
+              },
+              {
+                "id": "679-228-6-0-3018",
+                "npc": {
+                  "faceTo": 1
+                }
+              }
+            ],
+            "690023": [
+              {
+                "id": "689-229-6-0-3015",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "685-223-6-0-3021",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "689-225-6-0-3030",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "685-227-5-1-3202",
+                "resource": {}
+              },
+              {
+                "id": "684-230-6-0-3029",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "682-229-6-0-3004",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "687-228-5-1-3202",
+                "resource": {}
+              },
+              {
+                "id": "689-224-5-5-3602",
+                "resource": {}
+              },
+              {
+                "id": "690-228-6-0-3008",
+                "npc": {
+                  "faceTo": 1
+                }
+              }
+            ],
+            "670024": [
+              {
+                "id": "664-238-5-3-3402",
+                "resource": {}
+              },
+              {
+                "id": "670-240-38-1044-1044438",
+                "build": {
+                  "y": 240,
+                  "x": 670,
+                  "leagueID": 0,
+                  "leagueFlag": 0,
+                  "id": "670-240-38-1044-1044438",
+                  "bid": 1044438,
+                  "leagueName": "",
+                  "leagueAbbrName": ""
+                }
+              },
+              {
+                "id": "669-231-6-0-3016",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "666-235-23-0-9",
+                "boss": {
+                  "status": 1,
+                  "level": 1,
+                  "faceTo": 1,
+                  "leftLife": 100
+                }
+              },
+              {
+                "id": "666-231-6-0-3021",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "662-234-6-0-3032",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "663-239-6-0-3021",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "665-235-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_665_235",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              },
+              {
+                "id": "669-237-6-0-3022",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "669-240-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_669_240",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              },
+              {
+                "id": "664-239-6-0-3030",
+                "npc": {
+                  "faceTo": 2
+                }
+              }
+            ],
+            "670023": [
+              {
+                "id": "665-225-5-1-3202",
+                "resource": {}
+              },
+              {
+                "id": "664-228-6-0-3006",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "662-225-6-0-3021",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "670-227-5-3-3402",
+                "resource": {}
+              },
+              {
+                "id": "662-226-6-0-3031",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "670-222-6-0-3010",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "668-228-6-0-3010",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "665-230-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_665_230",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              },
+              {
+                "id": "661-225-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_661_225",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              }
+            ],
+            "670025": [
+              {
+                "id": "663-249-6-0-3004",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "664-250-6-0-3011",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "665-243-6-0-3006",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "670-244-6-0-3025",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "666-245-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_666_245",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              },
+              {
+                "id": "664-246-5-5-3602",
+                "resource": {}
+              },
+              {
+                "id": "670-247-6-0-3018",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "661-241-6-0-3023",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "666-249-6-0-3035",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "666-250-19-6-6",
+                "build": {
+                  "leagueFlag": 4,
+                  "leagueName": "CNK",
+                  "buildingState": 4,
+                  "buildSpeed": 0,
+                  "id": "6_666_250",
+                  "hp": 1600,
+                  "captainerId": 0,
+                  "hpMax": 1600,
+                  "stateBeginTime": 0,
+                  "defAid": 0,
+                  "stateEndTime": 0,
+                  "status": 1,
+                  "leagueID": 289269,
+                  "isAct": false,
+                  "leagueAbbrName": "Cnk"
+                }
+              },
+              {
+                "id": "669-250-6-0-3023",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "670-249-6-0-3023",
+                "npc": {
+                  "faceTo": 1
+                }
+              },
+              {
+                "id": "668-241-6-0-3032",
+                "npc": {
+                  "faceTo": 2
+                }
+              },
+              {
+                "id": "661-247-5-3-3402",
+                "resource": {}
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
+
+====================================================
+  <<< #6 cmd=1009 subcmd=100 err=0 
+====================================================
+{
+  "cmd": "1009",
+  "subcmd": "100",
+  "err": "0",
+  "data": {
+    "notifyID": "NOTIFY_SERVER_STATUS",
+    "notifyData": [
+      {
+        "status": "kick"
+      }
+    ]
+  },
+  "time": 1788969749
+}

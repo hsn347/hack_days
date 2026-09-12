@@ -10,3 +10,6 @@ h/*.so
 h/*.jar
 split_install.apk
 base_temp.apk
+split_arm64.apk
+dumps/
+*.log
