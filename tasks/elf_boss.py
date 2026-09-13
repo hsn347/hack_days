@@ -270,6 +270,52 @@ class ElfBossTask(BaseTask):
         await self._load_heroes()
         self._detect_busy_heroes()
 
+    async def is_event_active(self) -> Tuple[bool, str]:
+        """
+        الاستعلام الاستباقي عن حالة حدث العفريت للتأكد مما إذا كان الحدث نشطاً ومتاحاً على السيرفر:
+          1. استعلام حزمة 5051/1 (Hero Battle Boss Status):
+             - كود 15 (Err_ACTIVITY_NOT_OPEN): الحدث مغلق كلياً كحدث عام على السيرفر.
+          2. استعلام رادار الزعماء 2011/4 لنخبة العفريت (bossType 10 و 9):
+             - كود 16001: الحدث غير متاح.
+             - عودة إحداثيات صالحة (x, y): العفريت موجود ومتاح فوراً على الخريطة!
+          3. استعلام مصفوفة الخريطة 2011/3 (mapType 24):
+             - كود 7 (Err_NO_DATA): لا توجد أي أهداف للعفريت حول القلعة حالياً.
+        """
+        # 1. فحص حالة الحدث العامة عبر 5051/1
+        try:
+            r_5051 = await self.conn.query('5051', '1', {}, timeout=3)
+            if r_5051 and str(r_5051.get('err', '')) == '15':
+                return False, "الحدث مغلق كلياً على السيرفر (كود 15: Err_ACTIVITY_NOT_OPEN)"
+        except Exception:
+            pass
+
+        # 2. فحص رادار الزعماء 2011/4
+        for bt in (self.boss_type, 10, 9):
+            if not bt:
+                continue
+            try:
+                r_radar = await self.conn.query('2011', '4', {"bossType": bt}, timeout=3)
+                if r_radar and str(r_radar.get('err', '')) == '0':
+                    rsp = r_radar.get('rspdata', {})
+                    if rsp.get('x') is not None and rsp.get('y') is not None:
+                        return True, f"العفريت نشط ومتاح على الخريطة عند ({rsp.get('x')}, {rsp.get('y')})"
+                elif r_radar and str(r_radar.get('err', '')) == '16001':
+                    return False, "حدث العفريت غير مفتوح حالياً على الخريطة (كود 16001)"
+            except Exception:
+                pass
+
+        # 3. فحص مصفوفة الخريطة 2011/3
+        try:
+            r_map = await self.conn.query('2011', '3', {"mapType": 24, "subType": 0}, timeout=3)
+            if r_map and str(r_map.get('err', '')) == '7':
+                return False, "لا يوجد أي عفريت على الخريطة (كود 7: Err_NO_DATA)"
+            if r_map and isinstance(r_map.get('result'), list) and len(r_map['result']) > 0:
+                return True, f"تم العثور على {len(r_map['result'])} عفريت على الخريطة"
+        except Exception:
+            pass
+
+        return False, "لم يتم العثور على أي مؤشر لوجود حدث العفريت على السيرفر"
+
     async def _load_castle_coords(self):
         """جلب إحداثيات قلعة اللاعب على الخريطة."""
         uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
@@ -895,6 +941,14 @@ class ElfBossTask(BaseTask):
             f"👹 بدء مهمة الهجوم على {boss_desc} | "
             f"التشكيلة الأساسية: {self.formation_id} | الهدف: {target_mode_desc}"
         )
+
+        # فحص استباقي لجاهزية الحدث على السيرفر
+        self.log.info("🔍 فحص حالة حدث العفريت على السيرفر قبل البدء...")
+        is_active, active_reason = await self.is_event_active()
+        if not is_active:
+            msg = f"⚠️ حدث العفريت غير نشط حالياً على السيرفر: {active_reason}"
+            self.log.warning(msg)
+            return TaskResult.fail(msg, error=active_reason, event_active=False)
 
         successful_attacks = 0
         last_error = ""

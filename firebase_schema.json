@@ -1,0 +1,292 @@
+{
+  "_comment": "هيكل قاعدة بيانات Firebase Firestore للبوت ولوحة التحكم (Web Dashboard)",
+  "collections": {
+    "users": {
+      "doc_id": "{user_id}",
+      "description": "بيانات المستخدم الأساسية ونظام الاشتراك وصلاحيته",
+      "fields": {
+        "uid": "usr_9kL2mP4x8Q",
+        "username": "أحمد الحربي",
+        "email": "ahmed.user@gmail.com",
+        "phone": "+966501234567",
+        "role": "user",
+        "created_at": "2026-09-01T10:00:00Z",
+        "is_banned": false,
+        "subscription": {
+          "plan_id": "vip_pro",
+          "plan_name": "باقة كبار الشخصيات (VIP Plan)",
+          "status": "active",
+          "started_at": "2026-09-01T00:00:00Z",
+          "expires_at": "2026-10-01T23:59:59Z",
+          "days_remaining": 19,
+          "max_castles_allowed": 5,
+          "current_castles_count": 2
+        }
+      },
+      "subcollections": {
+        "castles": {
+          "doc_id": "{castle_id}",
+          "description": "حسابات القلاع التابعة للمستخدم ومواردها وإعداداتها",
+          "fields": {
+            "castle_id": "cst_489201",
+            "email": "meik.gaertner2306.mgr@gmail.com",
+            "is_active": true,
+            "created_at": "2026-09-05T12:00:00Z",
+            "castle_info": {
+              "lord_name": "صقر_قريش",
+              "castle_name": "القلعة الملكية",
+              "server_id": 145,
+              "castle_level": 30,
+              "lord_power": 45200000,
+              "vip_level": 12,
+              "alliance_name": "الأبطال [HERO]",
+              "coordinates": {
+                "x": 344,
+                "y": 447
+              }
+            },
+            "resources": {
+              "food": 15420000,
+              "wood": 18900000,
+              "iron": 4560000,
+              "diamond": 1250000,
+              "gold": 38400,
+              "stamina": 120,
+              "last_updated": "2026-09-12T14:50:00Z"
+            },
+            "bot_status": {
+              "state": "idle",
+              "last_run_time": "2026-09-12T14:48:00Z",
+              "next_run_time": "2026-09-12T15:18:00Z",
+              "last_run_message": "اكتملت كافة المهام بنجاح وتم إرسال 4 مسيرات جمع",
+              "active_marches": 5,
+              "max_marches": 6,
+              "last_error": null
+            },
+            "config": {
+              "city_harvest": {
+                "enabled": true
+              },
+              "research": {
+                "enabled": true,
+                "schedule": {
+                  "times_per_day": 2
+                }
+              },
+              "alliance": {
+                "enabled": true,
+                "auto_help": true,
+                "gold_donations": 0
+              },
+              "port": {
+                "enabled": true
+              },
+              "train": {
+                "enabled": true,
+                "levels": {
+                  "infantry": 6,
+                  "cavalry": 6,
+                  "archers": 6,
+                  "chariots": 6
+                }
+              },
+              "pet_patrol": {
+                "enabled": true,
+                "pet": "غزال"
+              },
+              "territory_expansion": {
+                "enabled": true
+              },
+              "shield": {
+                "enabled": true,
+                "duration": "8h",
+                "allow_gold": false
+              },
+              "stamina": {
+                "enabled": true,
+                "gold_buys": 0
+              },
+              "skills": {
+                "enabled": true,
+                "target_skills": [
+                  "harvest",
+                  "gather",
+                  "warehouse"
+                ]
+              },
+              "hero_draw": {
+                "enabled": true
+              },
+              "tactics_hall": {
+                "enabled": true,
+                "tactic": "القلعة الفارغة",
+                "schedule": {
+                  "times_per_day": 2
+                }
+              },
+              "watermill": {
+                "enabled": true,
+                "types": "all",
+                "allow_shop_buy": true
+              },
+              "fountain": {
+                "enabled": true,
+                "resources": [
+                  "food",
+                  "wood",
+                  "iron",
+                  "diamond"
+                ],
+                "allow_gold": false,
+                "gold_times": 0,
+                "schedule": {
+                  "times_per_day": 2
+                }
+              },
+              "material_workshop": {
+                "enabled": true,
+                "materials": [
+                  "fang",
+                  "fur",
+                  "metal",
+                  "coal"
+                ],
+                "schedule": {
+                  "times_per_day": 2
+                }
+              },
+              "caravan": {
+                "enabled": true,
+                "schedule": {
+                  "times_per_day": 4,
+                  "active_window": {
+                    "from": 7,
+                    "to": 23
+                  }
+                }
+              },
+              "port_delegate": {
+                "enabled": true,
+                "shop_item": "7",
+                "schedule": {
+                  "times_per_day": 3
+                }
+              },
+              "savings_bank": {
+                "enabled": true,
+                "days": 7,
+                "schedule": {
+                  "times_per_day": 1
+                }
+              },
+              "building": {
+                "enabled": true,
+                "upgrade_castle": true,
+                "speedup_castle": false,
+                "upgrade_support_buildings": true,
+                "schedule": {
+                  "times_per_day": 1
+                }
+              },
+              "prestige": {
+                "enabled": true,
+                "schedule": {
+                  "hours": [3]
+                },
+                "invaders_max_lv": 30,
+                "subtasks": {
+                  "smuggler": true,
+                  "invaders": true,
+                  "stronghold": true,
+                  "gather": true,
+                  "watermill": true,
+                  "train": true,
+                  "fortress": true
+                }
+              },
+              "march_manager": {
+                "enabled": true,
+                "schedule": {
+                  "times_per_day": 4
+                },
+                "max_queues": 6,
+                "priority_order": [
+                  "transport",
+                  "ruins",
+                  "combat",
+                  "stronghold",
+                  "gather"
+                ],
+                "transport": {
+                  "enabled": false,
+                  "target_x": null,
+                  "target_y": null,
+                  "resource_ids": [1002, 1003, 1004, 1005]
+                },
+                "ruins": {
+                  "enabled": true,
+                  "explore_time": 900,
+                  "formation_id": 1
+                },
+                "combat": {
+                  "enabled": true,
+                  "choice": "elf",
+                  "level": 30,
+                  "formation_id": 1,
+                  "count": 1
+                },
+                "elf": {
+                  "enabled": true,
+                  "formation_id": 1
+                },
+                "invaders": {
+                  "enabled": false,
+                  "level": 30,
+                  "formation_id": 1,
+                  "count": 1
+                },
+                "rebels": {
+                  "enabled": false,
+                  "level": 30,
+                  "formation_id": 1,
+                  "count": 1
+                },
+                "stronghold": {
+                  "enabled": false,
+                  "level": 30,
+                  "count": 2,
+                  "formation_id": 1
+                },
+                "gather": {
+                  "enabled": true,
+                  "res_type": 1,
+                  "level": 5,
+                  "search_range": 100
+                }
+              }
+            }
+          },
+          "subcollections": {
+            "logs": {
+              "doc_id": "{log_id}",
+              "description": "سجل العمليات التاريخية للقلعة",
+              "fields": {
+                "timestamp": "2026-09-12T14:48:15Z",
+                "step": "march_manager",
+                "title": "منسق الفيالق والمسيرات",
+                "status": "success",
+                "details": {
+                  "ruins_sent": 1,
+                  "elf_status": "skipped_not_open",
+                  "gather_marches": 4,
+                  "total_queues_active": 5
+                },
+                "message": "تم إطلاق مسيرة أطلال و 4 مسيرات جمع قمح بنجاح"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

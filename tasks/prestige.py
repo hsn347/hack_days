@@ -124,6 +124,34 @@ PRESTIGE_QUEST_NAMES: Dict[str, str] = {
     "iron": "جمع الحديد (2,000)",
 }
 
+# ── أسماء وتسميات المهام الفرعية لمهام الهيبة ──────────────────────
+PRESTIGE_SUBTASKS_ALL: List[str] = [
+    "smuggler",
+    "invaders",
+    "stronghold",
+    "gather",
+    "watermill",
+    "train",
+    "fortress",
+]
+
+PRESTIGE_SUBTASK_ALIASES: Dict[str, str] = {
+    # 1. متجر المهربين
+    "smuggler": "smuggler", "المهربين": "smuggler", "متجر": "smuggler", "متجر المهربين": "smuggler", "shop": "smuggler",
+    # 2. قتال الغزاة
+    "invaders": "invaders", "الغزاة": "invaders", "غزاة": "invaders", "monsters": "invaders", "invader": "invaders",
+    # 3. المعاقل / الملاجئ
+    "stronghold": "stronghold", "المعاقل": "stronghold", "معاقل": "stronghold", "الملاجئ": "stronghold", "ملجأ": "stronghold", "shelter": "stronghold",
+    # 4. جمع الموارد
+    "gather": "gather", "الجمع": "gather", "جمع": "gather", "جمع الموارد": "gather", "resources": "gather",
+    # 5. الساقية
+    "watermill": "watermill", "الساقية": "watermill", "ساقية": "watermill", "طاحونة": "watermill",
+    # 6. تدريب الجنود
+    "train": "train", "تدريب": "train", "الجنود": "train", "تدريب الجنود": "train", "troops": "train",
+    # 7. حصن الحرب
+    "fortress": "fortress", "حصن": "fortress", "الحصن": "fortress", "فخاخ": "fortress", "حصن الحرب": "fortress", "traps": "fortress",
+}
+
 # ── تعريفات الموارد الأربعة لجمع مهام الهيبة ───────────────────────
 PRESTIGE_RESOURCES = [
     {"type": 2, "name": "مزارع القمح (Food)",  "icon": "🌾", "res_code": 1001, "quest_id": 4112000, "quest_key": "food"},
@@ -133,6 +161,7 @@ PRESTIGE_RESOURCES = [
 ]
 
 REQUIRED_SOURCE_NUM = 25000  # القيمة المستهدفة لمهام الهيبة اليومية (25,000 مورد)
+
 TARGET_LOAD_CAPACITY = 25000  # سقف حمولة الجيش القصوى (25,000 مورد) ليعود فور امتلائه
 
 # تقدير حمولة الوحدة الواحدة حسب صنف القوة في القلاع المتقدمة (مع احتساب أبحاث ومهارات اللورد):
@@ -318,13 +347,53 @@ class PrestigeTask(BaseTask):
         self.stronghold_center_y = self.config.get("stronghold_y", sh_cfg.get("center_y", PRESTIGE_STRONGHOLD_CONFIG["center_y"]))
         self.stronghold_wait_queue = bool(self.config.get("stronghold_wait_queue", sh_cfg.get("wait_for_queue", PRESTIGE_STRONGHOLD_CONFIG["wait_for_queue"])))
 
+        # ── إعدادات التحكم في كل مهمة فرعية على حدة ───────────────
+        self.subtasks_config = self.config.get("subtasks", {})
+
         self._heroes: List[Dict[str, Any]] = []
         self._busy_heroes: Set[int] = set()
         self._used_army: Dict[int, int] = {}
         self._used_pets: Set[int] = set()
         self._excluded_targets: Set[str] = set()
 
+    def is_subtask_enabled(self, subtask_name: str) -> bool:
+        """
+        فحص ما إذا كانت مهمة فرعية محددة من مهام الهيبة مفعلة من المستخدم.
+        يدعم تمرير القيمة كـ dict أو list أو str أو أعلام فردية.
+        """
+        key = PRESTIGE_SUBTASK_ALIASES.get(subtask_name.strip().lower(), subtask_name.strip().lower())
+
+        # 1. إذا حُددت في subtasks كقاموس (dict)
+        if isinstance(self.subtasks_config, dict) and self.subtasks_config:
+            for k, v in self.subtasks_config.items():
+                if PRESTIGE_SUBTASK_ALIASES.get(str(k).strip().lower(), str(k).strip().lower()) == key:
+                    return bool(v)
+
+        # 2. إذا حُددت كقائمة (list) أو مجموعة (set)
+        elif isinstance(self.subtasks_config, (list, tuple, set)):
+            norm_set = {PRESTIGE_SUBTASK_ALIASES.get(str(x).strip().lower(), str(x).strip().lower()) for x in self.subtasks_config}
+            return key in norm_set
+
+        # 3. إذا حُددت كنص (str) مفصول بفواصل
+        elif isinstance(self.subtasks_config, str):
+            val = self.subtasks_config.strip().lower()
+            if val in ("all", "الكل", "all_tasks"):
+                return True
+            tokens = {PRESTIGE_SUBTASK_ALIASES.get(t.strip(), t.strip()) for t in val.replace("،", ",").split(",") if t.strip()}
+            return key in tokens
+
+        # 4. فحص الخيار المباشر في config العام (مثل enable_smuggler أو smuggler)
+        direct_key = f"enable_{key}"
+        if direct_key in self.config:
+            return bool(self.config[direct_key])
+        if key in self.config and isinstance(self.config[key], bool):
+            return bool(self.config[key])
+
+        # الافتراضي: تفعيل المهمة
+        return True
+
     async def on_start(self):
+
         """انتظار بيانات القلعة والأبطال ومهام الهيبة عند بدء المهمة."""
         for _ in range(30):
             has_city = "cityCtrl" in self.conn.init_data
@@ -1145,43 +1214,59 @@ class PrestigeTask(BaseTask):
         self.log_prestige_overview(quests_status)
 
         # 1. متجر المهربين
-        smuggler_res = await self.run_smuggler_store()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        if self.is_subtask_enabled("smuggler"):
+            smuggler_res = await self.run_smuggler_store()
+            await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة متجر المهربين معطلة بناءً على اختيار المستخدم.")
+            smuggler_res = {"success": True, "skipped": True, "user_disabled": True, "purchased_count": 0}
 
         # 2. الهجوم على الغزاة (Invaders)
-        invaders_res = await self.run_invaders_step()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        if self.is_subtask_enabled("invaders"):
+            invaders_res = await self.run_invaders_step()
+            await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة قتال الغزاة معطلة بناءً على اختيار المستخدم.")
+            invaders_res = {"success": True, "skipped": True, "user_disabled": True, "attacks": 0}
 
         # 3. الهجوم على المعاقل / الملاجئ (Strongholds)
-        stronghold_res = await self.run_stronghold_step()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        if self.is_subtask_enabled("stronghold"):
+            stronghold_res = await self.run_stronghold_step()
+            await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة احتلال المعاقل / الملاجئ معطلة بناءً على اختيار المستخدم.")
+            stronghold_res = {"success": True, "skipped": True, "user_disabled": True, "attacks": 0}
 
         # 4. جمع الموارد الأربعة خارج القلعة
-        gather_res = await self.run_gather_prestige()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        if self.is_subtask_enabled("gather"):
+            gather_res = await self.run_gather_prestige()
+            await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة جمع الموارد معطلة بناءً على اختيار المستخدم.")
+            gather_res = {"success": True, "skipped": True, "user_disabled": True, "dispatched": 0}
 
         # 5. الساقية — تفعيل جميع مباني إنتاج الموارد
-        watermill_res = await self.run_watermill_step()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        if self.is_subtask_enabled("watermill"):
+            watermill_res = await self.run_watermill_step()
+            await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة الساقية معطلة بناءً على اختيار المستخدم.")
+            watermill_res = {"success": True, "skipped": True, "user_disabled": True, "activated": 0}
 
         # 6. تدريب الجنود — 250 من كل نوع على مستوى 1
-        train_res = await self.run_train_step()
-
-        # استراحة بسيطة بين الخطوات
-        await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        if self.is_subtask_enabled("train"):
+            train_res = await self.run_train_step()
+            await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة تدريب الجنود معطلة بناءً على اختيار المستخدم.")
+            train_res = {"success": True, "skipped": True, "user_disabled": True, "trained_count": 0}
 
         # 7. حصن الحرب — تدريب الفخاخ تلقائياً
-        fortress_res = await self.run_fortress_step()
+        if self.is_subtask_enabled("fortress"):
+            fortress_res = await self.run_fortress_step()
+        else:
+            self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة بناءً على اختيار المستخدم.")
+            fortress_res = {"success": True, "skipped": True, "user_disabled": True}
 
         # 8. عرض تقرير حالة الهيبة
         await self.report_prestige_status()
@@ -1201,29 +1286,48 @@ class PrestigeTask(BaseTask):
         executed_parts = []
         skipped_parts = []
 
-        if smuggler_skipped:
+        if smuggler_res.get("user_disabled"):
+            skipped_parts.append("متجر المهربين (معطل)")
+        elif smuggler_skipped:
             skipped_parts.append("متجر المهربين ✨")
         else:
             executed_parts.append(f"متجر المهربين ({total_bought}/{self.target_smuggler_buys})")
 
-        if invaders_skipped:
+        if invaders_res.get("user_disabled"):
+            skipped_parts.append("الغزاة (معطل)")
+        elif invaders_skipped:
             skipped_parts.append("الغزاة ✨")
         else:
             executed_parts.append(f"الغزاة ({total_invaders}/{self.invaders_count})")
 
-        if stronghold_skipped:
+        if stronghold_res.get("user_disabled"):
+            skipped_parts.append("المعاقل (معطل)")
+        elif stronghold_skipped:
             skipped_parts.append("المعاقل ✨")
         else:
             executed_parts.append(f"المعاقل ({total_strongholds}/{self.stronghold_count})")
 
-        if gather_skipped:
+        if gather_res.get("user_disabled"):
+            skipped_parts.append("جمع الموارد (معطل)")
+        elif gather_skipped:
             skipped_parts.append("جمع الموارد ✨")
         else:
             executed_parts.append(f"جمع الموارد ({total_dispatched} مسيرة)")
 
-        executed_parts.append(f"الساقية ({watermill_activated} مبنى)")
-        executed_parts.append(f"تدريب الجنود ({train_trained} أنواع)")
-        executed_parts.append(f"حصن الحرب ({'✅' if fortress_res.get('success') else '⚠️'})")
+        if watermill_res.get("user_disabled"):
+            skipped_parts.append("الساقية (معطل)")
+        else:
+            executed_parts.append(f"الساقية ({watermill_activated} مبنى)")
+
+        if train_res.get("user_disabled"):
+            skipped_parts.append("تدريب الجنود (معطل)")
+        else:
+            executed_parts.append(f"تدريب الجنود ({train_trained} أنواع)")
+
+        if fortress_res.get("user_disabled"):
+            skipped_parts.append("حصن الحرب (معطل)")
+        else:
+            executed_parts.append(f"حصن الحرب ({'✅' if fortress_res.get('success') else '⚠️'})")
 
         summary_txt = ""
         if executed_parts:
@@ -1231,7 +1335,8 @@ class PrestigeTask(BaseTask):
         if skipped_parts:
             if summary_txt:
                 summary_txt += " | "
-            summary_txt += f"المتخطي لاكتماله مسبقاً: [{', '.join(skipped_parts)}]"
+            summary_txt += f"المتخطي: [{', '.join(skipped_parts)}]"
+
 
         msg = f"✅ اكتملت دورة مهام الهيبة! {summary_txt}"
         self.log.info(msg)
@@ -1273,6 +1378,11 @@ if __name__ == "__main__":
     parser.add_argument("--sh-maxlv", type=int, default=30, help="أقصى مستوى للمعقل [افتراضي: 30]")
     parser.add_argument("--sh-range", type=int, default=80, help="نطاق البحث عن المعاقل [افتراضي: 80]")
     parser.add_argument("--range", type=int, default=120, help="نطاق البحث عن حقول الموارد بالكيلومتر [افتراضي: 120]")
+    parser.add_argument(
+        "--subtasks",
+        default="all",
+        help="المهام الفرعية المطلوب تشغيلها مفصولة بفاصلة (smuggler,invaders,stronghold,gather,watermill,train,fortress أو all) [افتراضي: all]"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1331,6 +1441,7 @@ if __name__ == "__main__":
             "stronghold_min_lv": args.sh_minlv,
             "stronghold_max_lv": args.sh_maxlv,
             "stronghold_range": args.sh_range,
+            "subtasks": args.subtasks,
         }
 
         task = PrestigeTask(conn, prestige_cfg)

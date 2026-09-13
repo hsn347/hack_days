@@ -108,7 +108,7 @@ BUILDING_TROOP_MAP: Dict[str, Dict[str, Any]] = {
         "name_en": "Infantry",
         "icon": "🛡️",
         "prefix": 400,
-        "max_level": 10,
+        "max_level": 12,
         "queue_type": "1203"
     },
     "cavalry": {
@@ -117,7 +117,7 @@ BUILDING_TROOP_MAP: Dict[str, Dict[str, Any]] = {
         "name_en": "Cavalry",
         "icon": "🐎",
         "prefix": 500,
-        "max_level": 10,
+        "max_level": 12,
         "queue_type": "1204"
     },
     "archers": {
@@ -126,7 +126,7 @@ BUILDING_TROOP_MAP: Dict[str, Dict[str, Any]] = {
         "name_en": "Archers",
         "icon": "🏹",
         "prefix": 600,
-        "max_level": 10,
+        "max_level": 12,
         "queue_type": "1205"
     },
     "chariots": {
@@ -135,7 +135,7 @@ BUILDING_TROOP_MAP: Dict[str, Dict[str, Any]] = {
         "name_en": "Chariots",
         "icon": "🚜",
         "prefix": 700,
-        "max_level": 10,
+        "max_level": 12,
         "queue_type": "1206"
     },
 }
@@ -154,7 +154,8 @@ TYPE_ALIASES: Dict[str, str] = {
 # مستويات فتح الرتب العسكرية في الثكنات
 TIER_UNLOCK_BUILDING_LEVEL = {
     1: 1, 2: 4, 3: 7, 4: 10, 5: 13,
-    6: 16, 7: 19, 8: 22, 9: 26, 10: 30
+    6: 16, 7: 19, 8: 22, 9: 26, 10: 30,
+    11: 30, 12: 30
 }
 
 
@@ -646,7 +647,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Empire Troop Training Task — مهمة تدريب الجيش التلقائية")
     parser.add_argument("--email", "-e", help="البريد الإلكتروني للحساب")
     parser.add_argument("--types", "-t", default="all", help="أنواع القوات للتدريب (مشاة, خيالة, اسهم, عربات أو all)")
-    parser.add_argument("--level", "-l", type=int, default=10, help="مستوى القوات المراد تدريبه (1..10)")
+    parser.add_argument("--level", "-l", type=int, default=12, help="مستوى القوات المراد تدريبه (1..12)")
     parser.add_argument("--count", "-c", default="max", help="عدد الجنود للتدريب (رقم محدد أو 'max')")
     args = parser.parse_args()
 

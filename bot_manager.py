@@ -67,6 +67,7 @@ import copy
 import json
 import logging
 import time
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from game_client import GameConnection, AccountSession
@@ -87,11 +88,23 @@ from tasks.watermill import WatermillTask, BUILDING_CONFIG as WATERMILL_BUILDING
 from tasks.fountain import FountainTask, SUPPORTED_RESOURCES as FOUNTAIN_RESOURCES
 from tasks.material_workshop import MaterialWorkshopTask, MATERIALS_MAP as WORKSHOP_MATERIALS_MAP, parse_materials_choice
 from tasks.caravan import CaravanTask
-from tasks.merchant import MerchantTask
 from tasks.port_delegate import PortDelegateTask, DELEGATE_TASKS_CONFIG, ISLAND_SHOP_CATALOG, resolve_island_goods_id
 from tasks.savings_bank import SavingsBankTask, SAVINGS_PLANS, DEFAULT_DAYS as DEFAULT_SAVINGS_DAYS
 from tasks.building import BuildingTask, BUILDING_INFO
-from tasks.fortress import FortressTask
+from tasks.prestige import PrestigeTask, PRESTIGE_SUBTASKS_ALL, PRESTIGE_SUBTASK_ALIASES
+from tasks.march_manager import (
+    MarchManagerTask,
+    DEFAULT_PRIORITIES as MARCH_DEFAULT_PRIORITIES,
+    DEFAULT_TRANSPORT_CONFIG as MARCH_DEFAULT_TRANSPORT,
+    DEFAULT_RUINS_CONFIG as MARCH_DEFAULT_RUINS,
+    DEFAULT_COMBAT_CONFIG as MARCH_DEFAULT_COMBAT,
+    DEFAULT_ELF_CONFIG as MARCH_DEFAULT_ELF,
+    DEFAULT_INVADERS_CONFIG as MARCH_DEFAULT_INVADERS,
+    DEFAULT_REBELS_CONFIG as MARCH_DEFAULT_REBELS,
+    DEFAULT_STRONGHOLD_CONFIG as MARCH_DEFAULT_STRONGHOLD,
+    DEFAULT_GATHER_CONFIG as MARCH_DEFAULT_GATHER,
+    RESOURCE_SUBTYPE_MAP as MARCH_RESOURCE_SUBTYPE_MAP,
+)
 
 # ── إعداد نظام التسجيل (Logging) ───────────────────────────────────
 logging.basicConfig(
@@ -109,6 +122,37 @@ log = logging.getLogger("bot_manager")
 # لكل حساب مستخدم بناءً على ما يختاره ويحدده المستخدم من لوحة التحكم (Web Dashboard):
 # ════════════════════════════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════════════════════════════
+# 🕐 نظام الجدولة الزمنية للمهام (Task Scheduling System)
+# ════════════════════════════════════════════════════════════════════════════════════════
+# يمكن إضافة مفتاح "schedule" لأي مهمة للتحكم في توقيت تشغيلها.
+# البوت يعمل في حلقة مستمرة (افتراضياً كل 60 دقيقة) ويفحص الجدول في كل دورة.
+#
+# الأنواع المدعومة:
+#
+#  ① times_per_day — عدد مرات التشغيل يومياً (موزعة تلقائياً):
+#     "schedule": {"times_per_day": 3}   → كل ~8 ساعات
+#     "schedule": {"times_per_day": 2}   → كل ~12 ساعة
+#     "schedule": {"times_per_day": 24}  → في كل دورة (إذا كانت الدورة ساعة)
+#
+#  ② hours — ساعات محددة بالتوقيت المحلي (24h):
+#     "schedule": {"hours": [8, 20]}        → مرتين: 8 صباحاً و8 مساءً
+#     "schedule": {"hours": [6, 14, 22]}    → ثلاث مرات في اليوم
+#
+#  ③ active_window — نافذة زمنية للتشغيل (from <= hour < to):
+#     "schedule": {"active_window": {"from": 7, "to": 23}}  → بين 7 ص و11 م فقط
+#
+#  ④ دمج أنواع متعددة معاً:
+#     "schedule": {"times_per_day": 3, "active_window": {"from": 7, "to": 23}}
+#     → تُشغَّل 3 مرات يومياً لكن فقط بين 7 صباحاً و11 مساءً
+#
+#  ⑤ بدون "schedule" أو schedule = None → تُشغَّل في كل دورة (الافتراضي)
+#
+# تشغيل وضع الحلقة الدائمة من سطر الأوامر:
+#   python bot_manager.py --email "..." --loop
+#   python bot_manager.py --email "..." --loop --loop-interval 30   (كل 30 دقيقة)
+# ════════════════════════════════════════════════════════════════════════════════════════
+
 DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # 🌾 1. مهمة حصد مزارع ومناجم المدينة (City Harvest)
     "city_harvest": {
@@ -117,7 +161,8 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
 
     # 🔬 2. مهمة أبحاث الأكاديمية والعلوم (Academy Research)
     "research": {
-        "enabled": True,             # تفعيل/تعطيل أبحاث الأكاديمية التلقائية (البحث الموصى به من النظام)
+        "enabled": True,
+        "schedule": {"times_per_day": 2}
     },
 
     # 🤝 3. مهمة التحالف ومساعدة الأعضاء وتبرعات العلوم (Alliance Task)
@@ -186,12 +231,13 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "tactics_hall": {
         "enabled": True,             # تفعيل/تعطيل أبحاث قاعة الاستراتيجيات
         "tactic": "القلعة الفارغة",   # اسم أو معرف البحث المستهدف الذي يحدده المستخدم (مثال: "القلعة الفارغة", "قمة الاتقان", "البحث الكامل", 91010000)
+        "schedule": {"times_per_day": 2}
     },
 
     # 💧 13. مهمة طاحونة الماء وزيادة إنتاج موارد القلعة (Watermill Production Boost)
     "watermill": {
         "enabled": True,             # تفعيل/تعطيل مهمة طاحونة الماء ومضاعفة إنتاج الموارد
-        "types": "all",              # الموارد المطلوب تعزيزها: "all" (الكل)، أو محددة مثل: "food" (قمح), "wood" (خشب), "iron" (حديد), "silver" (فضة)
+        "types": "all",              # الموارد المطلوب تعزيزها: "all" (الكل)، أو محددة مثل: "food" (قمح), "wood" (خشب), "iron" (حديد), "diamond" (ألماس)
         "allow_shop_buy": True,      # السماح بالشراء التلقائي لأدوات التعزيز الناقصة من متجر التحالف بنقاط التحالف (True/False)
     },
 
@@ -206,6 +252,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         ],
         "allow_gold": False,         # السماح بالشراء بالذهب بعد انتهاء المرات المجانية (False افتراضياً لحماية الذهب)
         "gold_times": 0,             # عدد مرات الشراء بالذهب لكل مورد محدد عند السماح بالشراء بالذهب
+        "schedule": {"times_per_day": 2}
     },
 
     # 🔨 15. مهمة ورشة المواد وصناعة خامات العتاد (Material Workshop)
@@ -217,30 +264,27 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "metal",
             "coal",
         ],
+        "schedule": {"times_per_day": 2}
     },
 
     # 🐪 16. مهمة القافلة التجارية وحراسة الكنز (Caravan / Carriage Escort)
     "caravan": {
         "enabled": True,             # تفعيل/تعطيل إرسال القافلة وحراسة الكنز وجمع الجوائز تلقائياً
-    },
-
-    # 🛒 17. مهمة التاجر المتجول والمقايضة التلقائية (Traveling Merchant)
-    "merchant": {
-        "enabled": True,             # تفعيل/تعطيل المقايضة والشراء التلقائي من التاجر المتجول بالموارد
-        "target": 10,                # عدد عمليات الشراء بالموارد المستهدفة
-        "max_gold": 0,               # سقف الذهب لتحديث المتجر (0 = تحديثات مجانية فقط لمنع استهلاك الذهب)
+        "schedule": {"times_per_day": 4, "active_window": {"from": 7, "to": 23}}
     },
 
     # ⚓ 18. مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة (Port Delegate & Island Store)
     "port_delegate": {
         "enabled": True,             # تفعيل/تعطيل مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة
         "shop_item": "7",            # المنتج المطلوب شراؤه بالكامل من متجر الجزيرة (رقم 1-7 أو اسمه أو all للكل)
+        "schedule": {"times_per_day": 3}
     },
 
     # 🏦 19. مهمة دار الادخار وبنك التوفير (Savings Bank)
     "savings_bank": {
         "enabled": True,             # تفعيل/تعطيل استثمار الذهب وسحب الأرباح في دار الادخار تلقائياً
         "days": 7,                   # خطة الاستثمار والمدة المختارة بالأيام: 7 (أسبوعية), 15 (نصف شهرية), 30 (شهرية)
+        "schedule": {"times_per_day": 1}
     },
 
     # 🏗️ 20. مهمة ترقية القلعة والمباني والتسريع (Building Upgrade & Castle)
@@ -249,11 +293,91 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "upgrade_castle": True,            # ترقية القلعة ومتطلباتها (الخيار الأول)
         "speedup_castle": False,           # استخدام التسريع لترقية القلعة من الحقيبة والمجاني (الخيار الثاني)
         "upgrade_support_buildings": True, # ترقية المعسكرات والمراكز الطبية والمزارع وخيم العسكرية (الخيار الثالث)
+        "schedule": {"times_per_day": 1}
     },
 
-    # 🏰 21. مهمة تدريب فخاخ حصن الحرب (War Fortress Traps)
-    "fortress": {
-        "enabled": True,                   # تفعيل/تعطيل تدريب فخاخ حصن الحرب تلقائياً لأعلى مستوى متاح
+    # 🎖️ 22. مهمة مهام الهيبة اليومية (Daily Prestige Quests)
+    "prestige": {
+        "enabled": True,                   # تفعيل/تعطيل مهمة مهام الهيبة اليومية
+        "schedule": {
+            "hours": [3],                  # تشغيل مرة واحدة في اليوم الساعة 3 فجراً
+        },
+        "invaders_max_lv": 30,             # الحد الأقصى لمستوى الغزاة المطلوب قتالهم (1-30)
+        "subtasks": {                      # تفعيل كل مهمة من مهام الهيبة على حدة
+            "smuggler": True,              # متجر المهربين (10 مشتريات بالموارد)
+            "invaders": True,              # قتال الغزاة (5 هجمات)
+            "stronghold": True,            # احتلال المعاقل / الملاجئ (مرتان)
+            "gather": True,                # جمع الموارد الأربعة خارج القلعة بحمولة 25k
+            "watermill": True,             # الساقية وتفعيل مباني الموارد
+            "train": True,                 # تدريب الجنود (250 من كل نوع مستوى 1)
+            "fortress": True,              # حصن الحرب وتدريب الفخاخ
+        },
+    },
+
+    # 🎖️ 23. مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator)
+    # يدير كافة مسيرات الخريطة الخارجية للقلعة وفق الأولويات وسعة الفيالق المتاحة (تأتي من فايربيس)
+    "march_manager": {
+        "enabled": True,                   # تفعيل/تعطيل منسق الفيالق كلياً
+        "max_queues": 6,                   # سعة طوابير الفيالق القصوى للقلعة (5 أو 6)
+        "priority_order": [                # قائمة الأولويات المعتمدة بالترتيب
+            "transport",                   # 1. مساعدة الموارد
+            "ruins",                       # 2. استكشاف الأطلال (مسيرة واحدة حصراً)
+            "combat",                      # 3. القتال (عفريت / غزاة / متمردين)
+            "stronghold",                  # 4. الهجوم على الملاجئ
+            "gather",                      # 5. جمع الموارد بالفيالق الشاغرة
+        ],
+        # [1] إعدادات مساعدة الموارد (Transport)
+        "transport": {
+            "enabled": False,              # تفعيل مساعدة الموارد
+            "target_x": None,              # إحداثي X للقلعة الهدف (مثال: 344)
+            "target_y": None,              # إحداثي Y للقلعة الهدف (مثال: 447)
+            "resource_ids": [1002, 1003, 1004, 1005],  # الموارد (1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس)
+        },
+        # [2] إعدادات استكشاف الأطلال (Ruins) — مسيرة واحدة فقط حصراً
+        "ruins": {
+            "enabled": True,               # تفعيل استكشاف الأطلال
+            "explore_time": 900,           # مدة الاستكشاف بالثواني (900 = 15 دقيقة)
+            "formation_id": 1,             # رقم التشكيلة العسكرية (1 إلى 5)
+        },
+        # [3] إعدادات القتال الشامل (Combat) — يحدد المستخدم خياراً واحداً حصراً (عفريت أو غزاة أو متمردين)
+        "combat": {
+            "enabled": True,               # تفعيل أولوية القتال
+            "choice": "elf",               # الخيار المستهدف: "elf" (عفريت) أو "invaders" (غزاة) أو "rebels" (متمردين)
+            "level": 30,                   # مستوى الهدف المطلوب مهاجمته (للغزاة/المتمردين)
+            "formation_id": 1,             # رقم تشكيلة القتال (1 إلى 5)
+            "count": 1,                    # عدد الهجمات
+        },
+        # تخصيص كل هدف قتالي على حدة لدعم واجهات Firebase المتنوعة:
+        "elf": {
+            "enabled": True,               # تفعيل نخبة العفريت
+            "formation_id": 1,             # رقم التشكيلة
+        },
+        "invaders": {
+            "enabled": False,              # تفعيل الغزاة
+            "level": 30,                   # مستوى الغزاة
+            "formation_id": 1,             # رقم التشكيلة
+            "count": 1,                    # عدد الهجمات
+        },
+        "rebels": {
+            "enabled": False,              # تفعيل المتمردين
+            "level": 30,                   # مستوى المتمردين
+            "formation_id": 1,             # رقم التشكيلة
+            "count": 1,                    # عدد الهجمات
+        },
+        # [4] إعدادات الهجوم على المعاقل والملاجئ (Stronghold)
+        "stronghold": {
+            "enabled": False,              # تفعيل مهاجمة الملاجئ
+            "level": 30,                   # مستوى الملجأ المستهدف (1 إلى 30)
+            "count": 2,                    # عدد الملاجئ المستهدفة
+            "formation_id": 1,             # رقم التشكيلة
+        },
+        # [5] إعدادات جمع الموارد الخارجية (Gathering) — تستهلك كافة الفيالق الشاغرة
+        "gather": {
+            "enabled": True,               # تفعيل جمع الموارد بالفيالق المتبقية حتى الامتلاء
+            "res_type": 1,                 # نوع المورد: 1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس
+            "level": 5,                    # مستوى حقل المورد بالضبط (1 إلى 7)
+            "search_range": 100,           # نطاق البحث الأقصى حول القلعة
+        },
     }
 }
 
@@ -546,6 +670,188 @@ class AccountContext:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  كلاس الجدولة الزمنية للمهام (BotScheduler)
+# ════════════════════════════════════════════════════════════════════
+
+class BotScheduler:
+    """
+    محرك الجدولة الزمنية للمهام — مصمم للكفاءة القصوى مع آلاف الحسابات المتزامنة.
+
+    ⚡ تصميم خفيف الوزن (مناسب لـ 1000+ حساب):
+      - Dict بسيط بدون threads أو background tasks أو timers
+      - يستخدم asyncio.sleep() للانتظار — لا يستهلك CPU إطلاقاً
+      - يحفظ الحالة في ملف JSON صغير (<1KB) لكل حساب منفصلاً
+      - جميع العمليات O(1) — لا عمليات بحث أو loop ثقيلة
+
+    أنواع الجدولة المدعومة (قابلة للدمج):
+      ① times_per_day  : عدد مرات التشغيل يومياً (كل N ساعة تلقائياً)
+      ② hours          : قائمة ساعات تشغيل محددة بالتوقيت المحلي [8, 14, 20]
+      ③ active_window  : نافذة زمنية {"from": 7, "to": 23} — 7 ص إلى 11 م
+      ④ بدون schedule  : يُشغَّل في كل دورة (السلوك الافتراضي)
+
+    مثال دمج متعدد:
+      {"times_per_day": 3, "active_window": {"from": 7, "to": 23}}
+      → تُشغَّل 3 مرات يومياً لكن فقط بين 7 صباحاً و11 مساءً
+    """
+
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        state_file: Optional[str] = None,
+    ) -> None:
+        # استخراج إعدادات الجدولة فقط من المهام التي تحتوي عليها
+        self._schedules: Dict[str, Dict[str, Any]] = {}
+        for task_key, task_cfg in config.items():
+            if isinstance(task_cfg, dict):
+                sched = task_cfg.get("schedule")
+                if sched and isinstance(sched, dict):
+                    self._schedules[task_key] = sched
+
+        # آخر وقت تشغيل لكل مهمة: {task_key: unix_timestamp}
+        self._last_run: Dict[str, float] = {}
+
+        # ملف حفظ الحالة لاستمراريتها عند إعادة تشغيل البوت
+        self._state_file = state_file
+        self._load_state()
+
+    # ── حفظ وتحميل الحالة ──────────────────────────────────────────
+
+    def _load_state(self) -> None:
+        """تحميل آخر وقت تشغيل لكل مهمة من ملف الحالة المحفوظ."""
+        if not self._state_file or not os.path.exists(self._state_file):
+            return
+        try:
+            with open(self._state_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self._last_run = {k: float(v) for k, v in data.items()}
+        except Exception:
+            self._last_run = {}  # إذا تلف الملف نبدأ من جديد بأمان
+
+    def save_state(self) -> None:
+        """حفظ آخر وقت تشغيل لكل مهمة في ملف JSON (خفيف جداً < 1KB)."""
+        if not self._state_file:
+            return
+        try:
+            with open(self._state_file, "w", encoding="utf-8") as f:
+                json.dump(self._last_run, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass  # فشل الحفظ لا يوقف البوت
+
+    # ── منطق قرار التشغيل ─────────────────────────────────────────
+
+    def should_run(self, task_key: str, now: Optional[datetime] = None) -> bool:
+        """
+        هل يجب تشغيل هذه المهمة الآن؟
+
+        أولوية الفحص:
+          1. active_window → هل الوقت ضمن النافذة الزمنية المسموحة؟
+          2. hours         → هل الساعة الحالية مُدرجة ولم تُشغَّل فيها اليوم؟
+          3. times_per_day → هل مضت المدة الكافية منذ آخر تشغيل؟
+          4. لا إعدادات   → True دائماً (في كل دورة)
+        """
+        sched = self._schedules.get(task_key)
+        if not sched:
+            return True  # لا جدول محدد = تشغيل في كل دورة
+
+        now = now or datetime.now()
+
+        # ① فحص النافذة الزمنية (active_window) — يمنع التشغيل خارجها
+        active_window = sched.get("active_window")
+        if active_window and isinstance(active_window, dict):
+            from_h = int(active_window.get("from", 0))
+            to_h   = int(active_window.get("to",   24))
+            if not (from_h <= now.hour < to_h):
+                return False  # خارج النافذة الزمنية المسموحة
+
+        # ② فحص الساعات المحددة (hours)
+        # المنطق: نفّذ في أول دورة تأتي بعد مرور الساعة المحددة (مرة لكل فترة يومياً)
+        # hours=[3]     → تشغيل في أول دورة تبدأ ≥ 03:00 ولم تُنفذ اليوم بعد 03:00
+        # hours=[3, 15] → تشغيلتان: الأولى بعد 03:00، الثانية بعد 15:00
+        hours = sched.get("hours")
+        if hours and isinstance(hours, list):
+            sorted_hours = sorted(hours)
+            now_date = now.date()
+            now_hour = now.hour
+
+            # آخر ساعة هدف مرّت (≤ الساعة الحالية) = الفترة الزمنية الحالية
+            passed_hours = [h for h in sorted_hours if now_hour >= h]
+            if not passed_hours:
+                return False  # لم تحن أي ساعة هدف بعد → انتظار
+
+            current_slot_hour = max(passed_hours)
+
+            # هل تم التشغيل بالفعل في هذه الفترة اليوم؟
+            last_ts = self._last_run.get(task_key, 0.0)
+            if last_ts > 0.0:
+                last_dt = datetime.fromtimestamp(last_ts)
+                if last_dt.date() == now_date and last_dt.hour >= current_slot_hour:
+                    return False  # نُفذت في هذه الفترة → تخطّي
+            return True  # حانت الفترة ولم تُنفذ → شغّل
+
+
+        # ③ فحص عدد مرات التشغيل يومياً (times_per_day)
+        times_per_day = sched.get("times_per_day")
+        if times_per_day and isinstance(times_per_day, (int, float)) and float(times_per_day) > 0:
+            interval_secs = 86400.0 / float(times_per_day)
+            last_ts  = self._last_run.get(task_key, 0.0)
+            elapsed  = now.timestamp() - last_ts
+            return elapsed >= interval_secs
+
+        # الجدول موجود لكن لا شروط واضحة → شغّل دائماً
+        return True
+
+    def mark_ran(self, task_key: str, now: Optional[datetime] = None) -> None:
+        """تسجيل أن المهمة تم تنفيذها بنجاح الآن."""
+        self._last_run[task_key] = (now or datetime.now()).timestamp()
+
+    def seconds_until_next_any_task(self, now: Optional[datetime] = None) -> float:
+        """
+        كم ثانية حتى تستحق أي مهمة مُجدوَلة التشغيل القادم؟
+        يُستخدم لتحديد الانتظار المُثلى بين دورات loop mode.
+        إذا لا توجد مهام مُجدوَلة أو حان وقتها فوراً: يعيد 0.
+        """
+        if not self._schedules:
+            return 0.0
+
+        now       = now or datetime.now()
+        min_wait  = float("inf")
+        now_ts    = now.timestamp()
+
+        for task_key, sched in self._schedules.items():
+            # times_per_day: حساب الوقت المتبقي حتى الدورة القادمة
+            tpd = sched.get("times_per_day")
+            if tpd and isinstance(tpd, (int, float)) and float(tpd) > 0:
+                interval = 86400.0 / float(tpd)
+                last_ts  = self._last_run.get(task_key, 0.0)
+                wait     = max(0.0, interval - (now_ts - last_ts))
+                min_wait = min(min_wait, wait)
+
+            # hours: حساب الوقت حتى أقرب ساعة تشغيل قادمة
+            hours = sched.get("hours")
+            if hours and isinstance(hours, list):
+                for h in sorted(hours):
+                    candidate = now.replace(hour=h, minute=0, second=0, microsecond=0)
+                    if candidate <= now:
+                        candidate += timedelta(days=1)
+                    wait = (candidate - now).total_seconds()
+                    min_wait = min(min_wait, wait)
+
+        return 0.0 if min_wait == float("inf") else min_wait
+
+    def summary(self) -> str:
+        """ملخص نصي لحالة الجدول (للـ logging)."""
+        if not self._schedules:
+            return "لا توجد مهام مُجدوَلة — جميعها تعمل في كل دورة"
+        lines = [f"  📅 مهام مُجدوَلة ({len(self._schedules)} مهمة):"]
+        for key, sched in self._schedules.items():
+            last_ts = self._last_run.get(key, 0.0)
+            last_str = datetime.fromtimestamp(last_ts).strftime("%H:%M") if last_ts > 0 else "لم تُشغَّل بعد"
+            lines.append(f"     • {key}: {sched} | آخر تشغيل: {last_str}")
+        return "\n".join(lines)
+
+
+# ════════════════════════════════════════════════════════════════════
 #  كلاس مدير البوت الرئيسي (BotManager)
 # ════════════════════════════════════════════════════════════════════
 
@@ -562,7 +868,8 @@ class BotManager:
         account_or_email: Union[str, AccountSession],
         config: Optional[Dict[str, Any]] = None,
         reconnect_wait_seconds: int = 60,
-        max_reconnect_attempts: int = 10
+        max_reconnect_attempts: int = 10,
+        ignore_schedule: bool = False
     ):
         if isinstance(account_or_email, str):
             sm = SessionManager()
@@ -577,6 +884,7 @@ class BotManager:
         self.email = self.account.email
         self.conn: Optional[GameConnection] = None
         self.context = AccountContext(self.email)
+        self.ignore_schedule = bool(ignore_schedule)
 
         # دمج الإعدادات الافتراضية مع إعدادات المستخدم القادمة من Firebase
         self.config = self._build_default_config(config or {})
@@ -586,6 +894,12 @@ class BotManager:
         self.max_reconnect_attempts = int(max_reconnect_attempts)
         self._disconnected_event = asyncio.Event()
         self._last_kick_reason: str = ""
+
+        # ── مدير الجدولة الزمنية للمهام ─────────────────────────────
+        # ملف حالة خفيف لكل حساب منفصلاً (يضمن العزل الكامل بين 1000 حساب)
+        _safe_email = self.email.replace("@", "_").replace(".", "_").replace("+", "_")
+        _sched_file = os.path.join(_ROOT_DIR, f".sched_{_safe_email}.json")
+        self.scheduler = BotScheduler(self.config, state_file=_sched_file)
 
     def _build_default_config(self, user_cfg: Dict[str, Any]) -> Dict[str, Any]:
         """بناء قاموس الإعدادات بدمج إعدادات المستخدم القادمة من Firebase مع المخطط الافتراضي."""
@@ -1280,42 +1594,49 @@ class BotManager:
     # ════════════════════════════════════════════════════════════════════════════════════════
 
     async def execute_task_pipeline(self) -> Dict[str, Any]:
-        """تنفيذ سلسلة المهام بالترتيب المحدد وفق إعدادات المستخدم مع استئناف ذكي عند انقطاع الاتصال."""
+        """تنفيذ سلسلة المهام بالترتيب المحدد وفق الجدول الزمني مع استئناف ذكي عند انقطاع الاتصال."""
         results = {}
+        now = datetime.now()  # لقطة واحدة للوقت تُستخدم في كل فحوصات الجدول بالدورة
 
-        # 📋👇👇 قائمة تسلسل المهام المنفذة — رتبها أو عدلها كما تشاء 👇👇📋
-        pipeline: List[Tuple[str, Callable]] = [
-            ("🌾 حصد مزارع المدينة (City Harvest)",          self.step_1_city_harvest_task),
-            ("🔬 أبحاث الأكاديمية والعلوم (Academy Research)", self.step_2_research_task),
-            ("🤝 مهام وتبرعات التحالف (Alliance Task)",       self.step_3_alliance_task),
-            ("🚢 مهمة الميناء (Port Task)",                 self.step_4_port_task),
-            ("⚔️ مهمة تدريب الجنود (Train Troops)",         self.step_5_train_task),
-            ("🐾 مهمة دورية الحيوان الأليف (Pet Patrol)",    self.step_6_pet_patrol_task),
-            ("🚩 جوائز التوسع الإقليمي (Territory Expansion)", self.step_7_territory_expansion_task),
-            ("🛡️ درع السلام وحماية القلعة (Peace Shield)",    self.step_8_shield_task),
-            ("⚡ استخدام وشراء الطاقة (Stamina Task)",       self.step_9_stamina_task),
-            ("🎯 تفعيل المهارات التلقائية (Skills Task)",    self.step_10_skills_task),
-            ("🦸 تجنيد الأبطال وسحب الصناديق (Hero Draw)",  self.step_11_hero_draw_task),
-            ("🏛️ قاعة الاستراتيجيات وتطوير التكتيكات (Tactics Hall)", self.step_12_tactics_hall_task),
-            ("💧 طاحونة الماء وزيادة الإنتاج (Watermill Boost)",     self.step_13_watermill_task),
-            ("⛲ نافورة الأمنيات وبئر الحظ (Trevi Fountain)",       self.step_14_fountain_task),
-            ("🔨 ورشة المواد وصناعة خامات العتاد (Material Workshop)", self.step_15_material_workshop_task),
-            ("🐪 القافلة وحراسة الكنز (Caravan Task)",             self.step_16_caravan_task),
-            ("🛒 التاجر المتجول والمقايضة (Merchant Task)",        self.step_17_merchant_task),
-            ("⚓ الميناء العسكري ومتجر الجزيرة (Port Delegate)",    self.step_18_port_delegate_task),
-            ("🏦 دار الادخار واستثمار الذهب (Savings Bank)",       self.step_19_savings_bank_task),
-            ("🏗️ ترقية القلعة والمباني والتسريع (Building Upgrade)", self.step_20_building_task),
-            ("🏰 فخاخ حصن الحرب (War Fortress Traps)",             self.step_21_fortress_task),
-            # ──────────────────────────────────────────────────────────
-            # يمكنك مستقبلاً إضافة أي مهمة جديدة هنا بسطر واحد:
-            # ("🏰 ترقية القلعة والمباني", self.step_11_building_task),
-            # ("🪙 جمع الذهب الذكي",       self.step_9_gold_gather_task),
-            # ──────────────────────────────────────────────────────────
+        # 📋👇👇 قائمة تسلسل المهام: (الاسم، الدالة، مفتاح_الجدولة) — رتبها أو عدلها كما تشاء 👇👇📋
+        # ⚠️ مفتاح_الجدولة يجب أن يطابق مفتاح المهمة في DEFAULT_FIREBASE_USER_CONFIG
+        pipeline: List[Tuple[str, Callable, str]] = [
+            ("🌾 حصد مزارع المدينة (City Harvest)",              self.step_1_city_harvest_task,        "city_harvest"),
+            ("🔬 أبحاث الأكاديمية والعلوم (Academy Research)",   self.step_2_research_task,             "research"),
+            ("🤝 مهام وتبرعات التحالف (Alliance Task)",          self.step_3_alliance_task,             "alliance"),
+            ("🚢 مهمة الميناء (Port Task)",                     self.step_4_port_task,                 "port"),
+            ("⚔️ مهمة تدريب الجنود (Train Troops)",             self.step_5_train_task,                "train"),
+            ("🐾 مهمة دورية الحيوان الأليف (Pet Patrol)",        self.step_6_pet_patrol_task,           "pet_patrol"),
+            ("🚩 جوائز التوسع الإقليمي (Territory Expansion)",   self.step_7_territory_expansion_task,  "territory_expansion"),
+            ("🛡️ درع السلام وحماية القلعة (Peace Shield)",        self.step_8_shield_task,               "shield"),
+            ("⚡ استخدام وشراء الطاقة (Stamina Task)",           self.step_9_stamina_task,              "stamina"),
+            ("🎯 تفعيل المهارات التلقائية (Skills Task)",        self.step_10_skills_task,              "skills"),
+            ("🦸 تجنيد الأبطال وسحب الصناديق (Hero Draw)",       self.step_11_hero_draw_task,           "hero_draw"),
+            ("🏛️ قاعة الاستراتيجيات (Tactics Hall)",             self.step_12_tactics_hall_task,        "tactics_hall"),
+            ("💧 طاحونة الماء (Watermill Boost)",                self.step_13_watermill_task,           "watermill"),
+            ("⛲ نافورة الأمنيات (Trevi Fountain)",              self.step_14_fountain_task,            "fountain"),
+            ("🔨 ورشة المواد (Material Workshop)",               self.step_15_material_workshop_task,   "material_workshop"),
+            ("🐪 القافلة وحراسة الكنز (Caravan Task)",           self.step_16_caravan_task,             "caravan"),
+            ("⚓ الميناء العسكري (Port Delegate)",               self.step_18_port_delegate_task,       "port_delegate"),
+            ("🏦 دار الادخار (Savings Bank)",                   self.step_19_savings_bank_task,        "savings_bank"),
+            ("🏗️ ترقية المباني (Building Upgrade)",             self.step_20_building_task,            "building"),
+            ("🎖️ مهام الهيبة اليومية (Prestige Quests)",        self.step_22_prestige_task,            "prestige"),
+            ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
+            # ──────────────────────────────────────────────────────────────────────────────
+            # لإضافة مهمة جديدة أضف سطراً: ("📌 اسم المهمة", self.step_N_..., "config_key")
+            # ──────────────────────────────────────────────────────────────────────────────
         ]
 
         step_idx = 0
         while step_idx < len(pipeline):
-            step_name, step_func = pipeline[step_idx]
+            step_name, step_func, task_key = pipeline[step_idx]
+
+            # ── فحص الجدول الزمني ─────────────────────────────────────────
+            if not self.ignore_schedule and not self.scheduler.should_run(task_key, now):
+                log.info(f"⏭️  [{step_name}] — متجاوزة (ليس وقتها بحسب الجدول)")
+                results[step_name] = {"skipped": True, "reason": "schedule"}
+                step_idx += 1
+                continue
 
             # 1. التحقق من سلامة الاتصال قبل بدء المهمة
             if not self.is_connection_alive():
@@ -1377,6 +1698,7 @@ class BotManager:
 
             # إذا اكتملت الخطوة بنجاح دون انقطاع اتصال، ننتقل للمهمة التالية
             results[step_name] = res
+            self.scheduler.mark_ran(task_key, now)  # تسجيل وقت التشغيل في الجدول
             step_idx += 1
             await asyncio.sleep(1.5)  # مهلة أمان قصيرة بين المهام
 
@@ -1841,27 +2163,6 @@ class BotManager:
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
-    # [17] مهمة التاجر المتجول والمقايضة التلقائية
-    async def step_17_merchant_task(self) -> Dict[str, Any]:
-        """فحص وشراء سلع التاجر المتجول بالموارد فقط وتحديث المتجر بأمان ضد الحظر وحماية الذهب."""
-        merchant_cfg = self.config.get("merchant", {})
-        if not bool(merchant_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة التاجر المتجول بناءً على رغبة المستخدم (merchant.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
-
-        log.info("🛒 بدء مهمة التاجر المتجول للمقايضة بالموارد فقط (حماية الذهب ومكافحة الحظر)...")
-        task = MerchantTask(self.conn, merchant_cfg)
-        await task.on_start()
-        res = await task.run()
-
-        if res.success:
-            log.info(f"🎉 نتيجة التاجر المتجول: {res.message}")
-        else:
-            log.warning(f"⚠️ تنبيه في التاجر المتجول: {res.message}")
-
-        return {"success": res.success, "message": res.message, "data": res.data}
-
     # [18] مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة
     async def step_18_port_delegate_task(self) -> Dict[str, Any]:
         """فحص وتعيين مهام الميناء العسكري واستلام المكافآت وشراء المنتج المحدد بالكامل من متجر الجزيرة."""
@@ -1973,45 +2274,79 @@ class BotManager:
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
-    # ─────────────────────────────────────────────────────────────────
-    #  الخطوة 21: مهمة تدريب فخاخ حصن الحرب التلقائية
-    # ─────────────────────────────────────────────────────────────────
-    async def step_21_fortress_task(self) -> Dict[str, Any]:
-        """تدريب فخاخ حصن الحرب تلقائياً لأعلى مستوى متاح (rocks / arrows / oil) بحساب السور والموارد."""
-        f_cfg = self.config.get("fortress", {})
-        if not bool(f_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة فخاخ حصن الحرب بناءً على رغبة المستخدم (fortress.enabled = False)."
+
+    async def step_22_prestige_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة مهام الهيبة اليومية (Daily Prestige Quests):
+          - متجر المهربين بالموارد العادية فقط بدون ذهب.
+          - قتال الغزاة حتى الحد الأقصى للمستوى الذي حدده المستخدم (invaders_max_lv).
+          - مهاجمة المعاقل / الملاجئ.
+          - جمع الموارد الأربعة خارج القلعة بحمولة 25,000 مورد.
+          - الساقية وتفعيل جميع مباني إنتاج الموارد.
+          - تدريب الجنود (250 من كل نوع مستوى 1).
+          - حصن الحرب وتدريب الفخاخ.
+        تتيح للمستخدم تحديد كل مهمة فرعية على حدة (subtasks) والحد الأقصى لمستوى الغزاة.
+        مجدولة افتراضياً للعمل مرة واحدة يومياً الساعة 3 فجراً (schedule: {"hours": [3]}).
+        """
+        p_cfg = self.config.get("prestige", {})
+        if not bool(p_cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة مهام الهيبة بناءً على رغبة المستخدم (prestige.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
-        log.info("🏰 بدء مهمة تدريب فخاخ حصن الحرب (تلقائي لأعلى مستوى متاح وأقصى عدد ممكن)...")
-
-        task_cfg = {
-            "type": "auto",
-            "level": None,
-            "count": "max"
-        }
-
-        task = FortressTask(self.conn, task_cfg)
+        log.info("🎖️ بدء مهمة مهام الهيبة اليومية (Prestige Quests)...")
+        task_cfg = dict(p_cfg)
+        task = PrestigeTask(self.conn, task_cfg)
         await task.on_start()
         res = await task.run()
 
         if res.success:
-            log.info(f"🎉 نتيجة فخاخ حصن الحرب: {res.message}")
+            log.info(f"🎉 نتيجة مهمة الهيبة: {res.message}")
         else:
-            log.warning(f"⚠️ تنبيه في فخاخ حصن الحرب: {res.message}")
+            log.warning(f"⚠️ تنبيه في مهمة الهيبة: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
-    # ─────────────────────────────────────────────────────────────────
-    #  دورة التشغيل الكاملة (Full Lifecycle)
-    # ─────────────────────────────────────────────────────────────────
-    async def run(self) -> Dict[str, Any]:
+
+    async def step_23_march_manager_task(self) -> Dict[str, Any]:
         """
-        تشغيل دورة المدير الكاملة:
+        تنفيذ مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator):
+          - إدارة الفيالق المتاحة وتوزيعها وفق مصفوفة أولويات مخصصة من Firebase.
+          - مساعدة الموارد (Transport).
+          - استكشاف الأطلال (Ruins) بمسيرة واحدة فقط حصراً.
+          - قتال: العفريت (مع استعلام استباقي لتأكيد الحدث) أو الغزاة أو المتمردين (خيار حصري).
+          - الهجوم على المعاقل والملاجئ (Stronghold).
+          - جمع الموارد بالفيالق الشاغرة المتبقية بحسابات حمولة رياضية دقيقة مطابقة للعبة.
+        """
+        mm_cfg = self.config.get("march_manager", {})
+        if not bool(mm_cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة منسق الفيالق بناءً على رغبة المستخدم (march_manager.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        log.info("🎖️ بدء مهمة منسق الفيالق والمسيرات الذكي (March Orchestrator)...")
+        task_cfg = copy.deepcopy(mm_cfg)
+        task = MarchManagerTask(self.conn, task_cfg)
+        await task.on_start()
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
+    # ─────────────────────────────────────────────────────────────────
+    #  دورة التشغيل الواحدة (Single Run Lifecycle)
+    # ─────────────────────────────────────────────────────────────────
+    async def run_once(self) -> Dict[str, Any]:
+        """
+        تشغيل دورة واحدة كاملة:
           1. تسجيل الدخول.
           2. الاستعلام الشامل (مع إعادة المحاولة عند انقطاع الاتصال).
-          3. تنفيذ سلسلة المهام بالترتيب (مع استئناف ذكي من نفس النقطة عند انقطاع الاتصال).
+          3. تنفيذ سلسلة المهام بالترتيب مع فحص الجدول الزمني لكل مهمة.
           4. إغلاق الاتصال بأمان وإعادة النتائج.
         """
         try:
@@ -2036,7 +2371,7 @@ class BotManager:
             pipeline_results = await self.execute_task_pipeline()
 
             print("\n" + "═" * 72)
-            print("🏁 اكتمال تنفيذ المهام بنجاح من قبل مدير البوت!")
+            print("🏁 اكتمال تنفيذ الدورة بنجاح من قبل مدير البوت!")
             print("═" * 72 + "\n")
 
             return {
@@ -2054,6 +2389,63 @@ class BotManager:
                 await self.conn.close()
                 log.info(f"🔒 تم إغلاق اتصال الحساب {self.email} بأمان.")
 
+    # للتوافق مع الكود القديم
+    async def run(self) -> Dict[str, Any]:
+        """مستعار لـ run_once() — للتوافق مع الاستدعاءات القديمة."""
+        return await self.run_once()
+
+    # ─────────────────────────────────────────────────────────────────
+    #  دورة التشغيل المستمر (Loop Mode)
+    # ─────────────────────────────────────────────────────────────────
+    async def run_loop(self, loop_interval_minutes: int = 60) -> None:
+        """
+        تشغيل مستمر لا ينتهي — ينفذ دورة كاملة ثم ينتظر المدة المحددة.
+
+        ⚡ كفاءة عالية (مناسب لـ 1000+ حساب متزامن):
+          - asyncio.sleep() لا يستهلك أي CPU أثناء الانتظار
+          - يحفظ حالة الجدول بعد كل دورة لضمان الاستمرارية
+          - يكتشف أخطاء الدورة ويستمر للدورة التالية بدلاً من الإيقاف
+
+        Args:
+            loop_interval_minutes: المدة بين الدورات بالدقائق (افتراضي: 60)
+
+        التشغيل من سطر الأوامر:
+            python bot_manager.py --email "..." --loop
+            python bot_manager.py --email "..." --loop --loop-interval 30
+        """
+        iteration     = 0
+        interval_secs = loop_interval_minutes * 60
+
+        log.info(f"🔁 وضع التشغيل المستمر نشط — دورة كل {loop_interval_minutes} دقيقة")
+        log.info(self.scheduler.summary())
+
+        while True:
+            iteration += 1
+            start_time = datetime.now()
+
+            print("\n" + "═" * 72)
+            log.info(f"🔄 دورة رقم #{iteration} — بدأت {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("═" * 72)
+
+            try:
+                await self.run_once()
+            except Exception as e:
+                log.error(f"💥 خطأ في الدورة #{iteration}: {e}", exc_info=True)
+            finally:
+                # حفظ حالة الجدول بعد كل دورة (ملف صغير < 1KB)
+                self.scheduler.save_state()
+
+            # حساب وقت الانتظار المتبقي
+            elapsed   = (datetime.now() - start_time).total_seconds()
+            remaining = max(0.0, interval_secs - elapsed)
+
+            next_run = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
+            log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run}")
+
+            if remaining > 0:
+                log.info(f"💤 انتظار {remaining/60:.1f} دقيقة...")
+                await asyncio.sleep(remaining)
+
 
 # ════════════════════════════════════════════════════════════════════
 #  التشغيل المباشر من سطر الأوامر (CLI Entry Point)
@@ -2067,10 +2459,34 @@ if __name__ == "__main__":
     )
     parser.add_argument("--email", "-e", help="البريد الإلكتروني للحساب المستهدف")
     parser.add_argument(
+        "--firebase-config",
+        dest="firebase_config",
+        default=None,
+        help="مسار ملف JSON يحتوي على إعدادات المستخدم من Firebase (يتجاوز جميع خيارات الإعدادات الأخرى)"
+    )
+    parser.add_argument("--firebase-user-id",    dest="firebase_user_id",    default=None, help="معرف المستخدم في Firebase (للإبلاغ عن الحالة)")
+    parser.add_argument("--firebase-castle-id",  dest="firebase_castle_id",  default=None, help="معرف القلعة في Firebase (للإبلاغ عن الحالة)")
+    parser.add_argument(
         "--reconnect-wait",
         type=int,
         default=60,
         help="مدة الانتظار بالثواني عند انقطاع الاتصال بسبب دخول شخص آخر للحساب [افتراضي: 60 ثانية (دقيقة واحدة)]"
+    )
+
+    # ── خيارات وضع التشغيل المستمر (Loop Mode) ─────────────────────
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        default=False,
+        help="تشغيل البوت في حلقة مستمرة لا تنتهي — ينفذ دورة كاملة ثم ينتظر المدة المحددة [افتراضي: معطل]"
+    )
+    parser.add_argument(
+        "--loop-interval",
+        type=int,
+        default=60,
+        dest="loop_interval",
+        metavar="MINUTES",
+        help="المدة بين الدورات بالدقائق في وضع الحلقة الدائمة [افتراضي: 60 دقيقة]"
     )
 
     # خيارات مهمة حصد مزارع المدينة
@@ -2298,6 +2714,90 @@ if __name__ == "__main__":
     parser.add_argument("--fortress", dest="fortress", action="store_true", default=True, help="تفعيل تدريب فخاخ حصن الحرب تلقائياً لأعلى مستوى متاح [افتراضي: تفعيل]")
     parser.add_argument("--no-fortress", dest="fortress", action="store_false", help="تعطيل تدريب فخاخ حصن الحرب")
 
+    # خيارات مهمة مهام الهيبة اليومية (Prestige Quests)
+    parser.add_argument("--prestige", dest="prestige", action="store_true", default=True, help="تفعيل مهمة مهام الهيبة اليومية (تعمل الساعة 3 فجراً) [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige", dest="prestige", action="store_false", help="تعطيل مهمة مهام الهيبة")
+    parser.add_argument(
+        "--prestige-invaders-max-lv", "--prestige-max-lv",
+        dest="prestige_invaders_max_lv",
+        type=int,
+        default=30,
+        help="الحد الأقصى لمستوى الغزاة المطلوب قتالهم في مهام الهيبة [افتراضي: 30]"
+    )
+    parser.add_argument(
+        "--prestige-subtasks",
+        dest="prestige_subtasks",
+        default="all",
+        help="المهام الفرعية المطلوب تشغيلها من مهام الهيبة مفصولة بفاصلة (smuggler,invaders,stronghold,gather,watermill,train,fortress أو all) [افتراضي: الكل]"
+    )
+    # خيارات تشغيل كل مهمة من مهام الهيبة على حدة
+    parser.add_argument("--prestige-smuggler", dest="prestige_smuggler", action="store_true", default=True, help="تفعيل متجر المهربين في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-smuggler", dest="prestige_smuggler", action="store_false", help="تعطيل متجر المهربين في مهام الهيبة")
+    parser.add_argument("--prestige-invaders", dest="prestige_invaders", action="store_true", default=True, help="تفعيل قتال الغزاة في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-invaders", dest="prestige_invaders", action="store_false", help="تعطيل قتال الغزاة في مهام الهيبة")
+    parser.add_argument("--prestige-stronghold", dest="prestige_stronghold", action="store_true", default=True, help="تفعيل قتال المعاقل في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-stronghold", dest="prestige_stronghold", action="store_false", help="تعطيل قتال المعاقل في مهام الهيبة")
+    parser.add_argument("--prestige-gather", dest="prestige_gather", action="store_true", default=True, help="تفعيل جمع الموارد الأربعة في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-gather", dest="prestige_gather", action="store_false", help="تعطيل جمع الموارد في مهام الهيبة")
+    parser.add_argument("--prestige-watermill", dest="prestige_watermill", action="store_true", default=True, help="تفعيل الساقية في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-watermill", dest="prestige_watermill", action="store_false", help="تعطيل الساقية في مهام الهيبة")
+    parser.add_argument("--prestige-train", dest="prestige_train", action="store_true", default=True, help="تفعيل تدريب الجنود في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-train", dest="prestige_train", action="store_false", help="تعطيل تدريب الجنود في مهام الهيبة")
+    parser.add_argument("--prestige-fortress", dest="prestige_fortress", action="store_true", default=True, help="تفعيل حصن الحرب في مهام الهيبة [افتراضي: تفعيل]")
+    parser.add_argument("--no-prestige-fortress", dest="prestige_fortress", action="store_false", help="تعطيل حصن الحرب في مهام الهيبة")
+
+    # خيارات مهمة منسق الفيالق والمسيرات (March Orchestrator)
+    parser.add_argument("--march-manager", "--march", dest="march_manager", action="store_true", default=True, help="تفعيل مهمة منسق الفيالق والمسيرات الذكي [افتراضي: تفعيل]")
+    parser.add_argument("--no-march-manager", "--no-march", dest="march_manager", action="store_false", help="تعطيل مهمة منسق الفيالق والمسيرات")
+    parser.add_argument("--march-priorities", dest="march_priorities", default=None, help="قائمة الأولويات مفصولة بفاصلة (مثال: 'transport,ruins,combat,stronghold,gather' أو 'elf' فقط)")
+    parser.add_argument("--march-max-queues", dest="march_max_queues", type=int, default=6, help="الحد الأقصى لطوابير فيالق القلعة (5 أو 6) [افتراضي: 6]")
+
+    # مساعدة الموارد
+    parser.add_argument("--march-transport", dest="march_transport", action="store_true", default=None, help="تفعيل مساعدة الموارد في منسق الفيالق")
+    parser.add_argument("--no-march-transport", dest="march_transport", action="store_false", help="تعطيل مساعدة الموارد في منسق الفيالق")
+    parser.add_argument("--march-transport-coords", dest="march_transport_coords", default=None, help="إحداثيات القلعة الهدف للمساعدة بصيغة X,Y (مثال: '344,447')")
+
+    # الأطلال
+    parser.add_argument("--march-ruins", dest="march_ruins", action="store_true", default=None, help="تفعيل استكشاف الأطلال (مسيرة واحدة حصراً) [افتراضي: تفعيل]")
+    parser.add_argument("--no-march-ruins", dest="march_ruins", action="store_false", help="تعطيل استكشاف الأطلال")
+    parser.add_argument("--march-ruins-time", dest="march_ruins_time", type=int, default=900, help="مدة استكشاف الأطلال بالثواني [افتراضي: 900]")
+    parser.add_argument("--march-ruins-formation", dest="march_ruins_formation", type=int, default=1, help="تشكيلة استكشاف الأطلال (1-5) [افتراضي: 1]")
+
+    # القتال الحصري (عفريت / غزاة / متمردين)
+    parser.add_argument("--march-combat-choice", dest="march_combat_choice", choices=["elf", "invaders", "rebels", "عفريت", "غزاة", "متمردين"], default="elf", help="الهدف القتالي المختار: elf أو invaders أو rebels [افتراضي: elf]")
+    parser.add_argument("--march-elf", dest="march_elf", action="store_true", default=None, help="تفعيل قتال نخبة العفريت")
+    parser.add_argument("--no-march-elf", dest="march_elf", action="store_false", help="تعطيل قتال نخبة العفريت")
+    parser.add_argument("--march-invaders", dest="march_invaders", action="store_true", default=None, help="تفعيل قتال الغزاة")
+    parser.add_argument("--no-march-invaders", dest="march_invaders", action="store_false", help="تعطيل قتال الغزاة")
+    parser.add_argument("--march-rebels", dest="march_rebels", action="store_true", default=None, help="تفعيل قتال المتمردين")
+    parser.add_argument("--no-march-rebels", dest="march_rebels", action="store_false", help="تعطيل قتال المتمردين")
+    parser.add_argument("--march-combat-level", dest="march_combat_level", type=int, default=30, help="مستوى الهدف القتالي (غزاة/متمردين) [افتراضي: 30]")
+    parser.add_argument("--march-combat-count", dest="march_combat_count", type=int, default=1, help="عدد الهجمات القتالية [افتراضي: 1]")
+    parser.add_argument("--march-combat-formation", dest="march_combat_formation", type=int, default=1, help="تشكيلة القتال (1-5) [افتراضي: 1]")
+
+    # المعاقل والملاجئ
+    parser.add_argument("--march-stronghold", dest="march_stronghold", action="store_true", default=None, help="تفعيل الهجوم على الملاجئ")
+    parser.add_argument("--no-march-stronghold", dest="march_stronghold", action="store_false", help="تعطيل الهجوم على الملاجئ")
+    parser.add_argument("--march-stronghold-level", dest="march_stronghold_level", type=int, default=30, help="مستوى الملجأ المستهدف [افتراضي: 30]")
+    parser.add_argument("--march-stronghold-count", dest="march_stronghold_count", type=int, default=2, help="عدد الملاجئ المستهدفة [افتراضي: 2]")
+    parser.add_argument("--march-stronghold-formation", dest="march_stronghold_formation", type=int, default=1, help="تشكيلة مهاجمة الملجأ [افتراضي: 1]")
+
+    # جمع الموارد
+    parser.add_argument("--march-gather", dest="march_gather", action="store_true", default=None, help="تفعيل جمع الموارد بالفيالق الشاغرة [افتراضي: تفعيل]")
+    parser.add_argument("--no-march-gather", dest="march_gather", action="store_false", help="تعطيل جمع الموارد")
+    parser.add_argument("--march-gather-res", dest="march_gather_res", default="1", help="نوع المورد المطلوب جمعه (1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس أو بالاسم) [افتراضي: 1]")
+    parser.add_argument("--march-gather-level", dest="march_gather_level", type=int, default=5, help="مستوى حقل المورد للجمع [افتراضي: 5]")
+    parser.add_argument("--march-gather-range", dest="march_gather_range", type=int, default=100, help="أقصى نطاق بحث لحقول الموارد [افتراضي: 100]")
+
+    # خيار تجاوز فحص مواعيد الجدول الزمني للتجربة الفورية
+    parser.add_argument(
+        "--ignore-schedule", "--now",
+        dest="ignore_schedule",
+        action="store_true",
+        default=False,
+        help="تجاوز فحص مواعيد الجدول وتشغيل كافة المهام المفعلة فوراً في هذه الدورة [افتراضي: معطل]"
+    )
+
     args = parser.parse_args()
 
     # استخراج الحساب المطلوب
@@ -2332,7 +2832,29 @@ if __name__ == "__main__":
             "chariots": args.troop_level,
         }
 
-    # بناء قاموس الإعدادات المطابق للمخطط الجديد
+    # ── إذا مُرِّر ملف إعدادات Firebase، استخدمه مباشرة ─────────────────────────────────
+    if args.firebase_config and os.path.exists(args.firebase_config):
+        try:
+            with open(args.firebase_config, "r", encoding="utf-8") as _fc:
+                cfg = json.load(_fc)
+            log.info(f"✅ تم تحميل إعدادات Firebase من: {args.firebase_config}")
+            # إنشاء مدير البوت مباشرة بدون المرور بـ argparse config builder
+            manager = BotManager(
+                target_email,
+                cfg,
+                reconnect_wait_seconds=args.reconnect_wait,
+                ignore_schedule=False,  # Firebase دائماً يتجاهل الجدول الزمني ويعمل حسب لوحة التحكم
+            )
+            if args.loop:
+                asyncio.run(manager.run_loop(loop_interval_minutes=args.loop_interval))
+            else:
+                asyncio.run(manager.run_once())
+            sys.exit(0)
+        except Exception as _fe:
+            log.error(f"❌ خطأ في قراءة ملف إعدادات Firebase: {_fe}")
+            sys.exit(1)
+
+    # بناء قاموس الإعدادات المطابق للمخطط الجديد (من argparse)
     cfg = {
         "city_harvest": {
             "enabled": args.harvest,
@@ -2416,8 +2938,124 @@ if __name__ == "__main__":
         },
         "fortress": {
             "enabled": args.fortress,
+        },
+        "prestige": {
+            "enabled": args.prestige,
+            "schedule": {
+                "hours": [3],
+            },
+            "invaders_max_lv": args.prestige_invaders_max_lv,
+            "subtasks": {
+                "smuggler": args.prestige_smuggler,
+                "invaders": args.prestige_invaders,
+                "stronghold": args.prestige_stronghold,
+                "gather": args.prestige_gather,
+                "watermill": args.prestige_watermill,
+                "train": args.prestige_train,
+                "fortress": args.prestige_fortress,
+            },
+        },
+        "march_manager": {
+            "enabled": args.march_manager,
+            "schedule": {"times_per_day": 4},
+            "max_queues": args.march_max_queues,
+            "priority_order": (
+                [p.strip() for p in args.march_priorities.replace("،", ",").split(",") if p.strip()]
+                if args.march_priorities
+                else ["transport", "ruins", "combat", "stronghold", "gather"]
+            ),
+            "transport": {
+                "enabled": bool(args.march_transport) if args.march_transport is not None else False,
+                "target_x": (
+                    int(args.march_transport_coords.split(",")[0].strip())
+                    if args.march_transport_coords and "," in args.march_transport_coords
+                    else None
+                ),
+                "target_y": (
+                    int(args.march_transport_coords.split(",")[1].strip())
+                    if args.march_transport_coords and "," in args.march_transport_coords
+                    else None
+                ),
+                "resource_ids": [1002, 1003, 1004, 1005],
+            },
+            "ruins": {
+                "enabled": bool(args.march_ruins) if args.march_ruins is not None else True,
+                "explore_time": args.march_ruins_time,
+                "formation_id": args.march_ruins_formation,
+            },
+            "combat": {
+                "enabled": (
+                    bool(args.march_elf or args.march_invaders or args.march_rebels)
+                    if (args.march_elf is not None or args.march_invaders is not None or args.march_rebels is not None)
+                    else True
+                ),
+                "choice": (
+                    "elf" if args.march_elf else (
+                        "invaders" if args.march_invaders else (
+                            "rebels" if args.march_rebels else (
+                                "elf" if args.march_combat_choice in ("elf", "عفريت") else (
+                                    "invaders" if args.march_combat_choice in ("invaders", "غزاة") else "rebels"
+                                )
+                            )
+                        )
+                    )
+                ),
+                "level": args.march_combat_level,
+                "formation_id": args.march_combat_formation,
+                "count": args.march_combat_count,
+            },
+            "elf": {
+                "enabled": (
+                    bool(args.march_elf)
+                    if args.march_elf is not None
+                    else (args.march_combat_choice in ("elf", "عفريت") and not args.march_invaders and not args.march_rebels)
+                ),
+                "formation_id": args.march_combat_formation,
+            },
+            "invaders": {
+                "enabled": (
+                    bool(args.march_invaders)
+                    if args.march_invaders is not None
+                    else (args.march_combat_choice in ("invaders", "غزاة") and not args.march_elf and not args.march_rebels)
+                ),
+                "level": args.march_combat_level,
+                "formation_id": args.march_combat_formation,
+                "count": args.march_combat_count,
+            },
+            "rebels": {
+                "enabled": (
+                    bool(args.march_rebels)
+                    if args.march_rebels is not None
+                    else (args.march_combat_choice in ("rebels", "متمردين") and not args.march_elf and not args.march_invaders)
+                ),
+                "level": args.march_combat_level,
+                "formation_id": args.march_combat_formation,
+                "count": args.march_combat_count,
+            },
+            "stronghold": {
+                "enabled": bool(args.march_stronghold) if args.march_stronghold is not None else False,
+                "level": args.march_stronghold_level,
+                "count": args.march_stronghold_count,
+                "formation_id": args.march_stronghold_formation,
+            },
+            "gather": {
+                "enabled": bool(args.march_gather) if args.march_gather is not None else True,
+                "res_type": args.march_gather_res,
+                "level": args.march_gather_level,
+                "search_range": args.march_gather_range,
+            },
         }
     }
+
+    # تخصيص المهام الفرعية لمهام الهيبة إن تم تمرير قائمة محددة
+    if args.prestige_subtasks and args.prestige_subtasks.strip().lower() not in ("all", "الكل"):
+        chosen_subtasks = [s.strip() for s in args.prestige_subtasks.replace("،", ",").split(",") if s.strip()]
+        for k in cfg["prestige"]["subtasks"]:
+            cfg["prestige"]["subtasks"][k] = False
+        for s in chosen_subtasks:
+            res_key = PRESTIGE_SUBTASK_ALIASES.get(s.lower(), s.lower())
+            if res_key in cfg["prestige"]["subtasks"]:
+                cfg["prestige"]["subtasks"][res_key] = True
 
     # تمرير أي خيارات تجريبية إضافية إن حُددت من سطر الأوامر صراحة
     if args.harvest_types != "all":
@@ -2433,6 +3071,26 @@ if __name__ == "__main__":
     if args.destination != 1389:
         cfg["pet_patrol"]["destination"] = args.destination
 
-    # إنشاء وتشغيل مدير البوت
-    manager = BotManager(target_email, cfg, reconnect_wait_seconds=args.reconnect_wait)
-    asyncio.run(manager.run())
+    # إنشاء مدير البوت
+    manager = BotManager(
+        target_email,
+        cfg,
+        reconnect_wait_seconds=args.reconnect_wait,
+        ignore_schedule=args.ignore_schedule
+    )
+
+    # اختيار وضع التشغيل
+    if args.loop:
+        print(f"\n{'═'*72}")
+        print(f"🔁 وضع التشغيل المستمر (Loop Mode) — دورة كل {args.loop_interval} دقيقة")
+        print(f"   الحساب : {target_email}")
+        print(f"   للإيقاف: اضغط Ctrl+C")
+        print(f"{'═'*72}\n")
+        asyncio.run(manager.run_loop(loop_interval_minutes=args.loop_interval))
+    else:
+        print(f"\n{'═'*72}")
+        print(f"▶️  تشغيل دورة واحدة (One-Shot Mode)")
+        print(f"   الحساب : {target_email}")
+        print(f"   للتشغيل المستمر أضف: --loop")
+        print(f"{'═'*72}\n")
+        asyncio.run(manager.run_once())

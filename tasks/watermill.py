@@ -63,9 +63,9 @@ BUILDING_CONFIG = {
     },
     "silver": {
         "bid": 204,
-        "name": "🪙 مناجم الفضة/الألماس",
+        "name": "💎 مناجم الألماس",
         "buff_id": 5022,
-        "items": [501701],          # 501701 = تعزيز إنتاج الفضة/الألماس (24 ساعة)
+        "items": [501701],          # 501701 = تعزيز إنتاج الألماس (24 ساعة)
     },
 }
 
@@ -95,7 +95,7 @@ class WatermillTask(BaseTask):
             "food": "food", "قمح": "food", "طعام": "food", "مزارع": "food",
             "wood": "wood", "خشب": "wood", "مناشر": "wood",
             "iron": "iron", "حديد": "iron", "مناجم حديد": "iron",
-            "silver": "silver", "فضة": "silver", "الماس": "silver", "مناجم فضة": "silver"
+            "silver": "silver", "diamond": "silver", "فضة": "silver", "الماس": "silver", "ألماس": "silver", "مناجم فضة": "silver", "مناجم الماس": "silver", "مناجم ألماس": "silver"
         }
 
         resolved_types: Set[str] = set()
