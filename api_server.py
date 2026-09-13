@@ -69,6 +69,8 @@ _lock       = threading.Lock()
 _procs:   Dict[str, subprocess.Popen]   = {}   # castle_id → subprocess
 _reserved: Set[str]                     = set() # castle_ids محجوزة (بدأت لكن لم تُسجَّل بعد)
 _log_qs:  Dict[str, "queue.Queue[str]"] = {}    # castle_id → queue للـ logs
+_conn_states: Dict[str, str]            = {}    # castle_id → 'connected' | 'disconnected' | 'reconnecting'
+_user_stopped: Set[str]                 = set() # castle_ids التي تم إيقافها يدوياً من المستخدم
 
 
 def _is_running(castle_id: str) -> bool:
@@ -76,6 +78,23 @@ def _is_running(castle_id: str) -> bool:
         return True
     proc = _procs.get(castle_id)
     return proc is not None and proc.poll() is None
+
+
+def _get_real_status(castle_id: str) -> str:
+    """الحالة الحقيقية: العملية + حالة اتصال اللعبة معاً."""
+    with _lock:
+        if castle_id in _reserved:
+            return 'starting'
+        proc = _procs.get(castle_id)
+        if proc is None or proc.poll() is not None:
+            return 'idle'  # العملية متوقفة
+        # العملية شغالة — هل الاتصال بالجيم سيرفر نشط؟
+        conn = _conn_states.get(castle_id, 'connected')  # إذا لم يُبلَّغ بعد → نفترض متصل
+        if conn == 'disconnected':
+            return 'disconnected'  # شخص دخل من الجوال
+        if conn == 'reconnecting':
+            return 'reconnecting'
+        return 'running'
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -117,11 +136,50 @@ def _update_firebase_status(user_id: str, castle_id: str, state: str, message: s
                 "bot_status.state":            state,
                 "bot_status.last_run_message": message,
             }
+            if state in ("idle", "error"):
+                updates["bot_status.conn_state"] = state
+                updates["bot_status.conn_message"] = message
             if state == "running":
                 updates["bot_status.last_run_time"] = datetime.now(timezone.utc).isoformat()
             ref.update(updates)
     except Exception as e:
         log.debug(f"Firebase status update skipped: {e}")
+
+
+def _sync_castle_to_firebase(email: str, data: dict, user_id: Optional[str] = None, castle_id: Optional[str] = None):
+    """تحديث موارد وبيانات القلعة في Firestore فوراً."""
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore as fb_fs
+        sak = os.path.join(_ROOT, "firebase_service_account.json")
+        if not firebase_admin._apps:
+            if os.path.exists(sak):
+                firebase_admin.initialize_app(credentials.Certificate(sak))
+        if firebase_admin._apps:
+            db = fb_fs.client()
+            target_ref = None
+            if user_id and castle_id:
+                target_ref = db.collection("users").document(user_id).collection("castles").document(castle_id)
+            else:
+                for u in db.collection("users").stream():
+                    for c in db.collection("users").document(u.id).collection("castles").stream():
+                        if c.to_dict().get("email", "").strip().lower() == email.strip().lower():
+                            target_ref = db.collection("users").document(u.id).collection("castles").document(c.id)
+                            break
+                    if target_ref:
+                        break
+            if target_ref:
+                flat_data = {}
+                for k, v in data.items():
+                    if isinstance(v, dict):
+                        for subk, subv in v.items():
+                            flat_data[f"{k}.{subk}"] = subv
+                    else:
+                        flat_data[k] = v
+                target_ref.update(flat_data)
+                log.info(f"💾 [API Sync] تم تحديث موارد وبيانات القلعة {email} في Firestore بنجاح ✅")
+    except Exception as e:
+        log.warning(f"⚠️ [API Sync Warning]: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -171,10 +229,12 @@ def _bot_thread(req: StartBotRequest):
     cmd = [
         sys.executable,
         os.path.join(_ROOT, "bot_manager.py"),
-        "--email",          email,
-        "--firebase-config", config_path,
+        "--email",              email,
+        "--firebase-user-id",   user_id,
+        "--firebase-castle-id", castle_id,
+        "--firebase-config",    config_path,
         "--loop",
-        "--loop-interval",  str(req.loop_interval),
+        "--loop-interval",      str(req.loop_interval),
     ]
     log.info(f"▶️  [{email}] cmd: bot_manager.py --firebase-config ... --loop")
     log_q.put(f"[{datetime.now():%H:%M:%S}] ▶️  بدء البوت...")
@@ -201,8 +261,22 @@ def _bot_thread(req: StartBotRequest):
             _procs[castle_id] = proc
             _reserved.discard(castle_id)
 
-        # 6. قراءة stdout في thread آخر وإرساله للـ queue والملف
+        # 6. قراءة stdout في thread آخر — يحلل السطور لمعرفة حالة الاتصال
         def _reader():
+            """يقرأ stdout كل سطر ويُحدّث _conn_states فوراً بمجرد ظهور إشارة الانقطاع أو الاتصال."""
+            # ── الكلمات المفتاحية المطابقة لرسائل bot_manager.py الفعلية ──
+            DISCONNECT_SIGNALS = (
+                "دخول من جهاز آخر",       # 📱 [تنبيه: دخول من جهاز آخر]
+                "انقطع اتصال الحساب",     # ⚠️ [تنبيه السيرفر] انقطع اتصال الحساب
+            )
+            RECONNECTING_SIGNALS = (
+                "سيتوقف البوت مؤقتاً",    # ⏳ ينتظر 60 ثانية
+                "جاري إعادة الاتصال",     # 🔄 [انقطاع شبكي]
+                "متبقي على محاولة",       # ⏳ [متبقي] عداد تنازلي
+            )
+            CONNECTED_SIGNALS = (
+                "تم الاتصال والمصافحة بنجاح 100%",  # ✅ login_and_connect
+            )
             try:
                 with open(bot_log_path, "a", encoding="utf-8", errors="replace") as lf:
                     for line in proc.stdout:
@@ -213,12 +287,26 @@ def _bot_thread(req: StartBotRequest):
                         try:
                             log_q.put_nowait(stamped)
                         except queue.Full:
-                            pass  # الـ queue ممتلئة — تجاهل (لا نريد تعطيل البوت)
+                            pass
+
+                        # ── فحص السطر لتحديد حالة الاتصال ──
+                        if any(s in line for s in DISCONNECT_SIGNALS):
+                            with _lock:
+                                _conn_states[castle_id] = 'disconnected'
+                            log.info(f"📶 [{castle_id[:12]}] انقطاع الاتصال → disconnected")
+                        elif any(s in line for s in RECONNECTING_SIGNALS):
+                            with _lock:
+                                _conn_states[castle_id] = 'reconnecting'
+                        elif any(s in line for s in CONNECTED_SIGNALS):
+                            with _lock:
+                                _conn_states[castle_id] = 'connected'
+                            log.info(f"✅ [{castle_id[:12]}] اتصال نشط → connected")
             except Exception:
                 pass
 
         reader_t = threading.Thread(target=_reader, daemon=True)
         reader_t.start()
+
 
         # 7. انتظار انتهاء العملية مع فحص إيقاف
         while proc.poll() is None:
@@ -242,18 +330,42 @@ def _bot_thread(req: StartBotRequest):
             pass
 
     # 8. تنظيف وتحديث الحالة
+    was_user_stopped = False
     with _lock:
         _procs.pop(castle_id, None)
         _log_qs.pop(castle_id, None)
+        _conn_states.pop(castle_id, None)  # تنظيف حالة الاتصال
+        if castle_id in _user_stopped:
+            _user_stopped.discard(castle_id)
+            was_user_stopped = True
 
-    end_msg = f"[{datetime.now():%H:%M:%S}] {'✅ انتهى بنجاح' if ret == 0 else f'⚠️ توقف (كود={ret})'}"
-    log_q.put(end_msg)
-    log.info(f"{'✅' if ret == 0 else '⚠️'} [{email}] انتهى (exit={ret})")
-    _update_firebase_status(
-        user_id, castle_id,
-        "idle",
-        "انتهت الدورة بنجاح" if ret == 0 else f"توقف (كود={ret})"
-    )
+    if was_user_stopped:
+        end_msg = f"[{datetime.now():%H:%M:%S}] ⏹️ تم إيقاف البوت بواسطة المستخدم"
+        log_q.put(end_msg)
+        log.info(f"⏹️ [{email}] تم الإيقاف يدوياً بواسطة المستخدم")
+        _update_firebase_status(
+            user_id, castle_id,
+            "idle",
+            "تم إيقاف البوت بواسطة المستخدم"
+        )
+    elif ret != 0:
+        end_msg = f"[{datetime.now():%H:%M:%S}] 💥 توقف بسبب مشكلة فادحة (كود={ret})"
+        log_q.put(end_msg)
+        log.error(f"💥 [{email}] توقف بسبب خطأ فادح (exit={ret})")
+        _update_firebase_status(
+            user_id, castle_id,
+            "error",
+            f"توقف بسبب مشكلة فادحة في التشغيل (كود={ret})"
+        )
+    else:
+        end_msg = f"[{datetime.now():%H:%M:%S}] ✅ انتهت المهمة بنجاح"
+        log_q.put(end_msg)
+        log.info(f"✅ [{email}] انتهى بنجاح")
+        _update_firebase_status(
+            user_id, castle_id,
+            "idle",
+            "انتهت المهمة بنجاح"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -281,13 +393,14 @@ def start_bot(req: StartBotRequest):
 
 @app.post("/api/bot/stop/{castle_id}")
 def stop_bot(castle_id: str):
-    """إيقاف بوت قلعة معينة."""
+    """إيقاف بوت قلعة معينة بناءً على طلب المستخدم."""
     with _lock:
         proc = _procs.get(castle_id)
+        _user_stopped.add(castle_id)
 
     if proc and proc.poll() is None:
         proc.terminate()
-        log.info(f"⏹️  إيقاف القلعة {castle_id[:16]}...")
+        log.info(f"⏹️  إيقاف القلعة {castle_id[:16]} بواسطة المستخدم...")
         return {"status": "stopping", "castle_id": castle_id}
 
     return {"status": "not_running", "castle_id": castle_id}
@@ -308,12 +421,165 @@ def get_all_status():
 @app.get("/api/bot/status/{castle_id}")
 def get_status(castle_id: str):
     """حالة بوت قلعة معينة."""
+    return {"castle_id": castle_id, "status": _get_real_status(castle_id)}
+
+
+# ── endpoint يستقبل حالة اتصال اللعبة من bot_manager مباشرةً ──────
+class ConnStateRequest(BaseModel):
+    castle_id: str
+    state: str  # 'connected' | 'disconnected' | 'reconnecting'
+
+@app.post("/api/bot/conn-state")
+def update_conn_state(req: ConnStateRequest):
+    """يُستدعى من bot_manager لإبلاغ الـ API عن حالة اتصال اللعبة الفعلية."""
     with _lock:
-        if castle_id in _reserved:
-            return {"castle_id": castle_id, "status": "starting"}
-        proc = _procs.get(castle_id)
-        running = proc is not None and proc.poll() is None
-    return {"castle_id": castle_id, "status": "running" if running else "idle"}
+        if req.state in ('connected', 'disconnected', 'reconnecting'):
+            _conn_states[req.castle_id] = req.state
+        elif req.state == 'idle':
+            _conn_states.pop(req.castle_id, None)
+    log.info(f"📶 [{req.castle_id[:12]}] conn-state → {req.state}")
+    return {"ok": True}
+
+
+@app.get("/api/castle-data/{email}")
+async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: Optional[str] = None):
+    """
+    جلب بيانات القلعة والموارد الحية فوراً بالاتصال المباشر مع سيرفر اللعبة ومزامنتها مع Firestore.
+    """
+    try:
+        from core.session_manager import SessionManager
+        from game_client import GameConnection
+
+        # 1. تحميل جلسة الحساب
+        sm = SessionManager()
+        sessions = sm.load()
+        account = sessions.get(email)
+        if not account:
+            raise HTTPException(status_code=404, detail=f"الحساب {email} غير موجود في session_cache.json")
+
+        # 2. الاتصال بالسيرفر
+        conn = GameConnection(account)
+        ok = await asyncio.wait_for(conn.connect(), timeout=15)
+        if not ok:
+            raise HTTPException(status_code=503, detail="تعذر الاتصال بسيرفر اللعبة")
+
+        # 3. انتظار حزم التهيئة
+        for _ in range(25):
+            await asyncio.sleep(0.3)
+            if len(conn.init_data) > 0:
+                break
+
+        # 4. استخراج البيانات الأساسية والموارد
+        lord_ctrl  = conn.init_data.get("lordInfoCtrl", {})
+        base_info  = lord_ctrl.get("base", {}) if isinstance(lord_ctrl, dict) else {}
+        fc_info    = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
+        city_ctrl  = conn.init_data.get("cityCtrl", {})
+        reslist    = city_ctrl.get("reslist", {}) if isinstance(city_ctrl, dict) else {}
+
+        food    = int(float(reslist.get("1002", 0)))
+        wood    = int(float(reslist.get("1003", 0)))
+        iron    = int(float(reslist.get("1004", 0)))
+        diamond = int(float(reslist.get("1005", 0)))
+        gold    = int(base_info.get("gold", 0))
+        stamina = int(base_info.get("health", 100))
+        pos     = base_info.get("sourcePos", {})
+        coords  = {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
+
+        castle_lv  = 0
+        walls_lv   = 0
+
+        # استعلام المباني لجلب مستوى القلعة
+        try:
+            r_city = await asyncio.wait_for(conn.query("1001", "1", {}, timeout=8), timeout=10)
+            blist  = r_city.get("data", {}).get("blist", []) if r_city else []
+            if not blist and "cityCtrl" in conn.init_data:
+                blist = conn.init_data["cityCtrl"].get("blist", [])
+            for b in blist:
+                bid = int(b.get("bid", 0))
+                lv  = int(b.get("lv", 0))
+                if bid == 101:
+                    castle_lv = lv
+                elif bid == 102:
+                    walls_lv  = lv
+        except Exception:
+            pass
+
+        # 5. إغلاق الاتصال بأمان
+        try:
+            await conn.close()
+        except Exception:
+            pass
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res_data = {
+            "food":         food,
+            "wood":         wood,
+            "iron":         iron,
+            "diamond":      diamond,
+            "gold":         gold,
+            "stamina":      stamina,
+            "last_updated": now_iso,
+        }
+        cinfo_data = {
+            "lord_name":    str(base_info.get("nickName", email.split("@")[0])),
+            "lord_power":   int(fc_info.get("totalFc", 0)),
+            "castle_level": max(1, castle_lv),
+            "walls_level":  walls_lv,
+            "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition")).isdigit() else 1,
+            "coordinates":  coords,
+            "uid":          str(base_info.get("uid", getattr(account, "user_id", ""))),
+        }
+
+        # مزامنة فورية مع Firestore
+        _sync_castle_to_firebase(email, {"resources": res_data, "castle_info": cinfo_data}, user_id=user_id, castle_id=castle_id)
+
+        return {
+            "success":      True,
+            "email":        email,
+            "lord_name":    cinfo_data["lord_name"],
+            "lord_level":   int(base_info.get("level", 0)),
+            "kingdom_id":   str(base_info.get("partition", "")),
+            "gold":         gold,
+            "total_power":  cinfo_data["lord_power"],
+            "uid":          cinfo_data["uid"],
+            "castle_level": castle_lv,
+            "walls_level":  walls_lv,
+            "coordinates":  coords,
+            "resources":    res_data,
+            "fetched_at":   now_iso,
+        }
+
+    except HTTPException:
+        raise
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="انتهت مهلة الاتصال بسيرفر اللعبة (timeout)")
+    except Exception as e:
+        log.error(f"❌ [castle-data] فشل جلب بيانات القلعة لـ {email}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/errors")
+def get_error_log(lines: int = 100):
+    """
+    قراءة آخر N سطر من سجل الأخطاء bot_errors.log لمراجعتها.
+    مثال: GET /api/errors?lines=50
+    """
+    log_path = os.path.join(_ROOT, "bot_errors.log")
+    if not os.path.exists(log_path):
+        return {"errors": [], "count": 0, "message": "لا توجد أخطاء مسجلة حتى الآن ✅"}
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        last_lines = [l.rstrip("\n") for l in all_lines[-lines:]]
+        return {
+            "errors": last_lines,
+            "count":  len(all_lines),
+            "showing": len(last_lines),
+            "log_path": log_path,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.websocket("/ws/logs/{castle_id}")
@@ -366,6 +632,31 @@ async def ws_logs(websocket: WebSocket, castle_id: str):
         log.info(f"📡 WebSocket disconnected: {castle_id[:16]}")
     except Exception as e:
         log.debug(f"WebSocket error: {e}")
+
+
+@app.websocket("/ws/status/{castle_id}")
+async def ws_status(websocket: WebSocket, castle_id: str):
+    """
+    WebSocket خفيف لمراقبة حالة البوت الحقيقية في الوقت الفعلي.
+    يُرسل الحالة فور الاتصال ثم فقط عند التغيير (لا polling على الشبكة).
+    الحالات: running | starting | disconnected | reconnecting | idle | offline
+    """
+    await websocket.accept()
+
+    last_status = _get_real_status(castle_id)
+    await websocket.send_text(last_status)
+
+    try:
+        while True:
+            await asyncio.sleep(1)  # فحص في الذاكرة فقط — بدون شبكة
+            current = _get_real_status(castle_id)
+            if current != last_status:
+                last_status = current
+                await websocket.send_text(current)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════

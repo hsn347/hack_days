@@ -69,9 +69,65 @@ BUILDING_INFO: Dict[str, Dict[str, Any]] = {
     "201": {"name": "🌾 مزرعة القمح (Farm)", "category": "resource", "harvest": True},
     "202": {"name": "🪵 منشرة الخشب (Sawmill)", "category": "resource", "harvest": True},
     "203": {"name": "⛏️ منجم الحديد (Iron Mine)", "category": "resource", "harvest": True},
-    "204": {"name": "🪙 منجم الفضة/الألماس (Steel/Silver)", "category": "resource", "harvest": True},
+    "204": {"name": "🪙 منجم الكوارتز (Quartz Mine)", "category": "resource", "harvest": True},
     "205": {"name": "⛺ الخيمة العسكرية (Military Tent)", "category": "tent", "harvest": False},
-    "206": {"name": "🏥 المركز الطبي (Hospital)", "category": "hospital", "harvest": False},
+    "206": {"name": "🏥 المركز الطبي / المشفى (Hospital)", "category": "hospital", "harvest": False},
+}
+
+# المباني الداعمة المستهدفة للتفصيل والتحديد
+SUPPORT_BUILDINGS_DEF: Dict[str, Dict[str, Any]] = {
+    "farm": {
+        "bid": "201",
+        "name": "🌾 مزرعة القمح",
+        "desc": "مزارع القمح وإنتاج الحبوب",
+        "category": "resource",
+        "harvest": True,
+    },
+    "sawmill": {
+        "bid": "202",
+        "name": "🪵 منشرة الخشب",
+        "desc": "مناشر الخشب وإنتاج الأخشاب",
+        "category": "resource",
+        "harvest": True,
+    },
+    "iron_mine": {
+        "bid": "203",
+        "name": "⛏️ منجم الحديد",
+        "desc": "مناجم الحديد ومصاهر المعادن",
+        "category": "resource",
+        "harvest": True,
+    },
+    "quartz_mine": {
+        "bid": "204",
+        "name": "🪙 منجم الكوارتز",
+        "desc": "مناجم الكوارتز والفضة والألماس",
+        "category": "resource",
+        "harvest": True,
+    },
+    "hospital": {
+        "bid": "206",
+        "name": "🏥 الخيمة الطبية (المشفى)",
+        "desc": "المركز الطبي والمشفى لعلاج المصابين",
+        "category": "hospital",
+        "harvest": False,
+    },
+    "military_tent": {
+        "bid": "205",
+        "name": "⛺ الخيمة العسكرية",
+        "desc": "الخيام العسكرية لزيادة سعة وسرعة تدريب الجنود",
+        "category": "tent",
+        "harvest": False,
+    },
+}
+
+# خريطة المفاتيح والأسماء المستعارة لكل مبنى
+BUILDING_KEY_TO_BID: Dict[str, str] = {
+    "farm": "201", "wheat": "201", "tahil": "201", "201": "201",
+    "sawmill": "202", "wood": "202", "odun": "202", "202": "202",
+    "iron_mine": "203", "iron": "203", "demir": "203", "203": "203",
+    "quartz_mine": "204", "quartz": "204", "silver": "204", "kuvars": "204", "204": "204",
+    "hospital": "206", "medical_tent": "206", "clinic": "206", "hastane": "206", "206": "206",
+    "military_tent": "205", "tent": "205", "army_tent": "205", "cadir": "205", "205": "205",
 }
 
 # أدوات تسريع البناء والتسريع العام مرتبة من الأطول للأقصر
@@ -117,6 +173,68 @@ class BuildingTask(BaseTask):
     مهمة فحص وترقية القلعة ومباني الموارد والمعسكرات مع التسريع الذكي للقلعة.
     """
     name = "building"
+
+    def get_selected_support_bids(self) -> List[str]:
+        """
+        تحديد قائمة معرفات المباني (bids) المستهدفة للترقية بناءً على إعدادات وتفضيلات المستخدم:
+          1. مزرعة القمح (201)
+          2. منشرة الخشب (202)
+          3. منجم الحديد (203)
+          4. منجم الكوارتز (204)
+          5. الخيمة الطبية / المشفى (206)
+          6. الخيمة العسكرية (205)
+        """
+        cfg = self.config
+        tb = cfg.get("target_buildings")
+        if tb is None:
+            tb = cfg.get("subtasks")
+        if tb is None:
+            tb = cfg.get("selected_buildings")
+
+        # الترتيب النموذجي لترقية المباني الداعمة
+        all_support_bids = ["201", "202", "203", "204", "206", "205"]
+
+        # حالة 1: تم تمرير target_buildings كقاموس { "farm": True, "military_tent": False, ... }
+        if isinstance(tb, dict) and tb:
+            selected: List[str] = []
+            for k, enabled in tb.items():
+                if bool(enabled):
+                    bid = BUILDING_KEY_TO_BID.get(str(k).lower())
+                    if bid and bid not in selected:
+                        selected.append(bid)
+            return [b for b in all_support_bids if b in selected]
+
+        # حالة 2: تم تمرير target_buildings كقائمة ["farm", "205", ...]
+        if isinstance(tb, (list, tuple, set)) and tb:
+            selected = []
+            for item in tb:
+                bid = BUILDING_KEY_TO_BID.get(str(item).lower())
+                if bid and bid not in selected:
+                    selected.append(bid)
+            return [b for b in all_support_bids if b in selected]
+
+        # حالة 3: فحص المفاتيح المباشرة في cfg مثل upgrade_farm, upgrade_military_tent ...
+        direct_building_keys = [
+            ("farm", "201"),
+            ("sawmill", "202"),
+            ("iron_mine", "203"),
+            ("quartz_mine", "204"),
+            ("hospital", "206"),
+            ("military_tent", "205"),
+        ]
+        has_direct = any(
+            f"upgrade_{k}" in cfg or k in cfg for k, _ in direct_building_keys
+        )
+        if has_direct:
+            selected = []
+            for k, bid in direct_building_keys:
+                val = cfg.get(f"upgrade_{k}", cfg.get(k))
+                if val is not None and bool(val):
+                    selected.append(bid)
+            return selected
+
+        # افتراضياً (للتوافق العكسي): جميع المباني الـ 6 مفعلة
+        return all_support_bids
 
     def __init__(self, conn: GameConnection, config: Optional[Dict[str, Any]] = None):
         super().__init__(conn, config)
@@ -402,60 +520,71 @@ class BuildingTask(BaseTask):
                         actions_taken.append(f"🔍 [فحص] القلعة جاهزة للترقية إلى المستوى {castle_lv + 1}")
 
         # ─────────────────────────────────────────────────────────────
-        #  القسم 3: ترقية الموارد والمعسكرات والمستشفى (واحد فقط لكل نوع)
+        #  القسم 3: ترقية الموارد والمعسكرات والمستشفى بناءً على تفضيل المستخدم
         # ─────────────────────────────────────────────────────────────
         if do_buildings and (check_only or active_count < 2):
-            # الأنواع المستهدفة: مزارع (201-204)، مستشفى/مركز طبي (206)، خيمة عسكرية (205)، ومعسكرات الجيش (116-119)
-            target_types = ["201", "202", "203", "204", "206", "205", "116", "117", "118", "119"]
+            selected_bids = self.get_selected_support_bids()
+            selected_names = [BUILDING_INFO.get(b, {}).get("name", b) for b in selected_bids]
+            self.log.info(f"📋 المباني الداعمة المستهدفة للترقية ({len(selected_bids)} أنواع): {', '.join(selected_names)}")
 
-            for bid in target_types:
-                if not check_only and active_count >= 2:
-                    self.log.info("🛑 تم شغل طوابير البناء المتاحة (2/2).")
-                    break
-
-                b_list = buildings_by_type.get(bid, [])
-                if not b_list:
-                    continue
-
-                # تصفية المباني التي ليست قيد الترقية حالياً
-                available_to_upgrade = [b for b in b_list if str(b.get("state", "0")) != "2"]
-                if not available_to_upgrade:
-                    self.log.info(f"ℹ️ جميع مباني النوع {bid} قيد الترقية حالياً.")
-                    continue
-
-                # اختيار المبنى ذو المستوى الأقل لتحقيق التوازن الشامل
-                available_to_upgrade.sort(key=lambda x: int(x.get("lv", 0)))
-                chosen_b = available_to_upgrade[0]
-
-                cur_lv = int(chosen_b.get("lv", 0))
-                idx = str(chosen_b.get("index", ""))
-                iid = int(chosen_b.get("iid", 0))
-                b_name = BUILDING_INFO.get(bid, {}).get("name", f"مبنى #{bid}")
-                is_resource = BUILDING_INFO.get(bid, {}).get("harvest", False)
-
-                self.log.info(f"🎯 ترشيح ترقية: {b_name} (مستوى {cur_lv} ➔ {cur_lv + 1} | index: {idx})")
-
-                if not check_only:
-                    # 1. إذا كان مبنى موارد: جمع المحصول أولاً (1001/8)
-                    if is_resource:
-                        await self.harvest_resource_building(int(bid), iid)
-                        await asyncio.sleep(0.3)
-
-                    # 2. إرسال أمر الترقية (1001/3)
-                    r_up = await self.upgrade_building(bid, idx)
-                    err_up = str(r_up.get("err", "-1"))
-                    if err_up == "0":
-                        actions_taken.append(f"✅ تم بدء ترقية {b_name} (مستوى {cur_lv + 1} | index {idx})")
-                        active_count += 1
-                        # تحديث حالة المبنى محلياً لمنع تكراره في نفس الدورة
-                        chosen_b["state"] = "2"
-                    elif err_up == "1001":
-                        self.log.info("🛑 طوابير البناء ممتلئة.")
+            # تدوير الترقيات على الأنواع المختارة لشغل الطوابير المتاحة
+            made_progress = True
+            while made_progress and (check_only or active_count < 2):
+                made_progress = False
+                for bid in selected_bids:
+                    if not check_only and active_count >= 2:
+                        self.log.info("🛑 تم شغل طوابير البناء المتاحة (2/2).")
                         break
+
+                    b_list = buildings_by_type.get(bid, [])
+                    if not b_list:
+                        continue
+
+                    # تصفية المباني التي ليست قيد الترقية حالياً ولم تفشل في هذه الدورة
+                    available_to_upgrade = [
+                        b for b in b_list
+                        if str(b.get("state", "0")) != "2" and str(b.get("state", "0")) != "failed"
+                    ]
+                    if not available_to_upgrade:
+                        continue
+
+                    # اختيار المبنى ذو المستوى الأقل لتحقيق التوازن الشامل
+                    available_to_upgrade.sort(key=lambda x: int(x.get("lv", 0)))
+                    chosen_b = available_to_upgrade[0]
+
+                    cur_lv = int(chosen_b.get("lv", 0))
+                    idx = str(chosen_b.get("index", ""))
+                    iid = int(chosen_b.get("iid", 0))
+                    b_name = BUILDING_INFO.get(bid, {}).get("name", f"مبنى #{bid}")
+                    is_resource = BUILDING_INFO.get(bid, {}).get("harvest", False)
+
+                    self.log.info(f"🎯 ترشيح ترقية: {b_name} (مستوى {cur_lv} ➔ {cur_lv + 1} | index: {idx})")
+
+                    if not check_only:
+                        # 1. إذا كان مبنى موارد: جمع المحصول أولاً (1001/8)
+                        if is_resource:
+                            await self.harvest_resource_building(int(bid), iid)
+                            await asyncio.sleep(0.3)
+
+                        # 2. إرسال أمر الترقية (1001/3)
+                        r_up = await self.upgrade_building(bid, idx)
+                        err_up = str(r_up.get("err", "-1"))
+                        if err_up == "0":
+                            actions_taken.append(f"✅ تم بدء ترقية {b_name} (مستوى {cur_lv + 1} | index {idx})")
+                            active_count += 1
+                            chosen_b["state"] = "2"
+                            made_progress = True
+                        elif err_up == "1001":
+                            self.log.info("🛑 طوابير البناء ممتلئة.")
+                            made_progress = False
+                            break
+                        else:
+                            self.log.warning(f"⚠️ فشل ترقية {b_name}: كود {err_up}")
+                            chosen_b["state"] = "failed"
                     else:
-                        self.log.warning(f"⚠️ فشل ترقية {b_name}: كود {err_up}")
-                else:
-                    actions_taken.append(f"🔍 [فحص] موصى بترقية: {b_name} من مستوى {cur_lv} إلى {cur_lv + 1}")
+                        actions_taken.append(f"🔍 [فحص] موصى بترقية: {b_name} من مستوى {cur_lv} إلى {cur_lv + 1}")
+                        chosen_b["state"] = "2"
+                        made_progress = True
 
         # ─────────────────────────────────────────────────────────────
         #  النتيجة النهائية
@@ -490,6 +619,21 @@ if __name__ == "__main__":
     parser.add_argument("--speedup", "--speedup-castle", dest="speedup_castle", action="store_true", default=False, help="تسريع ترقية القلعة فقط بالأدوات المجانية والحقيبة")
     parser.add_argument("--check-only", "-c", action="store_true", help="فحص وعرض المباني الموصى بترقيتها دون إجراء الترقية")
     parser.add_argument("--all-accounts", action="store_true", help="تشغيل المهمة لجميع الحسابات المسجلة")
+
+    # خيارات تفصيل وتحديد المباني الداعمة
+    parser.add_argument("--farm", dest="bld_farm", action="store_true", default=None, help="ترقية مزارع القمح (201)")
+    parser.add_argument("--no-farm", dest="bld_farm", action="store_false", help="تعطيل ترقية مزارع القمح")
+    parser.add_argument("--sawmill", "--wood", dest="bld_sawmill", action="store_true", default=None, help="ترقية مناشر الخشب (202)")
+    parser.add_argument("--no-sawmill", "--no-wood", dest="bld_sawmill", action="store_false", help="تعطيل ترقية مناشر الخشب")
+    parser.add_argument("--iron", "--iron-mine", dest="bld_iron", action="store_true", default=None, help="ترقية مناجم الحديد (203)")
+    parser.add_argument("--no-iron", "--no-iron-mine", dest="bld_iron", action="store_false", help="تعطيل ترقية مناجم الحديد")
+    parser.add_argument("--quartz", "--quartz-mine", dest="bld_quartz", action="store_true", default=None, help="ترقية مناجم الكوارتز (204)")
+    parser.add_argument("--no-quartz", "--no-quartz-mine", dest="bld_quartz", action="store_false", help="تعطيل ترقية مناجم الكوارتز")
+    parser.add_argument("--hospital", "--clinic", dest="bld_hospital", action="store_true", default=None, help="ترقية الخيمة الطبية / المشفى (206)")
+    parser.add_argument("--no-hospital", "--no-clinic", dest="bld_hospital", action="store_false", help="تعطيل ترقية المشفى")
+    parser.add_argument("--military-tent", "--tent", dest="bld_tent", action="store_true", default=None, help="ترقية الخيمة العسكرية (205)")
+    parser.add_argument("--no-military-tent", "--no-tent", dest="bld_tent", action="store_false", help="تعطيل ترقية الخيمة العسكرية")
+    parser.add_argument("--target-buildings", dest="target_buildings", default=None, help="المباني المستهدفة مفصولة بفاصلة (farm,sawmill,iron_mine,quartz_mine,hospital,military_tent أو all)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -515,11 +659,31 @@ if __name__ == "__main__":
             if len(conn.init_data) > 0:
                 break
 
+        # بناء تفضيل المباني المستهدفة
+        target_buildings = {}
+        if args.target_buildings:
+            if args.target_buildings.strip().lower() == "all":
+                target_buildings = {k: True for k in ["farm", "sawmill", "iron_mine", "quartz_mine", "hospital", "military_tent"]}
+            else:
+                items = [x.strip().lower() for x in args.target_buildings.split(",") if x.strip()]
+                target_buildings = {k: (k in items or BUILDING_KEY_TO_BID.get(k) in items) for k in ["farm", "sawmill", "iron_mine", "quartz_mine", "hospital", "military_tent"]}
+        else:
+            if any(x is not None for x in [args.bld_farm, args.bld_sawmill, args.bld_iron, args.bld_quartz, args.bld_hospital, args.bld_tent]):
+                target_buildings = {
+                    "farm": True if args.bld_farm is None else args.bld_farm,
+                    "sawmill": True if args.bld_sawmill is None else args.bld_sawmill,
+                    "iron_mine": True if args.bld_iron is None else args.bld_iron,
+                    "quartz_mine": True if args.bld_quartz is None else args.bld_quartz,
+                    "hospital": True if args.bld_hospital is None else args.bld_hospital,
+                    "military_tent": True if args.bld_tent is None else args.bld_tent,
+                }
+
         task_cfg = {
             "castle": args.castle,
             "buildings": args.buildings,
             "speedup_castle": args.speedup_castle,
-            "check_only": args.check_only
+            "check_only": args.check_only,
+            "target_buildings": target_buildings,
         }
 
         task = BuildingTask(conn, task_cfg)

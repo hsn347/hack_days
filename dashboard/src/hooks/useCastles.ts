@@ -1,13 +1,14 @@
+import { useState, useEffect } from 'react'
 import {
   collection, doc, onSnapshot, query, orderBy, limit,
-  startAfter, getDocs, getDoc, setDoc, updateDoc, deleteDoc, type QueryDocumentSnapshot,
+  startAfter, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '../lib/firebase'
 import type { Castle, BotState, CastleConfig, CastleLog } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
-const PAGE_SIZE = 30
+const PAGE_SIZE = 100
 
 // ─── Deep merge castle config with defaults ────────────────
 // يضمن وجود جميع حقول الـ config حتى للقلاع القديمة في Firebase
@@ -130,6 +131,71 @@ export function useBotStatusLive(
   }
 }
 
+// ─── Real process status via WebSocket ────────────────────
+// اتصال WebSocket دائم بـ api_server.py — لا polling، لا استهلاك موارد.
+// الخادم يُرسل الحالة فور الاتصال ثم فقط عند التغيير.
+// إذا انقطع الاتصال → يُعيد الاتصال تلقائياً بعد 3 ثوانٍ.
+
+type RealStatus = 'running' | 'starting' | 'idle' | 'disconnected' | 'reconnecting' | 'offline'
+
+
+export function useRealBotStatus(castleId: string, enabled: boolean = true): {
+  status: RealStatus
+} {
+  const [status, setStatus] = useState<RealStatus>('offline')
+
+  useEffect(() => {
+    if (!enabled || !castleId) return
+
+    const WS_BASE = (import.meta.env.VITE_BOT_API_URL ?? 'http://localhost:8000')
+      .replace(/^http/, 'ws')
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let destroyed = false
+
+    function connect() {
+      if (destroyed) return
+      try {
+        ws = new WebSocket(`${WS_BASE}/ws/status/${castleId}`)
+
+        ws.onopen = () => {
+          // الاتصال ناجح — الخادم سيُرسل الحالة الأولية فوراً
+        }
+
+        ws.onmessage = (e) => {
+          const s = e.data?.trim() as RealStatus
+          if (s) setStatus(s)
+        }
+
+        ws.onclose = () => {
+          if (!destroyed) {
+            // الخادم غير متاح أو انقطع → نُبلّغ بـ offline وننتظر 3 ثوانٍ للإعادة
+            setStatus('offline')
+            reconnectTimer = setTimeout(connect, 3000)
+          }
+        }
+
+        ws.onerror = () => {
+          ws?.close()
+        }
+      } catch {
+        setStatus('offline')
+        if (!destroyed) reconnectTimer = setTimeout(connect, 3000)
+      }
+    }
+
+    connect()
+
+    return () => {
+      destroyed = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      ws?.close()
+    }
+  }, [castleId, enabled])
+
+  return { status }
+}
+
 // ─── Update bot state (via API server + Firebase fallback) ─────────
 export function useUpdateBotState(userId: string) {
   const qc = useQueryClient()
@@ -215,6 +281,35 @@ export function useUpdateCastleConfig(userId: string, castleId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castle', userId, castleId] })
+      qc.invalidateQueries({ queryKey: ['castles', userId] })
+    },
+  })
+}
+
+// ─── Batch update castle configs ────────────────────────────
+export function useBatchUpdateCastleConfigs(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ castleIds, config }: { castleIds: string[]; config: Partial<CastleConfig> }) => {
+      if (!castleIds || castleIds.length === 0) return
+      const updates: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(config)) {
+        updates[`config.${k}`] = v
+      }
+      // Chunk by 400 to respect Firestore writeBatch limit (max 500 per batch)
+      for (let i = 0; i < castleIds.length; i += 400) {
+        const chunk = castleIds.slice(i, i + 400)
+        const batch = writeBatch(db)
+        for (const id of chunk) {
+          batch.update(doc(db, 'users', userId, 'castles', id), updates)
+        }
+        await batch.commit()
+      }
+    },
+    onSuccess: (_, { castleIds }) => {
+      castleIds.forEach(id => {
+        qc.invalidateQueries({ queryKey: ['castle', userId, id] })
+      })
       qc.invalidateQueries({ queryKey: ['castles', userId] })
     },
   })

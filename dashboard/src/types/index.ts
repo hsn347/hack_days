@@ -45,7 +45,7 @@ export interface Resources {
   last_updated: string
 }
 
-export type BotState = 'running' | 'idle' | 'error' | 'paused' | 'pending'
+export type BotState = 'running' | 'idle' | 'error' | 'paused' | 'pending' | 'disconnected' | 'reconnecting' | 'waiting'
 
 export interface BotStatus {
   state: BotState
@@ -55,6 +55,10 @@ export interface BotStatus {
   active_marches: number
   max_marches: number
   last_error: string | null
+  // حالة الاتصال الفعلية (connected | disconnected | reconnecting | waiting | idle)
+  conn_state?: string
+  conn_message?: string
+  conn_updated?: string
 }
 
 // ─── Task Configs ─────────────────────────────────────
@@ -118,7 +122,7 @@ export interface CastleConfig {
   caravan: BaseTaskConfig
   port_delegate: BaseTaskConfig & { shop_item: string }
   savings_bank: BaseTaskConfig & { days: number }
-  building: BaseTaskConfig & { upgrade_castle: boolean; speedup_castle: boolean; upgrade_support_buildings: boolean }
+  building: BaseTaskConfig & { upgrade_castle: boolean; speedup_castle: boolean; upgrade_support_buildings: boolean; target_buildings?: Record<string, boolean> }
   prestige: BaseTaskConfig & { invaders_max_lv: number; subtasks: PrestigeSubtasks }
   march_manager: MarchManagerConfig
   gold_gather?: { enabled: boolean; locations: GoldLocation[] }

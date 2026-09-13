@@ -104,7 +104,7 @@
               },
               "stamina": {
                 "enabled": true,
-                "gold_buys": 0
+                "gold_buys": 1
               },
               "skills": {
                 "enabled": true,
@@ -184,6 +184,14 @@
                 "upgrade_castle": true,
                 "speedup_castle": false,
                 "upgrade_support_buildings": true,
+                "target_buildings": {
+                  "farm": true,
+                  "sawmill": true,
+                  "iron_mine": true,
+                  "quartz_mine": true,
+                  "hospital": true,
+                  "military_tent": true
+                },
                 "schedule": {
                   "times_per_day": 1
                 }

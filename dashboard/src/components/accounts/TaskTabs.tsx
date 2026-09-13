@@ -19,9 +19,10 @@ export const TABS: { id: TaskTab; emoji: string; label: string }[] = [
 interface TaskTabsProps {
   active: TaskTab
   onChange: (t: TaskTab) => void
+  errorTab?: TaskTab | null
 }
 
-export function TaskTabs({ active, onChange }: TaskTabsProps) {
+export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
   const scroll = (dir: 'left' | 'right') => {
@@ -47,10 +48,10 @@ export function TaskTabs({ active, onChange }: TaskTabsProps) {
       <button
         onClick={() => scroll('right')}
         style={{
-          flexShrink: 0, padding: '4px 8px',
-          borderRadius: '8px', border: 'none',
+          flexShrink: 0, padding: '3px 6px',
+          borderRadius: '6px', border: 'none',
           background: 'none', color: '#6b7280',
-          cursor: 'pointer', fontSize: '16px',
+          cursor: 'pointer', fontSize: '14px',
           display: 'flex', alignItems: 'center',
         }}
       >
@@ -69,19 +70,28 @@ export function TaskTabs({ active, onChange }: TaskTabsProps) {
       >
         {TABS.map(tab => {
           const isActive = active === tab.id
+          const isError = errorTab === tab.id
           return (
             <button
               key={tab.id}
               onClick={() => onChange(tab.id)}
               style={{
                 flexShrink: 0,
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '10px',
-                border: isActive ? '1px solid rgba(34,197,94,0.35)' : '1px solid transparent',
-                background: isActive ? 'linear-gradient(135deg, rgba(5,150,105,0.25) 0%, rgba(16,185,129,0.15) 100%)' : 'none',
-                color: isActive ? '#6ee7b7' : '#9ca3af',
-                fontSize: '13px',
+                display: 'flex', alignItems: 'center', gap: '5px',
+                padding: '5px 9px',
+                borderRadius: '8px',
+                border: isError
+                  ? '1px solid rgba(239,68,68,0.7)'
+                  : isActive
+                  ? '1px solid rgba(34,197,94,0.35)'
+                  : '1px solid transparent',
+                background: isError
+                  ? 'rgba(239,68,68,0.14)'
+                  : isActive
+                  ? 'linear-gradient(135deg, rgba(5,150,105,0.25) 0%, rgba(16,185,129,0.15) 100%)'
+                  : 'none',
+                color: isError ? '#fca5a5' : isActive ? '#6ee7b7' : '#9ca3af',
+                fontSize: '12px',
                 fontWeight: isActive ? 600 : 400,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
@@ -89,8 +99,20 @@ export function TaskTabs({ active, onChange }: TaskTabsProps) {
                 fontFamily: 'inherit',
               }}
             >
-              <span style={{ fontSize: '15px', lineHeight: 1 }}>{tab.emoji}</span>
+              <span style={{ fontSize: '13px', lineHeight: 1 }}>{tab.emoji}</span>
               <span>{tab.label}</span>
+              {isError && (
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ef4444',
+                    boxShadow: '0 0 6px #ef4444',
+                    display: 'inline-block',
+                  }}
+                />
+              )}
             </button>
           )
         })}

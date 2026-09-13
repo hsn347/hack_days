@@ -153,8 +153,11 @@ class AllianceTask(BaseTask):
 
         self.log.info(f"🏛️ بدء مهمة التحالف (التحالف ID: {alliance_id})")
 
-        # 2. مساعدة الأعضاء أولاً
-        helped_count = await self._help_members()
+        # 2. مساعدة الأعضاء والتبرع لعلوم التحالف (إن كانت مفعّلة)
+        auto_help = bool(cfg.get("auto_help", True))
+        helped_count = 0
+        if auto_help:
+            helped_count = await self._help_members()
 
         # 3. استعلام رصيد التبرعات المتاحة (1010/81)
         r_81 = await self.conn.query('1010', '81', {"uid": uid}, timeout=8)
@@ -183,7 +186,7 @@ class AllianceTask(BaseTask):
         total_scipoints    = 0
 
         # 5. تنفيذ التبرعات المجانية بالمتاح (donatetype: 2)
-        if free_available > 0:
+        if auto_help and free_available > 0:
             self.log.info(f"🚀 جاري تنفيذ {free_available} تبرع مجاني للتقنية #{target_sciid}...")
             for i in range(free_available):
                 r_donate = await self.conn.query('1010', '48', {
@@ -204,11 +207,13 @@ class AllianceTask(BaseTask):
                 await asyncio.sleep(DONATE_DELAY_SEC)
 
             self.log.info(f"✅ اكتملت التبرعات المجانية: {total_donated_free} تبرع (شرف: +{total_honor_earned:,} | نقاط علم: +{total_scipoints:,})")
+        elif not auto_help:
+            self.log.info("ℹ️ التبرع للتحالف معطّل من الإعدادات — تم تجاوز التبرعات.")
         else:
             self.log.info("ℹ️ رصيد التبرعات المجانية مستهلك حالياً (0/20) — بانتظار التجديد.")
 
-        # 6. التبرع بالذهب إن حُدد في الإعدادات / Firebase (donatetype: 1)
-        target_gold_donations = int(cfg.get('gold_donations', 0))
+        # 6. التبرع بالذهب إن حُدد في الإعدادات / Firebase (donatetype: 1 - الحد الأقصى 10)
+        target_gold_donations = min(10, max(0, int(cfg.get('gold_donations', 0)))) if auto_help else 0
         if target_gold_donations > 0:
             self.log.info(f"🪙 جاري تنفيذ {target_gold_donations} تبرع بالذهب للتقنية #{target_sciid}...")
             for i in range(target_gold_donations):

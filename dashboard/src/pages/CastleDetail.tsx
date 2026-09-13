@@ -3,13 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowRight, ArrowLeft } from 'lucide-react'
 import { Layout } from '../components/layout/Layout'
-import { TaskTabs } from '../components/accounts/TaskTabs'
 import { TaskTabContent } from '../components/accounts/TaskTabContent'
 import { ResourceBar } from '../components/accounts/ResourceBar'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { useCastle, useCastleLogs } from '../hooks/useCastles'
 import { useAuth } from '../hooks/useAuth'
-import type { TaskTab } from '../types'
 import { useAppStore } from '../store/appStore'
 
 export function CastleDetailPage() {
@@ -19,7 +17,6 @@ export function CastleDetailPage() {
   const { user } = useAuth()
   const { language } = useAppStore()
   const uid = user?.uid ?? ''
-  const [activeTab, setActiveTab] = useState<TaskTab>('gather')
 
   const { data: castle, isLoading } = useCastle(uid, id ?? '')
   const { data: logs } = useCastleLogs(uid, id ?? '')
@@ -110,9 +107,8 @@ export function CastleDetailPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-white text-base">إعدادات المهام</h2>
           </div>
-          <TaskTabs active={activeTab} onChange={setActiveTab} />
           <div className="w-full">
-            <TaskTabContent tab={activeTab} castle={castle} userId={uid} />
+            <TaskTabContent castle={castle} userId={uid} />
           </div>
         </div>
 

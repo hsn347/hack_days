@@ -612,3 +612,14 @@ html.light input[type="checkbox"],
 body.light input[type="checkbox"] {
   accent-color: #16a34a;
 }
+
+/* Hide number input spin buttons (Chrome, Safari, Edge, Opera, Firefox) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
