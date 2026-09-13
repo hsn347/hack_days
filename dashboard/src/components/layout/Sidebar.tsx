@@ -2,7 +2,7 @@ import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  LayoutDashboard, Users, Shield, Settings, LogOut,
+  LayoutDashboard, Users, Settings, LogOut,
   Moon, Sun, Bot, Menu, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -22,8 +22,7 @@ export function Sidebar() {
     const lc = lang.toLowerCase() as 'ar' | 'en' | 'tr'
     setLanguage(lc)
     i18n.changeLanguage(lc)
-    // Update dir
-    document.documentElement.dir = lc === 'ar' ? 'rtl' : 'ltr'
+    document.documentElement.dir = 'ltr'
     document.documentElement.lang = lc
   }
 
@@ -40,7 +39,6 @@ export function Sidebar() {
   const navLinks = [
     { to: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
     { to: '/accounts',  icon: Users,           label: t('nav.accounts')  },
-    ...(isAdmin ? [{ to: '/admin', icon: Shield, label: t('nav.admin') }] : []),
     { to: '/settings',  icon: Settings,        label: t('nav.settings')  },
   ]
 
@@ -51,12 +49,12 @@ export function Sidebar() {
         <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={toggleSidebar} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Always on the Left in all languages */}
       <aside
+        dir="ltr"
         className={clsx(
-          'glass-sidebar fixed top-0 h-full z-50 flex flex-col transition-transform duration-300',
+          'glass-sidebar fixed top-0 left-0 h-full z-50 flex flex-col border-r border-white/8 transition-transform duration-300',
           'sidebar-width',
-          // RTL: start from right on mobile when closed
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >

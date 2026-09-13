@@ -47,7 +47,7 @@ export function ResourceBar({ resources, compact }: ResourceBarProps) {
         return (
           <div
             key={key}
-            className={`flex items-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition-all ${
+            className={`resource-bar-chip flex items-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition-all ${
               compact ? 'gap-1 px-1.5 py-0.5 text-[11px]' : 'gap-1.5 px-2 py-1 text-xs'
             }`}
             title={`${t(label)}: ${val.toLocaleString()}`}
@@ -62,7 +62,7 @@ export function ResourceBar({ resources, compact }: ResourceBarProps) {
             ) : (
               <span className={`${color} shrink-0`}>{emoji}</span>
             )}
-            <span className="text-gray-200 font-semibold tabular-nums">
+            <span className="resource-bar-val text-gray-200 font-semibold tabular-nums">
               {formatNum(val)}
             </span>
           </div>

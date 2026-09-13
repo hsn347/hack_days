@@ -1,5 +1,5 @@
 import {
-  collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where,
+  collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy, where,
 } from 'firebase/firestore'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { db } from '../lib/firebase'
@@ -77,5 +77,69 @@ export function useDeleteUser() {
       await deleteDoc(doc(db, 'users', uid))
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin_users'] }),
+  })
+}
+
+// ─── Approve pending castle (admin only) ───────────────────
+export function useApproveCastle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, castleId }: { userId: string; castleId: string }) => {
+      const castleRef = doc(db, 'users', userId, 'castles', castleId)
+      await updateDoc(castleRef, {
+        is_active: true,
+        'bot_status.state': 'idle',
+        'bot_status.last_run_message': 'جاهز للتشغيل (تمت الموافقة من الإدارة)',
+      })
+
+      const userRef = doc(db, 'users', userId)
+      const userSnap = await getDoc(userRef)
+      const userData = userSnap.data()
+      const sub = userData?.subscription
+      const currentCount = Number(sub?.current_castles_count ?? 0)
+      const maxAllowed = Number(sub?.max_castles_allowed ?? 1)
+      const pendingCount = Number(sub?.pending_castles_count ?? 1)
+
+      const newCurrent = currentCount + 1
+      const updates: Record<string, unknown> = {
+        'subscription.current_castles_count': newCurrent,
+        'subscription.pending_castles_count': Math.max(0, pendingCount - 1),
+      }
+      // If new current exceeds max allowed, automatically increase max allowed to accommodate
+      if (newCurrent > maxAllowed) {
+        updates['subscription.max_castles_allowed'] = newCurrent
+      }
+      await updateDoc(userRef, updates)
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['castles', vars.userId] })
+      qc.invalidateQueries({ queryKey: ['user', vars.userId] })
+    },
+  })
+}
+
+// ─── Reject pending castle (admin only) ────────────────────
+export function useRejectCastle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, castleId }: { userId: string; castleId: string }) => {
+      await deleteDoc(doc(db, 'users', userId, 'castles', castleId))
+      const userRef = doc(db, 'users', userId)
+      const userSnap = await getDoc(userRef)
+      const pendingCount = Number(userSnap.data()?.subscription?.pending_castles_count ?? 1)
+      if (pendingCount > 0) {
+        await updateDoc(userRef, {
+          'subscription.pending_castles_count': pendingCount - 1,
+        })
+      }
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['castles', vars.userId] })
+      qc.invalidateQueries({ queryKey: ['user', vars.userId] })
+    },
   })
 }

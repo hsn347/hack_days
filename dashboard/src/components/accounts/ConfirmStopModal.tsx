@@ -38,6 +38,7 @@ export function ConfirmStopModal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
+            className="modal-backdrop"
             style={{
               position: 'fixed',
               inset: 0,
@@ -68,6 +69,7 @@ export function ConfirmStopModal({
               exit={{ scale: 0.94, opacity: 0, y: 15 }}
               transition={{ type: 'spring', damping: 26, stiffness: 360 }}
               onClick={e => e.stopPropagation()}
+              className="modal-box-panel stop-modal-panel"
               style={{
                 pointerEvents: 'all',
                 width: '100%',
@@ -112,7 +114,7 @@ export function ConfirmStopModal({
 
                 {/* Account Info Card (When single castle) */}
                 {!isAll && (lordName || email) && (
-                  <div className="mb-4 p-3 rounded-xl bg-white/[0.04] border border-white/10 text-start flex items-center gap-3">
+                  <div className="modal-account-card mb-4 p-3 rounded-xl bg-white/[0.04] border border-white/10 text-start flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
                       <Crown size={18} className="text-amber-400" />
                     </div>
@@ -130,7 +132,7 @@ export function ConfirmStopModal({
                 )}
 
                 {/* Notice Box */}
-                <div className="mb-6 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-start text-xs text-rose-200/90 leading-relaxed flex items-start gap-2.5">
+                <div className="modal-notice-box mb-6 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-start text-xs text-rose-200/90 leading-relaxed flex items-start gap-2.5">
                   <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5" />
                   <span>
                     سيتم إيقاف العمليات الحالية وإغلاق اتصال اللعبة بأمان، ولن يُنفّذ البوت أي دورات قادمة حتى تعيد تشغيله يدوياً.
@@ -143,7 +145,7 @@ export function ConfirmStopModal({
                     type="button"
                     onClick={onClose}
                     disabled={isPending}
-                    className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-300 bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer disabled:opacity-50"
+                    className="modal-cancel-btn flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-300 bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer disabled:opacity-50"
                   >
                     تراجع / إلغاء
                   </button>

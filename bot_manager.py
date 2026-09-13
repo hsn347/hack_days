@@ -270,7 +270,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # 🐪 16. مهمة القافلة التجارية وحراسة الكنز (Caravan / Carriage Escort)
     "caravan": {
         "enabled": True,             # تفعيل/تعطيل إرسال القافلة وحراسة الكنز وجمع الجوائز تلقائياً
-        "schedule": {"times_per_day": 4, "active_window": {"from": 7, "to": 23}}
+        "schedule": {"times_per_day": 5, "active_window": {"from": 7, "to": 23}}
     },
 
     # ⚓ 18. مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة (Port Delegate & Island Store)
@@ -579,8 +579,10 @@ class AccountContext:
         # جوائز حدث التوسع الإقليمي
         self.territory_ready_rewards: int = 0
 
-        # دروع السلام المتوفرة في الحقيبة
+        # دروع السلام المتوفرة في الحقيبة وحالة الحماية
         self.shield_backpack_counts: Dict[str, int] = {"8h": 0, "24h": 0, "3d": 0}
+        self.shield_active: bool = False
+        self.shield_status_str: str = "غير محمي (مكشوف)"
 
         # جرعات الطاقة المتوفرة في الحقيبة
         self.stamina_potions: Dict[int, int] = {300401: 0, 300402: 0, 300403: 0}
@@ -869,7 +871,9 @@ class BotManager:
         config: Optional[Dict[str, Any]] = None,
         reconnect_wait_seconds: int = 60,
         max_reconnect_attempts: int = 10,
-        ignore_schedule: bool = False
+        ignore_schedule: bool = False,
+        user_id: Optional[str] = None,
+        castle_id: Optional[str] = None,
     ):
         if isinstance(account_or_email, str):
             sm = SessionManager()
@@ -885,6 +889,9 @@ class BotManager:
         self.conn: Optional[GameConnection] = None
         self.context = AccountContext(self.email)
         self.ignore_schedule = bool(ignore_schedule)
+        self.user_id = user_id
+        self.castle_id = castle_id
+        self.is_loop = False
 
         # دمج الإعدادات الافتراضية مع إعدادات المستخدم القادمة من Firebase
         self.config = self._build_default_config(config or {})
@@ -901,14 +908,145 @@ class BotManager:
         _sched_file = os.path.join(_ROOT_DIR, f".sched_{_safe_email}.json")
         self.scheduler = BotScheduler(self.config, state_file=_sched_file)
 
+    def _update_bot_conn_state(self, conn_state: str, message: str = "") -> None:
+        """إبلاغ لوحة التحكم وFirebase بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
+        print(f"[FIREBASE_EVENT] conn_state={conn_state} message={message}", flush=True)
+        if not getattr(self, "user_id", None) or not getattr(self, "castle_id", None):
+            return
+        def _bg_update():
+            try:
+                import firebase_admin
+                from firebase_admin import credentials, firestore as fb_fs
+                sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
+                if not firebase_admin._apps and os.path.exists(sak):
+                    firebase_admin.initialize_app(credentials.Certificate(sak))
+                if firebase_admin._apps:
+                    db = fb_fs.client()
+                    ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
+                    from datetime import timezone
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    doc_data = {
+                        "bot_status.conn_state":   conn_state,
+                        "bot_status.conn_message": message,
+                        "bot_status.conn_updated": now_iso,
+                    }
+                    if conn_state in ("connected", "reconnecting", "disconnected", "waiting"):
+                        doc_data["bot_status.state"] = "running"
+                        if conn_state == "connected":
+                            doc_data["bot_status.last_run_time"] = now_iso
+                    elif conn_state == "idle":
+                        doc_data["bot_status.state"] = "idle"
+                    ref.update(doc_data)
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=_bg_update, daemon=True, name=f"bm-fb-{conn_state}").start()
+
+    def sync_castle_resources(self) -> None:
+        """تحديث بيانات موارد ومعلومات القلعة في بداية كل دورة في Firebase."""
+        if not self.conn or not getattr(self.conn, "init_data", None):
+            return
+
+        try:
+            lord_ctrl = self.conn.init_data.get("lordInfoCtrl", {})
+            base_info = lord_ctrl.get("base", {}) if isinstance(lord_ctrl, dict) else {}
+            fc_info   = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
+            city_ctrl = self.conn.init_data.get("cityCtrl", {})
+            reslist   = city_ctrl.get("reslist", {}) if isinstance(city_ctrl, dict) else {}
+
+            food    = int(float(reslist.get("1002", 0)))
+            wood    = int(float(reslist.get("1003", 0)))
+            iron    = int(float(reslist.get("1004", 0)))
+            diamond = int(float(reslist.get("1005", 0)))
+            gold    = int(base_info.get("gold", 0))
+            stamina = int(base_info.get("health", 100))
+            pos     = base_info.get("sourcePos", {}) if isinstance(base_info, dict) else {}
+            coords  = {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
+
+            from datetime import timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
+            res_data = {
+                "food":         food,
+                "wood":         wood,
+                "iron":         iron,
+                "diamond":      diamond,
+                "gold":         gold,
+                "stamina":      stamina,
+                "last_updated": now_iso,
+            }
+
+            cinfo_data = {
+                "lord_name":    str(base_info.get("nickName", self.email.split("@")[0])),
+                "lord_power":   int(fc_info.get("totalFc", 0)),
+                "castle_level": max(1, getattr(self.context, "castle_level", 1)),
+                "walls_level":  getattr(self.context, "walls_level", 0),
+                "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition", "")).isdigit() else 1,
+                "coordinates":  coords,
+                "uid":          str(base_info.get("uid", getattr(self.account, "user_id", ""))),
+            }
+
+            # طباعة السطر للـ api_server و stdout
+            print(f"[RESOURCE_SYNC] food={food} wood={wood} iron={iron} diamond={diamond} gold={gold} stamina={stamina} power={cinfo_data['lord_power']}", flush=True)
+
+            log.info(f"🌾 [تحديث موارد الدورة] قمح={food:,} خشب={wood:,} حديد={iron:,} زمرد={diamond:,} ذهب={gold:,} طاقة={stamina}")
+
+            # تحديث Firebase في الخلفية
+            def _bg_sync():
+                try:
+                    import firebase_admin
+                    from firebase_admin import credentials, firestore as fb_fs
+                    sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
+                    if not firebase_admin._apps and os.path.exists(sak):
+                        firebase_admin.initialize_app(credentials.Certificate(sak))
+                    if firebase_admin._apps:
+                        db = fb_fs.client()
+                        target_ref = None
+                        if getattr(self, "user_id", None) and getattr(self, "castle_id", None):
+                            target_ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
+                        else:
+                            for u in db.collection("users").stream():
+                                for c in db.collection("users").document(u.id).collection("castles").stream():
+                                    if c.to_dict().get("email", "").strip().lower() == self.email.strip().lower():
+                                        target_ref = db.collection("users").document(u.id).collection("castles").document(c.id)
+                                        break
+                                if target_ref:
+                                    break
+                        if target_ref:
+                            update_dict = {}
+                            for k, v in res_data.items():
+                                update_dict[f"resources.{k}"] = v
+                            for k, v in cinfo_data.items():
+                                update_dict[f"castle_info.{k}"] = v
+                            target_ref.update(update_dict)
+                            log.info(f"💾 [Firebase Sync] تم تحديث موارد وبيانات القلعة في بداية الدورة بنجاح ✅")
+                except Exception as ex:
+                    log.warning(f"⚠️ [Firebase Sync Warning]: {ex}")
+
+            import threading
+            threading.Thread(target=_bg_sync, daemon=True, name=f"res-sync-{self.email[:8]}").start()
+
+        except Exception as e:
+            log.warning(f"⚠️ تنبيه أثناء استخراج ومزامنة الموارد: {e}")
+
     def _build_default_config(self, user_cfg: Dict[str, Any]) -> Dict[str, Any]:
-        """بناء قاموس الإعدادات بدمج إعدادات المستخدم القادمة من Firebase مع المخطط الافتراضي."""
+        """بناء قاموس الإعدادات بدمج إعدادات المستخدم القادمة من Firebase مع المخطط الافتراضي.
+        ملاحظة: مفتاح 'schedule' محمي دائماً ويُؤخذ من DEFAULT_FIREBASE_USER_CONFIG فقط
+        ولا يمكن لـ Firebase تجاوزه أو تغييره."""
         cfg = copy.deepcopy(DEFAULT_FIREBASE_USER_CONFIG)
         for section, values in (user_cfg or {}).items():
             if section in cfg and isinstance(values, dict) and isinstance(cfg[section], dict):
-                cfg[section].update(values)
+                # ← نحذف 'schedule' من قيم Firebase لحماية جدول التنفيذ المحلي
+                firebase_values = {k: v for k, v in values.items() if k != 'schedule'}
+                cfg[section].update(firebase_values)
             else:
-                cfg[section] = values
+                # إذا كان القسم كاملاً قادماً من Firebase، نحافظ على schedule المحلي
+                if isinstance(values, dict):
+                    local_schedule = cfg.get(section, {}).get('schedule') if isinstance(cfg.get(section), dict) else None
+                    cfg[section] = {k: v for k, v in values.items() if k != 'schedule'}
+                    if local_schedule is not None:
+                        cfg[section]['schedule'] = local_schedule
+                else:
+                    cfg[section] = values
         return cfg
 
     def is_connection_alive(self) -> bool:
@@ -943,8 +1081,11 @@ class BotManager:
         log.warning(f"⏳ سيتوقف البوت مؤقتاً وينتظر {self.reconnect_wait_seconds} ثانية (دقيقة واحدة) لإفساح المجال ثم إعادة الدخول...")
         print("!" * 70 + "\n")
 
+        self._update_bot_conn_state("disconnected", f"تم تسجيل الدخول من جهاز آخر: {display_reason}")
+
         for attempt in range(1, self.max_reconnect_attempts + 1):
             log.info(f"⏳ [المحاولة {attempt}/{self.max_reconnect_attempts}] انتظار {self.reconnect_wait_seconds} ثانية (دقيقة واحدة)...")
+            self._update_bot_conn_state("reconnecting", f"جاري انتظار إعادة الاتصال (المحاولة {attempt}/{self.max_reconnect_attempts})...")
             wait_time = self.reconnect_wait_seconds
             while wait_time > 0:
                 if wait_time in (60, 45, 30, 15, 5):
@@ -969,7 +1110,12 @@ class BotManager:
                     await self.perform_comprehensive_query()
                 except Exception as e:
                     log.warning(f"⚠️ تنبيه أثناء تحديث بيانات الحساب بعد الدخول: {e}")
+                try:
+                    self.sync_castle_resources()
+                except Exception:
+                    pass
                 log.info("🎉 تم إعادة تسجيل الدخول بنجاح تام! جاهز لاستئناف المهام المتوقفة... ✅")
+                self._update_bot_conn_state("connected", "تمت إعادة الاتصال بالقلعة بنجاح")
                 return True
             else:
                 log.warning(f"⚠️ لم تنجح محاولة تسجيل الدخول #{attempt} (قد يكون المستخدم ما زال نشطاً داخل الحساب).")
@@ -1005,6 +1151,7 @@ class BotManager:
                 break
 
         log.info(f"✅ [تسجيل الدخول] تم الاتصال والمصافحة بنجاح 100%!")
+        self._update_bot_conn_state("connected", "تم الاتصال بالقلعة بنجاح 100%")
         return True
 
     # ─────────────────────────────────────────────────────────────────
@@ -1241,6 +1388,15 @@ class BotManager:
             ctx.shield_backpack_counts["3d"] = int(bp_ctrl.get("300703", {}).get("count", 0))
             for pid in (300401, 300402, 300403):
                 ctx.stamina_potions[pid] = int(bp_ctrl.get(str(pid), {}).get("count", 0))
+
+        # فحص حالة درع السلام النشط للقلعة
+        try:
+            s_task = ShieldTask(self.conn, self.config.get("shield", {}))
+            is_active, r_str, _ = s_task.is_shield_active()
+            ctx.shield_active = is_active
+            ctx.shield_status_str = r_str
+        except Exception:
+            pass
 
         # 10. فحص حالة المهارات التلقائية (lordSkillCtrl)
         try:
@@ -1486,7 +1642,8 @@ class BotManager:
         s_24h = ctx.shield_backpack_counts.get("24h", 0)
         s_3d = ctx.shield_backpack_counts.get("3d", 0)
         total_shields = s_8h + s_24h + s_3d
-        print(f"🛡️ دروع السلام في الحقيبة: {total_shields} درع (🛡️ {s_8h} درع 8س | 🛡️ {s_24h} درع 24س | 🛡️ {s_3d} درع 3أيام)")
+        shield_st = "🛡️ محمي بدرع سلام نشط" if ctx.shield_active else "⚠️ غير محمي (مكشوف بدون درع)"
+        print(f"🛡️ دروع السلام في الحقيبة: {total_shields} درع (🛡️ {s_8h} درع 8س | 🛡️ {s_24h} درع 24س | 🛡️ {s_3d} درع 3أيام) | الحالة: {shield_st}")
         print("─" * 72)
         p10 = ctx.stamina_potions.get(300401, 0)
         p50 = ctx.stamina_potions.get(300402, 0)
@@ -1948,7 +2105,10 @@ class BotManager:
         res = await task.run()
 
         if res.success:
-            log.info(f"🎉 نتيجة درع السلام: {res.message}")
+            if res.data.get("status") == "already_active":
+                log.info(f"🛡️ درع السلام: {res.message}")
+            else:
+                log.info(f"🎉 نتيجة درع السلام: {res.message}")
         else:
             log.warning(f"⚠️ تنبيه في درع السلام: {res.message}")
 
@@ -2095,8 +2255,10 @@ class BotManager:
             return {"skipped": True, "message": msg}
 
         res_list = fountain_cfg.get("resources", ["food", "wood", "iron", "diamond"])
-        allow_gold = bool(fountain_cfg.get("allow_gold", fountain_cfg.get("use_gold", False)))
         gold_times = int(fountain_cfg.get("gold_times", 0))
+        allow_gold = bool(fountain_cfg.get("allow_gold", fountain_cfg.get("use_gold", False))) and gold_times > 0
+        if not allow_gold:
+            gold_times = 0
 
         res_display = "، ".join(res_list) if isinstance(res_list, list) else str(res_list)
         log.info(f"⛲ بدء مهمة نافورة الأمنيات (الموارد: [{res_display}] | السماح بالشراء بالذهب: {'نعم' if allow_gold else 'لا'} | عدد مرات الذهب: {gold_times})...")
@@ -2367,8 +2529,20 @@ class BotManager:
                 else:
                     log.warning(f"⚠️ تنبيه أثناء الاستعلام الشامل: {e}")
 
+            # 2.5 تحديث بيانات وموارد القلعة في بداية الدورة مباشرة
+            try:
+                self.sync_castle_resources()
+            except Exception as e:
+                log.warning(f"⚠️ تنبيه أثناء تحديث موارد القلعة في بداية الدورة: {e}")
+
             # 3. تنفيذ سلسلة المهام
             pipeline_results = await self.execute_task_pipeline()
+
+            # 4. تحديث الموارد في نهاية الدورة أيضاً (لحفظ نواتج الحصاد والجمع)
+            try:
+                self.sync_castle_resources()
+            except Exception:
+                pass
 
             print("\n" + "═" * 72)
             print("🏁 اكتمال تنفيذ الدورة بنجاح من قبل مدير البوت!")
@@ -2388,6 +2562,8 @@ class BotManager:
             if self.conn:
                 await self.conn.close()
                 log.info(f"🔒 تم إغلاق اتصال الحساب {self.email} بأمان.")
+            if not getattr(self, "is_loop", False):
+                self._update_bot_conn_state("idle", "انتهت الدورة بنجاح")
 
     # للتوافق مع الكود القديم
     async def run(self) -> Dict[str, Any]:
@@ -2413,6 +2589,7 @@ class BotManager:
             python bot_manager.py --email "..." --loop
             python bot_manager.py --email "..." --loop --loop-interval 30
         """
+        self.is_loop = True
         iteration     = 0
         interval_secs = loop_interval_minutes * 60
 
@@ -2426,6 +2603,7 @@ class BotManager:
             print("\n" + "═" * 72)
             log.info(f"🔄 دورة رقم #{iteration} — بدأت {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             print("═" * 72)
+            self._update_bot_conn_state("connected", f"بدء دورة رقم #{iteration}")
 
             try:
                 await self.run_once()
@@ -2441,10 +2619,12 @@ class BotManager:
 
             next_run = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
             log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run}")
+            self._update_bot_conn_state("waiting", f"بانتظار الدورة القادمة الساعة {next_run}")
 
             if remaining > 0:
                 log.info(f"💤 انتظار {remaining/60:.1f} دقيقة...")
                 await asyncio.sleep(remaining)
+
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -2843,7 +3023,9 @@ if __name__ == "__main__":
                 target_email,
                 cfg,
                 reconnect_wait_seconds=args.reconnect_wait,
-                ignore_schedule=False,  # Firebase دائماً يتجاهل الجدول الزمني ويعمل حسب لوحة التحكم
+                ignore_schedule=True,  # Firebase دائماً يتجاهل الجدول الزمني ويعمل فورياً حسب خيارات المستخدم
+                user_id=getattr(args, "firebase_user_id", None),
+                castle_id=getattr(args, "firebase_castle_id", None),
             )
             if args.loop:
                 asyncio.run(manager.run_loop(loop_interval_minutes=args.loop_interval))
@@ -3076,7 +3258,9 @@ if __name__ == "__main__":
         target_email,
         cfg,
         reconnect_wait_seconds=args.reconnect_wait,
-        ignore_schedule=args.ignore_schedule
+        ignore_schedule=args.ignore_schedule,
+        user_id=getattr(args, "firebase_user_id", None),
+        castle_id=getattr(args, "firebase_castle_id", None),
     )
 
     # اختيار وضع التشغيل

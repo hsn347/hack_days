@@ -95,7 +95,7 @@ function Stepper({
   return (
     <div
       className={clsx(
-        'inline-flex items-center h-6 rounded-md bg-black/60 border border-white/10 overflow-hidden transition-all duration-150 select-none shadow-sm shrink-0',
+        'task-stepper inline-flex items-center bg-black/60 shadow-sm border border-white/10 rounded-md h-6 overflow-hidden transition-all duration-150 select-none shrink-0',
         isFocused
           ? hasError
             ? 'border-rose-500 ring-1 ring-rose-500/40'
@@ -109,7 +109,7 @@ function Stepper({
         type="button"
         disabled={value <= min}
         onClick={() => handleStep(-1)}
-        className="w-5 h-6 flex items-center justify-center bg-white/[0.03] hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent text-gray-300 hover:text-emerald-300 transition-colors cursor-pointer border-r border-white/5 shrink-0"
+        className="task-stepper-btn flex justify-center items-center bg-white/[0.03] hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:hover:bg-transparent disabled:opacity-20 border-white/5 border-r w-5 h-6 text-gray-300 hover:text-emerald-300 transition-colors cursor-pointer disabled:cursor-not-allowed shrink-0"
         title={`تقليل (${min})`}
       >
         <Minus size={10} strokeWidth={2.5} />
@@ -119,7 +119,7 @@ function Stepper({
       <div
         onClick={() => inputRef.current?.focus()}
         className={clsx(
-          'relative flex items-center justify-center h-6 px-0.5 cursor-text transition-colors shrink-0',
+          'task-stepper-pod relative flex justify-center items-center px-0.5 h-6 transition-colors cursor-text shrink-0',
           formatLabel ? 'w-auto min-w-[50px] px-1.5' : 'w-7 min-w-[28px] max-w-[28px]',
           isFocused ? 'bg-black/90' : 'bg-black/30 hover:bg-black/50'
         )}
@@ -176,12 +176,12 @@ function Stepper({
             }
           }}
           style={{ width: '100%', minWidth: 0 }}
-          className="text-center bg-transparent text-emerald-400 font-bold text-xs font-mono outline-none px-0 selection:bg-emerald-500/40 cursor-text"
+          className="task-stepper-input bg-transparent selection:bg-emerald-500/40 px-0 outline-none font-mono font-bold text-emerald-400 text-xs text-center cursor-text"
         />
 
         {/* Formatted label overlay when blurred */}
         {!isFocused && formatLabel && (
-          <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-emerald-400 pointer-events-none whitespace-nowrap px-1">
+          <span className="task-stepper-label absolute inset-0 flex justify-center items-center px-1 font-bold text-[11px] text-emerald-400 whitespace-nowrap pointer-events-none">
             {formatLabel(value)}
           </span>
         )}
@@ -192,7 +192,7 @@ function Stepper({
         type="button"
         disabled={value >= max}
         onClick={() => handleStep(1)}
-        className="w-5 h-6 flex items-center justify-center bg-white/[0.03] hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent text-gray-300 hover:text-emerald-300 transition-colors cursor-pointer border-l border-white/5 shrink-0"
+        className="task-stepper-btn flex justify-center items-center bg-white/[0.03] hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:hover:bg-transparent disabled:opacity-20 border-white/5 border-l w-5 h-6 text-gray-300 hover:text-emerald-300 transition-colors cursor-pointer disabled:cursor-not-allowed shrink-0"
         title={`زيادة (${max})`}
       >
         <Plus size={10} strokeWidth={2.5} />
@@ -207,6 +207,7 @@ function ResCard({ img, label, selected, onClick }: { img: string; label: string
     <button
       type="button"
       onClick={onClick}
+      className={clsx('task-res-card', selected ? 'selected' : 'unselected')}
       style={{
         flex: '1 1 0',
         minWidth: '68px',
@@ -239,11 +240,14 @@ function TaskRow({
   children?: React.ReactNode; comingSoon?: boolean;
 }) {
   return (
-    <div style={{
-      background: enabled && !comingSoon ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
-      border: enabled && !comingSoon ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-      borderRadius: '12px', overflow: 'hidden',
-    }}>
+    <div
+      className={clsx('task-row-card', enabled && !comingSoon ? 'enabled' : 'disabled', comingSoon && 'coming-soon')}
+      style={{
+        background: enabled && !comingSoon ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+        border: enabled && !comingSoon ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '12px', overflow: 'hidden',
+      }}
+    >
       <div
         onClick={() => !comingSoon && onToggle(!enabled)}
         style={{
@@ -252,7 +256,7 @@ function TaskRow({
           cursor: comingSoon ? 'default' : 'pointer',
           userSelect: 'none',
         }}
-        className="hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors"
+        className="task-row-header hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors"
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
           {img ? (
@@ -263,13 +267,13 @@ function TaskRow({
             <span style={{ fontSize: '18px', flexShrink: 0 }}>{emoji}</span>
           ) : null}
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: comingSoon ? '#6b7280' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{label}</div>
+            <div className="task-row-label" style={{ color: comingSoon ? '#6b7280' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{label}</div>
           </div>
         </div>
         <Toggle value={enabled} onChange={onToggle} disabled={comingSoon} size="sm" />
       </div>
       {children && enabled && !comingSoon && (
-        <div style={{ padding: '0 12px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="task-row-children" style={{ padding: '0 12px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ paddingTop: '10px' }}>{children}</div>
         </div>
       )}
@@ -279,7 +283,7 @@ function TaskRow({
 
 /** عنوان قسم */
 function SectionLabel({ text }: { text: string }) {
-  return <div style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>{text}</div>
+  return <div className="task-section-label" style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>{text}</div>
 }
 
 // ─── Resource definitions ────────────────────────────────────────────────────
@@ -305,6 +309,14 @@ const WATERMILL_RESOURCES = [
   { key: 'iron',    img: '/images/watermill/uretimdemir.png',  label: 'الحديد' },
   { key: 'diamond', img: '/images/watermill/uretimkuvars.png', label: 'ألماس' },
 ]
+
+const FOUNTAIN_RESOURCES = [
+  { key: 'food',    label: 'القمح',   img: '/images/fountain/food.png' },
+  { key: 'wood',    label: 'الخشب',   img: '/images/fountain/wood.png' },
+  { key: 'iron',    label: 'الحديد',  img: '/images/fountain/iron.png' },
+  { key: 'coal',    label: 'الفحم',   img: '/images/fountain/coal.png' },
+  { key: 'diamond', label: 'ألماس',   img: '/images/fountain/diamond.png' },
+] as const
 
 // أنواع القوات والتدريب العسكري
 const BARRACKS_TYPES = [
@@ -452,6 +464,9 @@ export function TaskTabContent({
   const [draftConfig, setDraftConfig] = useState<CastleConfig>(() =>
     JSON.parse(JSON.stringify(castle.config))
   )
+  const [savedConfig, setSavedConfig] = useState<CastleConfig>(() =>
+    JSON.parse(JSON.stringify(castle.config))
+  )
 
   const lastSavedConfigRef = useRef<CastleConfig>(castle.config)
   const currentCastleIdRef = useRef<string>(castle.id)
@@ -470,21 +485,25 @@ export function TaskTabContent({
     if (currentCastleIdRef.current !== castle.id) {
       currentCastleIdRef.current = castle.id
       lastSavedConfigRef.current = castle.config
-      setDraftConfig(JSON.parse(JSON.stringify(castle.config)))
+      const fresh = JSON.parse(JSON.stringify(castle.config))
+      setSavedConfig(fresh)
+      setDraftConfig(fresh)
       setCoordsError(false)
       return
     }
     if (JSON.stringify(lastSavedConfigRef.current) !== JSON.stringify(castle.config)) {
       lastSavedConfigRef.current = castle.config
-      setDraftConfig(JSON.parse(JSON.stringify(castle.config)))
+      const fresh = JSON.parse(JSON.stringify(castle.config))
+      setSavedConfig(fresh)
+      setDraftConfig(fresh)
     }
   }, [castle.id, castle.config])
 
   const updateConfig = useUpdateCastleConfig(userId, castle.id)
 
   const changesCount = useMemo(() => {
-    return countConfigChanges(lastSavedConfigRef.current, draftConfig)
-  }, [draftConfig])
+    return countConfigChanges(savedConfig, draftConfig)
+  }, [savedConfig, draftConfig])
 
   function update<K extends keyof CastleConfig>(key: K, patch: Partial<CastleConfig[K]>) {
     setDraftConfig(prev => {
@@ -553,29 +572,27 @@ export function TaskTabContent({
 
     const changedSections: Partial<CastleConfig> = {}
     for (const key of Object.keys(draftConfig) as (keyof CastleConfig)[]) {
-      if (JSON.stringify(draftConfig[key]) !== JSON.stringify(lastSavedConfigRef.current[key])) {
+      if (JSON.stringify(draftConfig[key]) !== JSON.stringify(savedConfig[key])) {
         ;(changedSections as Record<string, unknown>)[key] = draftConfig[key]
       }
     }
 
-    const origGg = (lastSavedConfigRef.current as unknown as { gold_gather?: unknown }).gold_gather
+    const origGg = (savedConfig as unknown as { gold_gather?: unknown }).gold_gather
     const draftGg = (draftConfig as unknown as { gold_gather?: unknown }).gold_gather
     if (JSON.stringify(draftGg) !== JSON.stringify(origGg)) {
       ;(changedSections as Record<string, unknown>).gold_gather = draftGg
     }
 
-    const count = changesCount
-
     if (isBatchMode && onBatchSave) {
       try {
         setIsSavingBatch(true)
         await onBatchSave(changedSections)
-        lastSavedConfigRef.current = JSON.parse(JSON.stringify(draftConfig))
-        toast.success(`✅ تم تطبيق وحفظ ${count} إعدادات جماعية على ${batchTargetCount} حسابات بنجاح!`, {
-          duration: 4000,
-        })
+        const updated = JSON.parse(JSON.stringify(draftConfig))
+        lastSavedConfigRef.current = updated
+        setSavedConfig(updated)
+        toast.success('تم تطبيق الإعدادات بنجاح')
       } catch (err) {
-        toast.error('❌ فشل حفظ الإعدادات الجماعية: ' + (err instanceof Error ? err.message : 'خطأ غير معروف'))
+        toast.error('فشل حفظ الإعدادات: ' + (err instanceof Error ? err.message : 'خطأ غير معروف'))
       } finally {
         setIsSavingBatch(false)
       }
@@ -584,19 +601,21 @@ export function TaskTabContent({
 
     updateConfig.mutate(changedSections, {
       onSuccess: () => {
-        lastSavedConfigRef.current = JSON.parse(JSON.stringify(draftConfig))
-        toast.success(`✅ تم حفظ ${count} تغييرات بنجاح`)
+        const updated = JSON.parse(JSON.stringify(draftConfig))
+        lastSavedConfigRef.current = updated
+        setSavedConfig(updated)
+        toast.success('تم حفظ التغييرات بنجاح')
       },
       onError: (err) => {
-        toast.error('❌ فشل حفظ التغييرات: ' + (err instanceof Error ? err.message : 'خطأ غير معروف'))
+        toast.error('فشل حفظ التغييرات: ' + (err instanceof Error ? err.message : 'خطأ غير معروف'))
       },
     })
   }
 
   const handleCancel = () => {
     if (changesCount === 0) return
-    setDraftConfig(JSON.parse(JSON.stringify(lastSavedConfigRef.current)))
-    toast('تم إلغاء التغييرات واستعادة الإعدادات الأصلية', { icon: '↩️' })
+    setDraftConfig(JSON.parse(JSON.stringify(savedConfig)))
+    toast.success('تم إلغاء التغييرات')
   }
 
   const cfg = draftConfig
@@ -620,12 +639,12 @@ export function TaskTabContent({
             borderRadius: '14px', padding: '12px 14px',
             cursor: 'pointer', userSelect: 'none',
           }}
-          className="hover:bg-white/[0.04] transition-colors"
+          className={clsx('task-header-card transition-colors', g.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/images/gather/mtahil.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>جمع الموارد</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>جمع الموارد</div>
             </div>
           </div>
           <Toggle value={g.enabled} onChange={v => update('march_manager', { gather: { ...g, enabled: v } })} />
@@ -697,12 +716,12 @@ export function TaskTabContent({
             borderRadius: '14px', padding: '12px 14px',
             cursor: 'pointer', userSelect: 'none',
           }}
-          className="hover:bg-white/[0.04] transition-colors"
+          className={clsx('task-header-card transition-colors', tr.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>⚔️</span>
             <div>
-              <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>التدريب العسكري</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>التدريب العسكري</div>
             </div>
           </div>
           <Toggle value={tr.enabled} onChange={toggle('train')} />
@@ -715,7 +734,7 @@ export function TaskTabContent({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {activeList.map((key, idx) => {
                 return (
-                  <div key={key} style={{
+                  <div key={key} className="task-barracks-card" style={{
                     background: 'rgba(255,255,255,0.04)',
                     border: '1px solid rgba(255,255,255,0.10)',
                     borderRadius: '14px', padding: '14px',
@@ -746,6 +765,7 @@ export function TaskTabContent({
                             key={b.key}
                             type="button"
                             disabled={isUsedElsewhere}
+                            className={clsx('task-troop-btn', isSelected ? 'selected' : 'unselected', isUsedElsewhere && 'used-elsewhere')}
                             onClick={() => {
                               if (isUsedElsewhere) return
                               const newLevels = { ...tr.levels, [key]: 0, [b.key]: tr.levels[key] || 1 }
@@ -846,10 +866,12 @@ export function TaskTabContent({
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '14px', padding: '12px 14px',
-        }}>
+        }}
+        className="task-header-card disabled"
+        >
           <span style={{ fontSize: '24px' }}>🗡️</span>
           <div>
-            <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>الهجوم</div>
+            <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>الهجوم</div>
           </div>
         </div>
 
@@ -861,6 +883,7 @@ export function TaskTabContent({
               <button
                 key={f}
                 type="button"
+                className={clsx('task-formation-btn', sharedFormation === f ? 'selected' : 'unselected')}
                 onClick={() => setSharedFormation(f)}
                 style={{
                   flex: '1 1 0', aspectRatio: '1',
@@ -896,7 +919,7 @@ export function TaskTabContent({
             const isActive = combatChoice === opt.key
             const configData = opt.key === 'elf' ? mm.elf : opt.key === 'invaders' ? mm.invaders : mm.rebels
             return (
-              <div key={opt.key} style={{
+              <div key={opt.key} className={clsx('task-sub-card', isActive ? 'enabled' : 'disabled')} style={{
                 background: isActive ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
                 border: isActive ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(255,255,255,0.08)',
                 borderRadius: '12px', padding: '12px 14px',
@@ -958,6 +981,7 @@ export function TaskTabContent({
                   <button
                     key={opt.s}
                     type="button"
+                    className={clsx('task-duration-btn', mm.ruins.explore_time === opt.s ? 'selected' : 'unselected')}
                     onClick={() => update('march_manager', { enabled: true, ruins: { ...mm.ruins, explore_time: opt.s } })}
                     style={{
                       flex: '1 1 0', padding: '8px 4px', borderRadius: '10px',
@@ -1046,12 +1070,12 @@ export function TaskTabContent({
             borderRadius: '14px', padding: '12px 14px',
             cursor: 'pointer', userSelect: 'none',
           }}
-          className="hover:bg-white/[0.04] transition-colors"
+          className={clsx('task-header-card transition-colors', wm.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/images/watermill/uretimbonusust.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>مكافأة الطاحونة</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>مكافأة الطاحونة</div>
             </div>
           </div>
           <Toggle value={wm.enabled} onChange={toggle('watermill')} />
@@ -1122,12 +1146,12 @@ export function TaskTabContent({
             borderRadius: '14px', padding: '12px 14px',
             cursor: 'pointer', userSelect: 'none',
           }}
-          className="hover:bg-white/[0.04] transition-colors"
+          className={clsx('task-header-card transition-colors', tr.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>🔗</span>
             <div>
-              <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>مساعدة الموارد</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>مساعدة الموارد</div>
             </div>
           </div>
           <Toggle
@@ -1160,7 +1184,7 @@ export function TaskTabContent({
               <SectionLabel text="الموقع" />
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>X</div>
+                  <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>X</div>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1186,7 +1210,7 @@ export function TaskTabContent({
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>Y</div>
+                  <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>Y</div>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1279,7 +1303,7 @@ export function TaskTabContent({
             cursor: 'pointer',
             userSelect: 'none',
           }}
-          className="hover:opacity-95 transition-all"
+          className={clsx('task-prestige-master-banner transition-all', pr.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '220px' }}>
@@ -1303,7 +1327,7 @@ export function TaskTabContent({
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ color: '#fef08a', fontWeight: 700, fontSize: '16px' }}>مهام الهيبة</span>
+                  <span className="task-prestige-title" style={{ color: '#fef08a', fontWeight: 700, fontSize: '16px' }}>مهام الهيبة</span>
                   {pr.enabled ? (
                     <span style={{
                       padding: '2px 8px', borderRadius: '9999px',
@@ -1375,6 +1399,7 @@ export function TaskTabContent({
               return (
                 <div
                   key={st.key}
+                  className={clsx('task-subtask-row', isSubEnabled ? 'enabled' : 'disabled')}
                   style={{
                     background: isSubEnabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.025)',
                     border: isSubEnabled ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(255,255,255,0.07)',
@@ -1499,7 +1524,7 @@ export function TaskTabContent({
                     min={0}
                     max={10}
                     onChange={v => update('alliance', { gold_donations: v })}
-                    formatLabel={v => v === 0 ? '0 (مجاني)' : `${v} ذهب`}
+                    
                   />
                 </div>
               </div>
@@ -1517,6 +1542,7 @@ export function TaskTabContent({
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {PETS.map(p => (
                 <button key={p.name} type="button"
+                  className={clsx('task-pet-btn', cfg.pet_patrol.pet === p.name ? 'selected' : 'unselected')}
                   onClick={() => update('pet_patrol', { pet: p.name })}
                   style={{
                     padding: '4px 8px', borderRadius: '6px', fontFamily: 'inherit',
@@ -1557,6 +1583,7 @@ export function TaskTabContent({
                 />
                 <select
                   value={currentCount}
+                  className="task-stamina-select"
                   onChange={e => update('stamina', { gold_buys: Number(e.target.value) })}
                   style={{
                     flex: 1,
@@ -1617,6 +1644,7 @@ export function TaskTabContent({
                 <button
                   key={opt.d}
                   type="button"
+                  className={clsx('task-savings-btn', isSelected ? 'selected' : 'unselected')}
                   onClick={() => update('savings_bank', { days: opt.d })}
                   style={{
                     flex: 1,
@@ -1682,6 +1710,7 @@ export function TaskTabContent({
                       <button
                         key={tab.id}
                         type="button"
+                        className={clsx('task-strategy-tab', isActive && 'active')}
                         onClick={() => setTacticsCategory(tab.id)}
                         style={{
                           background: 'none',
@@ -1719,6 +1748,7 @@ export function TaskTabContent({
                       <button
                         key={item.id}
                         type="button"
+                        className={clsx('task-strategy-card', isSelected ? 'selected' : 'unselected')}
                         onClick={() => update('tactics_hall', { tactic: item.name_ar })}
                         style={{
                           padding: '16px 12px',
@@ -1775,6 +1805,255 @@ export function TaskTabContent({
           )
         })()}
 
+        {/* نافورة الأمنيات الملكية وبئر الحظ (Trevi Fountain) */}
+        {(() => {
+          const ft = cfg.fountain || {
+            enabled: false,
+            resources: ['food', 'wood', 'iron', 'diamond'],
+            allow_gold: false,
+            gold_times: 0,
+          }
+          const selectedRes: string[] = Array.isArray(ft.resources) ? ft.resources : []
+          const activeResCount = FOUNTAIN_RESOURCES.filter(r => selectedRes.includes(r.key)).length
+
+          const toggleRes = (key: string) => {
+            const next = selectedRes.includes(key)
+              ? selectedRes.filter(k => k !== key)
+              : [...selectedRes, key]
+            update('fountain', { resources: next })
+          }
+
+          const selectAll = () => {
+            update('fountain', { resources: FOUNTAIN_RESOURCES.map(r => r.key) })
+          }
+
+          const deselectAll = () => {
+            update('fountain', { resources: [] })
+          }
+
+          return (
+            <TaskRow
+              img="/images/fountain/fountain.png"
+              label="نافورة الأمنيات الملكية وبئر الحظ"
+              enabled={ft.enabled}
+              onToggle={toggle('fountain')}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '4px' }}>
+                {/* ── قسم اختيار الموارد الخمسة للتمني ── */}
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#d1fae5', fontSize: '13px', fontWeight: 600 }}>الموارد المحددة</span>
+                      <span style={{
+                        padding: '1px 8px',
+                        borderRadius: '9999px',
+                        background: activeResCount > 0 ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.15)',
+                        border: activeResCount > 0 ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(239,68,68,0.30)',
+                        color: activeResCount > 0 ? '#86efac' : '#fca5a5',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                      }}>
+                        {activeResCount} من {FOUNTAIN_RESOURCES.length} موارد
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={selectAll}
+                        style={{
+                          background: 'rgba(16,185,129,0.10)',
+                          border: '1px solid rgba(16,185,129,0.25)',
+                          color: '#6ee7b7',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        تحديد الكل
+                      </button>
+                      <button
+                        type="button"
+                        onClick={deselectAll}
+                        style={{
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          color: '#9ca3af',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        إلغاء التحديد
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* شبكة بطاقات الموارد الخمسة */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                    {FOUNTAIN_RESOURCES.map(r => {
+                      const isSelected = selectedRes.includes(r.key)
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          className={clsx('task-fountain-card', isSelected ? 'selected' : 'unselected')}
+                          onClick={() => toggleRes(r.key)}
+                          style={{
+                            padding: '12px 6px',
+                            borderRadius: '12px',
+                            border: isSelected ? '1.5px solid #f59e0b' : '1px solid rgba(255,255,255,0.08)',
+                            background: isSelected ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
+                            boxShadow: isSelected ? '0 0 12px rgba(245,158,11,0.2)' : 'none',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            transition: 'all 0.15s ease',
+                            position: 'relative',
+                          }}
+                          onMouseEnter={e => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                            }
+                          }}
+                        >
+                          <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '8px',
+                            background: isSelected ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.30)',
+                            border: isSelected ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease',
+                          }}>
+                            <img
+                              src={r.img}
+                              alt={r.label}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                objectFit: 'contain',
+                                filter: isSelected ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(25%) opacity(0.8)',
+                                transition: 'filter 0.15s ease',
+                              }}
+                              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            />
+                          </div>
+                          <span style={{
+                            fontSize: '12px',
+                            color: isSelected ? '#fbbf24' : '#9ca3af',
+                            fontWeight: isSelected ? 600 : 500,
+                          }}>
+                            {r.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* ── قسم الشراء بالذهب (توقل زيادة ونقصان: 0 = ممنوع الذهب، رقم > 0 = عدد المرات المسموح بها) ── */}
+                {(() => {
+                  const currentGoldTimes = ft.allow_gold === false ? 0 : Math.max(0, Number(ft.gold_times) || 0)
+                  const isGoldAllowed = currentGoldTimes > 0
+
+                  const setGoldCount = (val: number) => {
+                    const count = Math.max(0, val)
+                    update('fountain', {
+                      gold_times: count,
+                      allow_gold: count > 0,
+                    })
+                  }
+
+                  return (
+                    <div style={{
+                      background: isGoldAllowed ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.03)',
+                      border: isGoldAllowed ? '1px solid rgba(234,179,8,0.28)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                      transition: 'all 0.2s ease',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <img
+                          src="/images/fountain/gold.png"
+                          alt="Gold"
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            objectFit: 'contain',
+                            filter: isGoldAllowed ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(40%) opacity(0.7)',
+                          }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: isGoldAllowed ? '#fbbf24' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
+                              السماح بالشراء بالذهب
+                            </span>
+                            <span style={{
+                              padding: '1px 8px',
+                              borderRadius: '9999px',
+                              background: isGoldAllowed ? 'rgba(234,179,8,0.18)' : 'rgba(255,255,255,0.06)',
+                              border: isGoldAllowed ? '1px solid rgba(234,179,8,0.40)' : '1px solid rgba(255,255,255,0.10)',
+                              color: isGoldAllowed ? '#fef08a' : '#9ca3af',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                            }}>
+                              {isGoldAllowed ? `${currentGoldTimes} مرة لكل مورد` : 'ممنوع الذهب (0)'}
+                            </span>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      {/* محدد الزيادة والنقصان (+ / -) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Stepper
+                          value={currentGoldTimes}
+                          min={0}
+                          max={50}
+                          onChange={setGoldCount}
+                        />
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </TaskRow>
+          )
+        })()}
+
         {/* ورشة المواد (Material Workshop) */}
         <TaskRow
           img="/images/daily/malzeme_atolyesi.png"
@@ -1804,6 +2083,7 @@ export function TaskTabContent({
                 <button
                   key={m.key}
                   type="button"
+                  className={clsx('task-workshop-card', isSelected ? 'selected' : 'unselected')}
                   onClick={handleToggle}
                   style={{
                     flex: 1,
@@ -1884,6 +2164,7 @@ export function TaskTabContent({
             <div>
               <select
                 value={sh.duration || '8h'}
+                className="task-shield-select"
                 onChange={e => update('shield', { duration: e.target.value as typeof sh.duration })}
                 style={{
                   width: '100%',
@@ -2115,7 +2396,7 @@ export function TaskTabContent({
 
               {/* شبكة المباني الـ 6 التفاعلية */}
               {bld.upgrade_support_buildings && (
-                <div style={{
+                <div className="task-support-bld-box" style={{
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
@@ -2201,6 +2482,7 @@ export function TaskTabContent({
                         <button
                           key={b.key}
                           type="button"
+                          className={clsx('task-support-bld-card', isSelected ? 'selected' : 'unselected')}
                           onClick={() => toggleTargetBuilding(b.key)}
                           style={{
                             display: 'flex',
@@ -2454,6 +2736,7 @@ export function TaskTabContent({
                       <button
                         key={item.id}
                         type="button"
+                        className={clsx('task-dungeon-product', isSelected ? 'selected' : 'unselected')}
                         onClick={() => toggleProduct(item.id)}
                         style={{
                           display: 'flex',
@@ -2595,12 +2878,12 @@ export function TaskTabContent({
             borderRadius: '14px', padding: '12px 14px',
             cursor: 'pointer', userSelect: 'none',
           }}
-          className="hover:bg-white/[0.04] transition-colors"
+          className={clsx('task-header-card transition-colors', gg.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/images/gather/altin.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>البحث عن الذهب</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>البحث عن الذهب</div>
             </div>
           </div>
           <Toggle value={gg.enabled} onChange={v => updateGg({ enabled: v })} />
@@ -2611,7 +2894,7 @@ export function TaskTabContent({
             {/* Locations */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {gg.locations.map((loc, i) => (
-                <div key={i} style={{
+                <div key={i} className="task-gold-location-card" style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.10)',
                   borderRadius: '14px', padding: '14px',
@@ -2628,7 +2911,7 @@ export function TaskTabContent({
                   </div>
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>X</div>
+                      <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>X</div>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -2642,7 +2925,7 @@ export function TaskTabContent({
                       />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>Y</div>
+                      <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>Y</div>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -2702,7 +2985,7 @@ export function TaskTabContent({
   )
 
   return (
-    <div className="relative space-y-5 w-full">
+    <div className="task-tab-content-root relative space-y-5 w-full">
       <TaskTabs
         active={currentTab}
         onChange={handleTabChange}
@@ -2711,115 +2994,57 @@ export function TaskTabContent({
 
       {renderTabContent()}
 
-      {/* Fixed Full-Page Bottom Bar via createPortal to body */}
-      {typeof document !== 'undefined' && createPortal(
+      {/* Floating Save Widget on the Right (only when there are changes) */}
+      {changesCount > 0 && typeof document !== 'undefined' && createPortal(
         <div
-          className="bottom-0 z-[999] fixed bg-gray-950/95 shadow-[0_-10px_40px_rgba(0,0,0,0.85)] backdrop-blur-2xl px-4 sm:px-8 py-3.5 border-white/10 border-t transition-all duration-300 start-0 end-0 md:start-[var(--sidebar-w)]"
-          style={{ minHeight: '64px' }}
+          className="fixed bottom-6 z-[999] right-4 sm:right-6 md:right-8 animate-in fade-in slide-in-from-bottom-3 duration-200"
+          style={{ maxWidth: 'calc(100vw - 32px)' }}
         >
-          <div className="flex flex-wrap justify-between items-center gap-4 mx-auto w-full max-w-7xl">
-            {/* Left/Start side: Castle Info & Status */}
-            {isBatchMode ? (
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex flex-shrink-0 justify-center items-center bg-primary-900/60 border border-primary-700/40 rounded-xl w-9 h-9 font-bold text-primary-400 text-sm">
-                  <SlidersHorizontal size={16} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-white text-sm truncate">
-                      إعدادات جماعية ({batchTargetCount} حسابات)
-                    </span>
-                    {changesCount > 0 ? (
-                      <span className="flex items-center gap-1.5 bg-amber-500/20 px-2.5 py-0.5 border border-amber-500/40 rounded-full font-semibold text-amber-300 text-xs animate-pulse">
-                        <span className="bg-amber-400 rounded-full w-1.5 h-1.5" />
-                        {changesCount} تعديل جماعي غير محفوظ
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-0.5 border border-emerald-500/20 rounded-full font-medium text-emerald-400 text-xs">
-                        <Check size={12} />
-                        الإعدادات الجماعية مطبقة ومحفوظة
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-400 truncate">
-                    {changesCount > 0
-                      ? `اضغط زر التطبيق لحفظ هذه التغييرات فوراً على ${batchTargetCount} حسابات نشطة`
-                      : `هذه الإعدادات متطابقة مع التعديلات المحفوظة`}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex flex-shrink-0 justify-center items-center bg-primary-900/60 border border-primary-700/40 rounded-xl w-9 h-9 font-bold text-primary-400 text-sm">
-                  {castle.castle_info?.lord_name?.[0]?.toUpperCase() || '🏰'}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-white text-sm truncate">
-                      {castle.castle_info?.lord_name || 'قلعة'}
-                    </span>
-                    {changesCount > 0 ? (
-                      <span className="flex items-center gap-1.5 bg-amber-500/20 px-2.5 py-0.5 border border-amber-500/40 rounded-full font-semibold text-amber-300 text-xs animate-pulse">
-                        <span className="bg-amber-400 rounded-full w-1.5 h-1.5" />
-                        {changesCount} تعديل غير محفوظ
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-0.5 border border-emerald-500/20 rounded-full font-medium text-emerald-400 text-xs">
-                        <Check size={12} />
-                        جميع الإعدادات محفوظة
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-400 truncate">
-                    {changesCount > 0
-                      ? 'لديك تعديلات معلّقة — اضغط حفظ التغييرات لتطبيقها على البوت، أو إلغاء للرجوع'
-                      : `سيرفر #${castle.castle_info?.server_id || '—'} • ${castle.email}`}
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="task-floating-save-bar flex items-center gap-3 bg-gray-900/95 border border-emerald-500/30 shadow-[0_10px_35px_rgba(0,0,0,0.7)] backdrop-blur-xl px-3.5 py-2 rounded-xl text-white">
+            {/* Minimal counter */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="bg-amber-400 rounded-full w-2 h-2 shrink-0 animate-pulse" />
+              <span className="font-semibold text-gray-200">
+                {isBatchMode
+                  ? (batchTargetCount > 0 ? `${changesCount} تعديل • ${batchTargetCount} حساب` : `${changesCount} تعديل (حدد حسابات)`)
+                  : `${changesCount} تعديل غير محفوظ`}
+              </span>
+            </div>
 
-            {/* Right/End side: Action Buttons */}
-            <div className="flex items-center gap-3 ms-auto">
-              {/* Cancel Button */}
+            {/* Subtle Divider */}
+            <div className="bg-white/10 w-px h-4" />
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                disabled={changesCount === 0 || isPending}
+                disabled={isPending}
                 onClick={handleCancel}
-                className={clsx(
-                  'flex items-center gap-1.5 px-3 py-1.5 border rounded-lg font-medium text-xs transition-all duration-200',
-                  changesCount > 0 && !isPending
-                    ? 'text-gray-300 border-white/10 hover:text-white hover:bg-white/10 active:scale-95 cursor-pointer'
-                    : 'text-gray-600 border-transparent opacity-40 cursor-not-allowed'
-                )}
+                className="hover:bg-white/10 px-2.5 py-1 rounded-lg text-gray-400 hover:text-white text-xs transition-colors cursor-pointer"
               >
-                <RotateCcw size={13} />
-                <span>إلغاء التغييرات</span>
+                إلغاء
               </button>
 
-              {/* Save Button */}
               <button
                 type="button"
-                disabled={changesCount === 0 || isPending || (isBatchMode && batchTargetCount === 0)}
+                disabled={isPending || (isBatchMode && batchTargetCount === 0)}
                 onClick={handleSave}
                 className={clsx(
-                  'flex items-center gap-1.5 shadow-md px-3.5 py-1.5 rounded-lg font-semibold text-xs transition-all duration-200',
-                  changesCount > 0 && !isPending && (!isBatchMode || batchTargetCount > 0)
-                    ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.35)] active:scale-95 cursor-pointer'
-                    : 'bg-white/5 text-gray-500 border border-white/10 opacity-60 cursor-not-allowed'
+                  'flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold text-xs transition-all duration-200',
+                  !isPending && (!isBatchMode || batchTargetCount > 0)
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-500/25 active:scale-95 cursor-pointer'
+                    : 'bg-white/10 text-gray-500 cursor-not-allowed opacity-60'
                 )}
               >
                 {isPending ? (
-                  <Loader2 size={14} className="text-white animate-spin" />
-                ) : changesCount > 0 ? (
-                  <Check size={14} className="text-white" />
+                  <Loader2 size={13} className="animate-spin text-white" />
                 ) : (
-                  <Check size={14} className="text-gray-500" />
+                  <Check size={13} className="text-white" />
                 )}
                 <span>
                   {isBatchMode
-                    ? (changesCount > 0 ? `تطبيق على ${batchTargetCount} حساب (${changesCount})` : 'لا توجد تغييرات')
-                    : (changesCount > 0 ? `حفظ التغييرات (${changesCount})` : 'لا توجد تغييرات')}
+                    ? (batchTargetCount > 0 ? `تطبيق (${batchTargetCount})` : 'تطبيق')
+                    : 'حفظ'}
                 </span>
               </button>
             </div>

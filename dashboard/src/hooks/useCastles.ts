@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '../lib/firebase'
-import type { Castle, BotState, CastleConfig, CastleLog } from '../types'
+import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
 const PAGE_SIZE = 100
@@ -242,7 +242,13 @@ export function useBotControl(userId: string) {
           console.warn('⚠️ api_server.py غير متاح — تحديث Firebase فقط')
           await updateDoc(
             doc(db, 'users', userId, 'castles', castle.id),
-            { 'bot_status.state': 'running', 'bot_status.last_run_message': 'في انتظار خادم البوت...' }
+            {
+              'bot_status.state':            'running',
+              'bot_status.conn_state':       'connected',
+              'bot_status.conn_message':     'في انتظار خادم البوت...',
+              'bot_status.last_run_message': 'في انتظار خادم البوت...',
+              'bot_status.conn_updated':     new Date().toISOString(),
+            }
           )
           return
         }
@@ -257,9 +263,11 @@ export function useBotControl(userId: string) {
       await updateDoc(
         doc(db, 'users', userId, 'castles', castle.id),
         {
-          'bot_status.state': state,
-          'bot_status.last_run_message':
-            state === 'running' ? 'البوت يعمل الآن...' : 'تم الإيقاف',
+          'bot_status.state':            state,
+          'bot_status.conn_state':       state === 'running' ? 'connected' : 'idle',
+          'bot_status.conn_message':     state === 'running' ? 'البوت متصل ويعمل الآن...' : 'تم إيقاف البوت بواسطة المستخدم',
+          'bot_status.last_run_message': state === 'running' ? 'البوت يعمل الآن...' : 'تم الإيقاف',
+          'bot_status.conn_updated':     new Date().toISOString(),
         }
       )
     },
@@ -324,11 +332,30 @@ export function useAddCastle(userId: string) {
       const userRef = doc(db, 'users', userId)
       const userSnap = await getDoc(userRef)
       const userData = userSnap.data()
-      const maxAllowed = userData?.subscription?.max_castles_allowed ?? 1
-      const currentCount = userData?.subscription?.current_castles_count ?? 0
+      const sub = userData?.subscription
+      const maxAllowed = Number(sub?.max_castles_allowed ?? 1)
+      const currentCount = Number(sub?.current_castles_count ?? 0)
 
-      // If already reached limit, castle is marked pending approval in registration queue
-      const isPending = currentCount >= maxAllowed
+      // Expiration & Active status check
+      const now = new Date()
+      const isExpired = sub?.expires_at ? new Date(sub.expires_at).getTime() <= now.getTime() : false
+      const isSubActive = (sub?.status === 'active' || !sub?.status) && !isExpired
+
+      // Rule:
+      // If user is within allowed count AND subscription has not expired:
+      // IMMEDIATELY ACCEPTED without waiting for admin!
+      // Otherwise, if count >= maxAllowed or subscription is expired:
+      // goes to pending approval queue.
+      const isWithinQuota = currentCount < maxAllowed
+      const isAutoApproved = isSubActive && isWithinQuota
+      const isPending = !isAutoApproved
+
+      let pendingReason = ''
+      if (!isSubActive) {
+        pendingReason = 'بانتظار موافقة المسؤول (انتهت فترة الاشتراك أو الحساب غير نشط)'
+      } else if (!isWithinQuota) {
+        pendingReason = 'بانتظار موافقة المسؤول (تم تجاوز عدد الحسابات المسموح بها)'
+      }
 
       // 2. Create new castle document
       const castleColRef = collection(db, 'users', userId, 'castles')
@@ -341,8 +368,8 @@ export function useAddCastle(userId: string) {
         castle_id: newCastleRef.id,
         email: emailTrimmed,
         password: password,
-        is_active: !isPending,
-        created_at: new Date().toISOString(),
+        is_active: isAutoApproved,
+        created_at: now.toISOString(),
         castle_info: {
           lord_name: lordFallback,
           castle_name: 'قلعة جديدة',
@@ -360,13 +387,13 @@ export function useAddCastle(userId: string) {
           diamond: 0,
           gold: 0,
           stamina: 100,
-          last_updated: new Date().toISOString(),
+          last_updated: now.toISOString(),
         },
         bot_status: {
-          state: isPending ? 'pending' : 'idle',
+          state: isAutoApproved ? 'idle' : 'pending',
           last_run_time: null,
           next_run_time: null,
-          last_run_message: isPending ? 'بانتظار موافقة المسؤول (تم تجاوز الحد المسموح)' : 'جاهز للتشغيل',
+          last_run_message: isAutoApproved ? 'جاهز للتشغيل' : pendingReason,
           active_marches: 0,
           max_marches: 2,
           last_error: null,
@@ -376,10 +403,15 @@ export function useAddCastle(userId: string) {
 
       await setDoc(newCastleRef, newCastle)
 
-      // 3. Increment current active count if active
-      if (!isPending) {
+      // 3. Increment current active count or pending count
+      if (isAutoApproved) {
         await updateDoc(userRef, {
           'subscription.current_castles_count': currentCount + 1,
+        })
+      } else {
+        const pendingCount = Number(sub?.pending_castles_count ?? 0)
+        await updateDoc(userRef, {
+          'subscription.pending_castles_count': pendingCount + 1,
         })
       }
 
@@ -388,6 +420,7 @@ export function useAddCastle(userId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
       qc.invalidateQueries({ queryKey: ['user', userId] })
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
     },
   })
 }
@@ -418,13 +451,21 @@ export function useDeleteCastle(userId: string) {
   return useMutation({
     mutationFn: async ({ castleId, wasActive }: { castleId: string; wasActive?: boolean }) => {
       await deleteDoc(doc(db, 'users', userId, 'castles', castleId))
+      const userRef = doc(db, 'users', userId)
+      const userSnap = await getDoc(userRef)
+      const sub = userSnap.data()?.subscription
       if (wasActive) {
-        const userRef = doc(db, 'users', userId)
-        const userSnap = await getDoc(userRef)
-        const currentCount = userSnap.data()?.subscription?.current_castles_count ?? 1
+        const currentCount = Number(sub?.current_castles_count ?? 1)
         if (currentCount > 0) {
           await updateDoc(userRef, {
             'subscription.current_castles_count': currentCount - 1,
+          })
+        }
+      } else {
+        const pendingCount = Number(sub?.pending_castles_count ?? 1)
+        if (pendingCount > 0) {
+          await updateDoc(userRef, {
+            'subscription.pending_castles_count': pendingCount - 1,
           })
         }
       }
@@ -432,21 +473,8 @@ export function useDeleteCastle(userId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
       qc.invalidateQueries({ queryKey: ['user', userId] })
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
     },
   })
 }
 
-// ─── Castle logs ──────────────────────────────────────────
-export function useCastleLogs(userId: string, castleId: string) {
-  return useQuery({
-    queryKey: ['castleLogs', userId, castleId],
-    queryFn: async () => {
-      const ref = collection(db, 'users', userId, 'castles', castleId, 'logs')
-      const q = query(ref, orderBy('timestamp', 'desc'), limit(50))
-      const snap = await getDocs(q)
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as CastleLog))
-    },
-    staleTime: 30_000,
-    enabled: !!userId && !!castleId,
-  })
-}

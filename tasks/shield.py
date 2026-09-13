@@ -99,6 +99,90 @@ class ShieldTask(BaseTask):
     def __init__(self, conn: GameConnection, config: dict = None):
         super().__init__(conn, config)
 
+    def is_shield_active(self, shield_info: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, int]:
+        """
+        التحقق الشامل مما إذا كان هناك درع سلام نشط حالياً لحماية القلعة.
+
+        المعايير المعتمدة وفق بروتوكول ومحرك اللعبة:
+          1. مؤقت الجلسة النشط (shield_expire_ts): إذا تم تفعيل درع مسبقاً في هذه الجلسة وما زال وقته سارياً.
+          2. مؤشر الأمان في الخريطة (kingdomMapCtrl.isSafe): يرسله خادم اللعبة عند تسجيل الدخول (1000/1)
+             ويحدد بشكل قاطع ما إذا كانت القلعة تحت الحماية (True) أو مكشوفة (False).
+          3. مصفوفة التعزيزات (buffCtrl): فحص معرّف درع السلام (id: 5001) ووقت بدئه (beginTime).
+
+        Returns:
+            (is_active: bool, reason_str: str, remaining_seconds: int)
+        """
+        now = time.time()
+
+        # 1. فحص مؤقت الجلسة الداخلي
+        expire_ts = getattr(self.conn, 'shield_expire_ts', 0)
+        if expire_ts > now + 60:
+            rem = int(expire_ts - now)
+            hours = rem // 3600
+            mins = (rem % 3600) // 60
+            return True, f"درع سلام نشط ومسجل في الجلسة (متبقي: {hours} س و {mins} د)", rem
+        elif expire_ts > 0 and expire_ts <= now:
+            self.conn.shield_expire_ts = 0
+
+        # 2. فحص بيانات التهيئة القادمة من السيرفر (init_data)
+        init_data = getattr(self.conn, 'init_data', {}) or {}
+        km = init_data.get('kingdomMapCtrl', {})
+        is_safe = km.get('isSafe') if isinstance(km, dict) else False
+
+        # 3. فحص قائمة التعزيزات النشطة (buffCtrl) للبحث عن معرّف درع السلام (5001)
+        buff_ctrl = init_data.get('buffCtrl', [])
+        shield_buff = None
+        if isinstance(buff_ctrl, list):
+            for b in buff_ctrl:
+                if isinstance(b, dict) and b.get('id') == 5001:
+                    shield_buff = b
+                    break
+
+        shield_duration_sec = (shield_info or {}).get("seconds", 8 * 3600)
+
+        # إذا كانت القلعة محمية في الخريطة أو يوجد تعزيز الدرع 5001
+        if is_safe or shield_buff:
+            rem = 0
+            if shield_buff:
+                b_begin = int(shield_buff.get('beginTime', 0))
+                if b_begin > 0:
+                    elapsed = int(now) - b_begin
+                    if elapsed < shield_duration_sec:
+                        rem = shield_duration_sec - elapsed
+                    else:
+                        # إذا كان elapsed أكبر من مدة الدرع المستهدف ولكن السيرفر ما زال يبلغ أن isSafe=True
+                        # فهذا يعني أن المستخدم كان قد فعّل درعاً أطول (مثلاً 24 ساعة أو 3 أيام)
+                        rem = max(3600, 24 * 3600 - elapsed)
+
+            if rem > 0:
+                self.conn.shield_expire_ts = now + rem
+                hours = rem // 3600
+                mins = (rem % 3600) // 60
+                time_str = f" (متبقي تقريبياً: {hours} س و {mins} د)" if hours > 0 or mins > 0 else ""
+                return True, f"القلعة محمية بالفعل بدرع سلام نشط (isSafe=True){time_str}", rem
+            else:
+                default_rem = 3600
+                self.conn.shield_expire_ts = now + default_rem
+                return True, "القلعة محمية بالفعل بدرع سلام نشط وفق بيانات السيرفر (isSafe=True)", default_rem
+
+        return False, "لا يوجد درع سلام نشط (القلعة مكشوفة)", 0
+
+    def _record_shield_activation(self, shield_info: Dict[str, Any]):
+        """تسجيل تفعيل الدرع بنجاح في كائن الاتصال وبيانات التهيئة لتفادي إعادة التفعيل."""
+        now = time.time()
+        self.conn.shield_expire_ts = now + shield_info["seconds"]
+        if hasattr(self.conn, 'init_data') and isinstance(self.conn.init_data, dict):
+            km = self.conn.init_data.setdefault("kingdomMapCtrl", {})
+            if isinstance(km, dict):
+                km["isSafe"] = True
+            buff_list = self.conn.init_data.setdefault("buffCtrl", [])
+            if isinstance(buff_list, list):
+                self.conn.init_data["buffCtrl"] = [b for b in buff_list if isinstance(b, dict) and b.get("id") != 5001]
+                self.conn.init_data["buffCtrl"].append({
+                    "id": 5001,
+                    "beginTime": int(now)
+                })
+
     async def run(self) -> TaskResult:
         cfg = self.config
         raw_dur = str(cfg.get('duration', '8h')).lower().strip()
@@ -108,6 +192,19 @@ class ShieldTask(BaseTask):
         allow_gold = bool(cfg.get('allow_gold', False))
 
         self.log.info(f"🛡️ بدء مهمة الدرع التلقائي [{shield_info['name']}] (الشراء بالذهب: {allow_gold})")
+
+        # 0. التحقق الاستباقي: هل القلعة محمية بالفعل بدرع سلام نشط؟
+        is_active, reason, remaining_sec = self.is_shield_active(shield_info)
+        if is_active:
+            self.log.info(f"🛡️ {reason} — تم إنهاء المهمة بنجاح لتوفير الدروع وعدم إهدارها.")
+            retry_sec = max(300, remaining_sec - 300) if remaining_sec > 300 else 3600
+            return TaskResult.ok(
+                f"🛡️ القلعة محمية بالفعل بدرع سلام نشط: {reason}",
+                status="already_active",
+                shield_active=True,
+                remaining_seconds=remaining_sec,
+                retry_after=retry_sec
+            )
 
         # 1. فحص مخزون الحقيبة للدروع المجانية (1004/1)
         r_bag = await self.conn.query('1004', '1', {}, timeout=8)
@@ -160,6 +257,9 @@ class ShieldTask(BaseTask):
                 if next_sign and isinstance(item_signs, dict):
                     item_signs[str(target_item_id)] = next_sign
 
+                # تسجيل الدرع وتحديث مؤقت الحماية في الجلسة وبيانات التهيئة
+                self._record_shield_activation(shield_info)
+
                 success_msg = f"تم تفعيل {shield_info['name']} بنجاح من الحقيبة مجاناً"
                 self.log.info(f"✅ {success_msg} 🎉")
                 # تعيين التجديد قبل انتهاء الدرع بـ 5 دقائق
@@ -187,6 +287,9 @@ class ShieldTask(BaseTask):
             # إرسال طلب الشراء والاستخدام الفوري (1034/2)
             self.conn.send_nowait('1034', '2', payload)
             await asyncio.sleep(1.5)
+
+            # تسجيل الدرع وتحديث مؤقت الحماية في الجلسة وبيانات التهيئة
+            self._record_shield_activation(shield_info)
 
             success_msg = f"تم شراء وتفعيل {shield_info['name']} بنجاح بالذهب ({shield_info['gold_price']} ذهب)"
             self.log.info(f"✅ {success_msg} 🎉")

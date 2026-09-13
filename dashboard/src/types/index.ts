@@ -3,14 +3,16 @@
 // ════════════════════════════════════════════════════
 
 export interface Subscription {
-  plan_id: 'free' | 'basic' | 'pro' | 'vip_pro' | 'enterprise'
+  plan_id?: string
   plan_name: string
   status: 'active' | 'expired' | 'suspended'
   started_at: string
   expires_at: string
   days_remaining: number
+  months_duration?: number
   max_castles_allowed: number
   current_castles_count: number
+  pending_castles_count?: number
 }
 
 export interface User {
@@ -156,7 +158,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   hero_draw: { enabled: false },
   tactics_hall: { enabled: false, tactic: 'القلعة الفارغة', schedule: { times_per_day: 2 } },
   watermill: { enabled: false, types: 'food', allow_shop_buy: false },
-  fountain: { enabled: false, resources: [], allow_gold: false, gold_times: 0, schedule: { times_per_day: 2 } },
+  fountain: { enabled: false, resources: ['food', 'wood', 'iron', 'diamond'], allow_gold: false, gold_times: 0, schedule: { times_per_day: 2 } },
   material_workshop: { enabled: false, materials: [], schedule: { times_per_day: 2 } },
   caravan: { enabled: false, schedule: { times_per_day: 2 } },
   port_delegate: { enabled: false, shop_item: 'all' },

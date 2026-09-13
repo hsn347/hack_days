@@ -11,7 +11,7 @@ tasks/savings_bank.py — مهمة دار الادخار وبنك التوفير
      - إيداع الذهب تلقائياً بأقصى حد متاح (6023/1) للمدة المختارة (7 أو 15 أو 30 يوماً).
 
 الاستخدام كملف مستقل:
-    python tasks/savings_bank.py --email "meik.gaertner2306.MGr@gmail.com" --days 30
+    python tasks/savings_bank.py --email "samartilleli@yopmail.com" --days 7
     python tasks/savings_bank.py --email "zzoro8290@gmail.com" --days 30
     python tasks/savings_bank.py --email "ossso5040@gmail.com" --days 15 --deposit 4000
 """
@@ -118,9 +118,64 @@ class SavingsBankTask(BaseTask):
                     retry_after=min(remaining_sec + 60, 86400)
                 )
 
-        # 2. تحديد مبلغ الإيداع (الافتراضي 2000 أو المحدد صراحة من المستخدم/Firebase)
+        # 2. تحديد مبلغ الإيداع (الافتراضي 2000 أو المحدد صراحة)
         custom_deposit = cfg.get('deposit')
-        deposit_amount = int(custom_deposit) if custom_deposit else plan_info.get("max_deposit", 2000)
+        desired_amount = int(custom_deposit) if custom_deposit else plan_info.get("max_deposit", 2000)
+
+        # ── فحص 1: هل توجد وديعة نشطة بالفعل؟ (من init_data مباشرة) ──────────
+        sb_ctrl_live = self.conn.init_data.get('savingsBankAgCtrl', {})
+        live_slip = sb_ctrl_live.get('slip', {}) if isinstance(sb_ctrl_live, dict) else {}
+        if isinstance(live_slip, dict) and live_slip.get('startTime'):
+            s_days = int(live_slip.get('day', 7))
+            s_start = int(live_slip.get('startTime', 0))
+            s_end = s_start + (s_days * 86400)
+            if int(time.time()) < s_end:
+                remaining_sec = s_end - int(time.time())
+                rem_days = remaining_sec // 86400
+                rem_hours = (remaining_sec % 86400) // 3600
+                self.log.info(
+                    f"ℹ️ توجد وديعة نشطة بالفعل ({live_slip.get('deposit', 0):,} ذهب لمدة {s_days} يوم) | "
+                    f"متبقي: {rem_days} يوم و {rem_hours} ساعة — لا حاجة للإيداع."
+                )
+                return TaskResult.ok(
+                    "توجد وديعة نشطة بالفعل",
+                    status="investing",
+                    slip=live_slip,
+                    remaining_seconds=remaining_sec,
+                    retry_after=min(remaining_sec + 60, 86400)
+                )
+
+        # ── فحص 2: الاستعلام عن الذهب الحالي للقلعة (1001/1 حي) ──────────────
+        current_gold = 0
+        try:
+            r_city = await self.conn.query('1001', '1', {}, timeout=8)
+            if r_city and str(r_city.get('err', '0')) == '0':
+                lord_ctrl = self.conn.init_data.get('lordInfoCtrl', {})
+                base_info = lord_ctrl.get('base', {}) if isinstance(lord_ctrl, dict) else {}
+                current_gold = int(base_info.get('gold', 0))
+                # أحياناً يعود الذهب في الرد المباشر
+                if current_gold == 0:
+                    current_gold = int(r_city.get('data', {}).get('gold', 0))
+            self.log.info(f"🪙 الذهب الحالي في القلعة: {current_gold:,}")
+        except Exception as e:
+            self.log.warning(f"⚠️ لم نتمكن من الاستعلام عن الذهب الحالي: {e}")
+
+        if current_gold < 100:
+            self.log.warning(
+                f"⚠️ رصيد الذهب غير كافٍ للإيداع ({current_gold:,} ذهب) — الحد الأدنى المطلوب 100 ذهب. تخطي المهمة."
+            )
+            return TaskResult.fail(
+                f"رصيد الذهب غير كافٍ ({current_gold:,})",
+                retry_after=3600
+            )
+
+        # تعديل مبلغ الإيداع ليكون بحد أقصى ما تملكه القلعة
+        deposit_amount = min(desired_amount, current_gold)
+        if deposit_amount < desired_amount:
+            self.log.info(
+                f"💡 تم تعديل مبلغ الإيداع من {desired_amount:,} إلى {deposit_amount:,} ذهب "
+                f"(ما هو متاح فعلياً في القلعة)"
+            )
 
         # 3. تنفيذ الإيداع الجديد (6023/1)
         self.log.info(f"🚀 جاري إيداع {deposit_amount:,} ذهب في دار الادخار لمدة {target_days} يوماً...")

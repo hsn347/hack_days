@@ -71,6 +71,7 @@ _reserved: Set[str]                     = set() # castle_ids محجوزة (بد�
 _log_qs:  Dict[str, "queue.Queue[str]"] = {}    # castle_id → queue للـ logs
 _conn_states: Dict[str, str]            = {}    # castle_id → 'connected' | 'disconnected' | 'reconnecting'
 _user_stopped: Set[str]                 = set() # castle_ids التي تم إيقافها يدوياً من المستخدم
+_castle_emails: Dict[str, str]          = {}    # castle_id → email
 
 
 def _is_running(castle_id: str) -> bool:
@@ -94,6 +95,8 @@ def _get_real_status(castle_id: str) -> str:
             return 'disconnected'  # شخص دخل من الجوال
         if conn == 'reconnecting':
             return 'reconnecting'
+        if conn == 'waiting':
+            return 'waiting'
         return 'running'
 
 
@@ -117,8 +120,8 @@ class StopBotRequest(BaseModel):
 # Firebase helper (لتحديث bot_status)
 # ══════════════════════════════════════════════════════════════════
 
-def _update_firebase_status(user_id: str, castle_id: str, state: str, message: str = ""):
-    """يحدّث bot_status في Firestore (اختياري — إذا firebase-admin مثبت)."""
+def _update_firebase_status(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None):
+    """يحدّث bot_status في Firestore (state + conn_state + message)."""
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore as fb_fs
@@ -132,18 +135,42 @@ def _update_firebase_status(user_id: str, castle_id: str, state: str, message: s
         if firebase_admin._apps:
             db = fb_fs.client()
             ref = db.collection("users").document(user_id).collection("castles").document(castle_id)
+            now_iso = datetime.now(timezone.utc).isoformat()
             updates: dict = {
                 "bot_status.state":            state,
                 "bot_status.last_run_message": message,
             }
-            if state in ("idle", "error"):
-                updates["bot_status.conn_state"] = state
+            if conn_state is not None:
+                updates["bot_status.conn_state"]   = conn_state
                 updates["bot_status.conn_message"] = message
-            if state == "running":
-                updates["bot_status.last_run_time"] = datetime.now(timezone.utc).isoformat()
+                updates["bot_status.conn_updated"] = now_iso
+            elif state in ("idle", "error"):
+                updates["bot_status.conn_state"]   = state
+                updates["bot_status.conn_message"] = message
+                updates["bot_status.conn_updated"] = now_iso
+            elif state == "running":
+                updates["bot_status.conn_state"]   = "connected"
+                updates["bot_status.conn_message"] = message or "البوت متصل بالقلعة ويعمل الآن"
+                updates["bot_status.last_run_time"] = now_iso
+                updates["bot_status.conn_updated"] = now_iso
+            elif state == "waiting":
+                updates["bot_status.conn_state"]   = "waiting"
+                updates["bot_status.conn_message"] = message or "بانتظار الدورة القادمة"
+                updates["bot_status.conn_updated"] = now_iso
+
             ref.update(updates)
     except Exception as e:
         log.debug(f"Firebase status update skipped: {e}")
+
+
+def update_firebase_status_async(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None):
+    """تحديث Firestore في thread منفصل فوراً دون تعطيل القراءة من stdout."""
+    threading.Thread(
+        target=_update_firebase_status,
+        args=(user_id, castle_id, state, message, conn_state),
+        daemon=True,
+        name=f"fb-sync-{castle_id[:8]}"
+    ).start()
 
 
 def _sync_castle_to_firebase(email: str, data: dict, user_id: Optional[str] = None, castle_id: Optional[str] = None):
@@ -195,6 +222,7 @@ def _bot_thread(req: StartBotRequest):
     log_q: "queue.Queue[str]" = queue.Queue(maxsize=500)
     with _lock:
         _log_qs[castle_id] = log_q
+        _castle_emails[castle_id] = email
 
     log.info(f"🚀 [{email}] بدء تشغيل البوت...")
     _update_firebase_status(user_id, castle_id, "running", "البوت يعمل الآن...")
@@ -241,6 +269,7 @@ def _bot_thread(req: StartBotRequest):
 
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
 
     # 5. ملف log البوت
     bot_log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
@@ -261,13 +290,14 @@ def _bot_thread(req: StartBotRequest):
             _procs[castle_id] = proc
             _reserved.discard(castle_id)
 
-        # 6. قراءة stdout في thread آخر — يحلل السطور لمعرفة حالة الاتصال
+        # 6. قراءة stdout في thread آخر — يحلل السطور لمعرفة حالة الاتصال ومزامنتها مع Firebase
         def _reader():
-            """يقرأ stdout كل سطر ويُحدّث _conn_states فوراً بمجرد ظهور إشارة الانقطاع أو الاتصال."""
-            # ── الكلمات المفتاحية المطابقة لرسائل bot_manager.py الفعلية ──
+            """يقرأ stdout كل سطر ويُحدّث Firebase فوراً بمجرد ظهور إشارة الانقطاع أو الاتصال أو الانتظار."""
             DISCONNECT_SIGNALS = (
                 "دخول من جهاز آخر",       # 📱 [تنبيه: دخول من جهاز آخر]
                 "انقطع اتصال الحساب",     # ⚠️ [تنبيه السيرفر] انقطع اتصال الحساب
+                "other_device",
+                "Other Device Login",
             )
             RECONNECTING_SIGNALS = (
                 "سيتوقف البوت مؤقتاً",    # ⏳ ينتظر 60 ثانية
@@ -276,6 +306,11 @@ def _bot_thread(req: StartBotRequest):
             )
             CONNECTED_SIGNALS = (
                 "تم الاتصال والمصافحة بنجاح 100%",  # ✅ login_and_connect
+                "تم الاتصال بنجاح!",
+            )
+            WAITING_SIGNALS = (
+                "انتظار",                 # 💤 انتظار X دقيقة...
+                "الدورة القادمة الساعة",  # ✅ انتهت الدورة #X — الدورة القادمة الساعة: ...
             )
             try:
                 with open(bot_log_path, "a", encoding="utf-8", errors="replace") as lf:
@@ -289,18 +324,77 @@ def _bot_thread(req: StartBotRequest):
                         except queue.Full:
                             pass
 
-                        # ── فحص السطر لتحديد حالة الاتصال ──
-                        if any(s in line for s in DISCONNECT_SIGNALS):
+                        # ── 1. فحص وسوم الأحداث الصريحة القادمة من البوت ──
+                        if "[FIREBASE_EVENT]" in line:
+                            try:
+                                parts = line.split("[FIREBASE_EVENT]", 1)[1].strip()
+                                ev_state = ""
+                                ev_msg = ""
+                                for token in parts.split():
+                                    if token.startswith("conn_state="):
+                                        ev_state = token.split("=", 1)[1]
+                                    elif token.startswith("message="):
+                                        ev_msg = token.split("=", 1)[1]
+                                if ev_state:
+                                    with _lock:
+                                        _conn_states[castle_id] = ev_state
+                                    bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
+                                    update_firebase_status_async(user_id, castle_id, bs, ev_msg or line, ev_state)
+                            except Exception:
+                                pass
+
+                        elif "[RESOURCE_SYNC]" in line:
+                            try:
+                                parts = line.split("[RESOURCE_SYNC]", 1)[1].strip()
+                                rmap = {}
+                                for token in parts.split():
+                                    if "=" in token:
+                                        k, v = token.split("=", 1)
+                                        if v.lstrip("-").isdigit():
+                                            rmap[k] = int(v)
+                                if rmap:
+                                    now_iso = datetime.now(timezone.utc).isoformat()
+                                    r_data = {
+                                        "food":         rmap.get("food", 0),
+                                        "wood":         rmap.get("wood", 0),
+                                        "iron":         rmap.get("iron", 0),
+                                        "diamond":      rmap.get("diamond", 0),
+                                        "gold":         rmap.get("gold", 0),
+                                        "stamina":      rmap.get("stamina", 100),
+                                        "last_updated": now_iso,
+                                    }
+                                    c_data = {}
+                                    if "power" in rmap:
+                                        c_data["lord_power"] = rmap["power"]
+                                    _sync_castle_to_firebase(
+                                        email,
+                                        {"resources": r_data, "castle_info": c_data} if c_data else {"resources": r_data},
+                                        user_id=user_id,
+                                        castle_id=castle_id,
+                                    )
+                            except Exception as ex:
+                                log.debug(f"Resource sync parse error: {ex}")
+
+                        # ── 2. فحص السطر بالكلمات المفتاحية لتحديث Firebase ──
+                        elif any(s in line for s in DISCONNECT_SIGNALS):
                             with _lock:
                                 _conn_states[castle_id] = 'disconnected'
-                            log.info(f"📶 [{castle_id[:12]}] انقطاع الاتصال → disconnected")
+                            log.info(f"📶 [{castle_id[:12]}] انقطاع الاتصال (دخول من جهاز آخر) → disconnected")
+                            update_firebase_status_async(user_id, castle_id, 'running', 'تم تسجيل الدخول من جهاز آخر — البوت متوقف مؤقتاً', 'disconnected')
                         elif any(s in line for s in RECONNECTING_SIGNALS):
                             with _lock:
                                 _conn_states[castle_id] = 'reconnecting'
+                            update_firebase_status_async(user_id, castle_id, 'running', 'جاري إعادة الاتصال بالقلعة...', 'reconnecting')
                         elif any(s in line for s in CONNECTED_SIGNALS):
                             with _lock:
                                 _conn_states[castle_id] = 'connected'
                             log.info(f"✅ [{castle_id[:12]}] اتصال نشط → connected")
+                            update_firebase_status_async(user_id, castle_id, 'running', 'البوت متصل بالقلعة ويعمل الآن', 'connected')
+                        elif any(s in line for s in WAITING_SIGNALS):
+                            with _lock:
+                                _conn_states[castle_id] = 'waiting'
+                            log.info(f"💤 [{castle_id[:12]}] بانتظار الدورة القادمة → waiting")
+                            update_firebase_status_async(user_id, castle_id, 'running', 'بانتظار موعد الدورة القادمة...', 'waiting')
             except Exception:
                 pass
 
@@ -317,7 +411,7 @@ def _bot_thread(req: StartBotRequest):
     except Exception as e:
         log.error(f"💥 [{email}] خطأ: {e}")
         log_q.put(f"[{datetime.now():%H:%M:%S}] 💥 خطأ: {e}")
-        _update_firebase_status(user_id, castle_id, "error", str(e))
+        _update_firebase_status(user_id, castle_id, "error", str(e), conn_state="error")
         with _lock:
             _procs.pop(castle_id, None)
             _reserved.discard(castle_id)
@@ -346,7 +440,8 @@ def _bot_thread(req: StartBotRequest):
         _update_firebase_status(
             user_id, castle_id,
             "idle",
-            "تم إيقاف البوت بواسطة المستخدم"
+            "تم إيقاف البوت بواسطة المستخدم",
+            conn_state="idle"
         )
     elif ret != 0:
         end_msg = f"[{datetime.now():%H:%M:%S}] 💥 توقف بسبب مشكلة فادحة (كود={ret})"
@@ -355,17 +450,21 @@ def _bot_thread(req: StartBotRequest):
         _update_firebase_status(
             user_id, castle_id,
             "error",
-            f"توقف بسبب مشكلة فادحة في التشغيل (كود={ret})"
+            f"توقف بسبب مشكلة فادحة في التشغيل (كود={ret})",
+            conn_state="error"
         )
     else:
-        end_msg = f"[{datetime.now():%H:%M:%S}] ✅ انتهت المهمة بنجاح"
+        # انتهت العملية بدون إيقاف يدوي — في وضع التكرار أو انتهاء دورة عادية
+        end_msg = f"[{datetime.now():%H:%M:%S}] 💤 بانتظار موعد الدورة القادمة"
         log_q.put(end_msg)
-        log.info(f"✅ [{email}] انتهى بنجاح")
+        log.info(f"💤 [{email}] اكتمال دورة — البوت لا يزال مفعلاً وبانتظار الدورة التالية")
         _update_firebase_status(
             user_id, castle_id,
-            "idle",
-            "انتهت المهمة بنجاح"
+            "running",
+            "بانتظار موعد الدورة القادمة",
+            conn_state="waiting"
         )
+
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -582,54 +681,96 @@ def get_error_log(lines: int = 100):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/logs/{castle_id}")
+def get_castle_logs(castle_id: str, lines: int = 100):
+    """
+    قراءة آخر N سطر من ملف log الخاص بالقلعة محلياً من القرص دون أي اتصال بـ Firebase.
+    مثال: GET /api/logs/{castle_id}?lines=50
+    """
+    email = _castle_emails.get(castle_id)
+    log_path = None
+    if email:
+        p = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+        if os.path.exists(p):
+            log_path = p
+
+    if not log_path:
+        candidates = [
+            os.path.join(_ROOT, f) for f in os.listdir(_ROOT)
+            if f.startswith("bot_") and f.endswith(".log") and f != "bot_errors.log"
+        ]
+        if candidates:
+            log_path = max(candidates, key=os.path.getmtime)
+
+    if not log_path or not os.path.exists(log_path):
+        return {"logs": [], "count": 0, "message": "لا يوجد سجل محلي بعد"}
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        last_lines = [l.rstrip("\r\n") for l in all_lines[-lines:]]
+        return {
+            "logs": last_lines,
+            "count": len(all_lines),
+            "showing": len(last_lines),
+            "file": os.path.basename(log_path),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws/logs/{castle_id}")
 async def ws_logs(websocket: WebSocket, castle_id: str):
     """
-    WebSocket للـ logs المباشرة لبوت قلعة معينة.
+    WebSocket للـ logs المباشرة لبوت قلعة معينة (محلياً 100% بدون أي اتصال بفايربيس).
     الاتصال: ws://localhost:8000/ws/logs/{castle_id}
     """
     await websocket.accept()
-    log.info(f"📡 WebSocket connection: {castle_id[:16]}")
+    log.info(f"📡 WebSocket logs connected: {castle_id[:16]}")
 
-    # إرسال رسالة ترحيب
-    await websocket.send_text(f"[{datetime.now():%H:%M:%S}] 📡 متصل — مراقبة القلعة {castle_id[:12]}...")
+    # 1. إرسال أحدث 30 سطراً من ملف الـ log المحلي فور الاتصال
+    email = _castle_emails.get(castle_id)
+    log_path = None
+    if email:
+        p = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+        if os.path.exists(p):
+            log_path = p
+    if not log_path:
+        candidates = [
+            os.path.join(_ROOT, f) for f in os.listdir(_ROOT)
+            if f.startswith("bot_") and f.endswith(".log") and f != "bot_errors.log"
+        ]
+        if candidates:
+            log_path = max(candidates, key=os.path.getmtime)
 
-    # انتظار ظهور الـ queue (حتى 30 ثانية)
-    for _ in range(60):
-        with _lock:
-            q = _log_qs.get(castle_id)
-        if q:
-            break
-        await asyncio.sleep(0.5)
+    if log_path and os.path.exists(log_path):
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                recent = [l.rstrip("\r\n") for l in f.readlines()[-35:]]
+            for r in recent:
+                await websocket.send_text(r)
+        except Exception:
+            pass
 
-    if not q:
-        await websocket.send_text(f"[{datetime.now():%H:%M:%S}] ℹ️ البوت غير نشط حالياً")
-        await websocket.close()
-        return
-
+    # 2. البث المباشر لأي أسطر جديدة تخرج من البوت
     try:
         while True:
-            # تحقق من وجود سطور في الـ queue
-            lines_sent = 0
-            while lines_sent < 20:  # أرسل حتى 20 سطر في كل دورة
-                try:
-                    line = q.get_nowait()
-                    await websocket.send_text(line)
-                    lines_sent += 1
-                except queue.Empty:
-                    break
-
-            # تحقق هل البوت لا يزال يعمل
             with _lock:
-                still_running = _is_running(castle_id)
-            if not still_running and q.empty():
-                await websocket.send_text(f"[{datetime.now():%H:%M:%S}] 🏁 انتهى البوت")
-                break
+                q = _log_qs.get(castle_id)
 
-            await asyncio.sleep(0.2)
+            if q:
+                lines_sent = 0
+                while lines_sent < 30:
+                    try:
+                        line = q.get_nowait()
+                        await websocket.send_text(line)
+                        lines_sent += 1
+                    except queue.Empty:
+                        break
 
+            await asyncio.sleep(0.3)
     except WebSocketDisconnect:
-        log.info(f"📡 WebSocket disconnected: {castle_id[:16]}")
+        log.info(f"📡 WebSocket logs disconnected: {castle_id[:16]}")
     except Exception as e:
         log.debug(f"WebSocket error: {e}")
 

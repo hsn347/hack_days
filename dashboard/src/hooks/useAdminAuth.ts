@@ -1,0 +1,262 @@
+import React, { useState, useEffect, createContext, useContext } from 'react'
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  type User as FirebaseUser,
+} from 'firebase/auth'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
+import type { User } from '../types'
+
+interface AdminSession {
+  uid: string
+  email: string
+  role: 'admin'
+  expiresAt: number
+  token: string
+}
+
+interface AdminAuthContextType {
+  adminUser: User | null
+  isAuthenticated: boolean
+  loading: boolean
+  failedAttempts: number
+  isLocked: boolean
+  lockCountdown: number
+  loginAdmin: (email: string, pass: string) => Promise<void>
+  logoutAdmin: () => Promise<void>
+  refreshSession: () => void
+}
+
+const ADMIN_SESSION_KEY = 'osmanli_admin_session_token'
+const FAILED_ATTEMPTS_KEY = 'osmanli_admin_failed_attempts'
+const LOCK_UNTIL_KEY = 'osmanli_admin_lock_until'
+const SESSION_DURATION_MS = 60 * 60 * 1000 // 60 دقيقة
+const MAX_FAILED_ATTEMPTS = 3
+const LOCKOUT_DURATION_SEC = 60 // حظر مؤقت لمدة 60 ثانية
+
+export const AdminAuthContext = createContext<AdminAuthContextType | null>(null)
+
+export function useAdminAuthProvider(): AdminAuthContextType {
+  const [adminUser, setAdminUser] = useState<User | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    return parseInt(sessionStorage.getItem(FAILED_ATTEMPTS_KEY) || '0', 10)
+  })
+  const [isLocked, setIsLocked] = useState(false)
+  const [lockCountdown, setLockCountdown] = useState(0)
+
+  // ─── إدارة مؤقت القفل الأمني (Brute Force Defense) ─────────────
+  useEffect(() => {
+    const checkLock = () => {
+      const lockUntil = parseInt(sessionStorage.getItem(LOCK_UNTIL_KEY) || '0', 10)
+      const now = Date.now()
+      if (lockUntil > now) {
+        setIsLocked(true)
+        setLockCountdown(Math.ceil((lockUntil - now) / 1000))
+      } else {
+        setIsLocked(false)
+        setLockCountdown(0)
+        sessionStorage.removeItem(LOCK_UNTIL_KEY)
+      }
+    }
+
+    checkLock()
+    const timer = setInterval(checkLock, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // ─── التحقق من الجلسة المخزنة عند الإقلاع ─────────────────────
+  useEffect(() => {
+    const verifySession = async () => {
+      try {
+        const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
+        if (!raw) {
+          setIsAuthenticated(false)
+          setAdminUser(null)
+          setLoading(false)
+          return
+        }
+
+        const session: AdminSession = JSON.parse(raw)
+        if (Date.now() > session.expiresAt) {
+          // انتهت صلاحية الجلسة
+          sessionStorage.removeItem(ADMIN_SESSION_KEY)
+          setIsAuthenticated(false)
+          setAdminUser(null)
+          setLoading(false)
+          return
+        }
+
+        const isSuperAdminEmail = session.email?.toLowerCase() === 'ibraboths@gmail.com'
+        let userData: any = null
+        try {
+          const snap = await getDoc(doc(db, 'users', session.uid))
+          if (snap.exists()) userData = snap.data()
+        } catch {}
+
+        if ((userData && userData.role === 'admin') || isSuperAdminEmail) {
+          setAdminUser({ uid: session.uid, ...(userData || {}), email: session.email, role: 'admin' } as User)
+          setIsAuthenticated(true)
+        } else {
+          sessionStorage.removeItem(ADMIN_SESSION_KEY)
+          setIsAuthenticated(false)
+          setAdminUser(null)
+        }
+      } catch {
+        sessionStorage.removeItem(ADMIN_SESSION_KEY)
+        setIsAuthenticated(false)
+        setAdminUser(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    verifySession()
+  }, [])
+
+  // ─── تسجيل دخول المسؤول ─────────────────────────────────────────
+  const loginAdmin = async (email: string, pass: string) => {
+    // 1. فحص هل النظام في وضع الحماية
+    const lockUntil = parseInt(sessionStorage.getItem(LOCK_UNTIL_KEY) || '0', 10)
+    if (lockUntil > Date.now()) {
+      const remaining = Math.ceil((lockUntil - Date.now()) / 1000)
+      throw new Error(`النظام مقفل أمنياً بسبب تكرار المحاولات الخاطئة. يرجى الانتظار ${remaining} ثانية.`)
+    }
+
+    try {
+      // 2. مصادقة الحساب مع Firebase
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), pass)
+      const uid = cred.user.uid
+
+      const userEmail = (cred.user.email || email).trim().toLowerCase()
+      const isSuperAdminEmail = userEmail === 'ibraboths@gmail.com'
+
+      // 3. فحص صلاحيات المشرف الأعلى من Firestore
+      let userData: any = null
+      try {
+        const snap = await getDoc(doc(db, 'users', uid))
+        if (snap.exists()) {
+          userData = snap.data()
+        }
+      } catch (e) {
+        console.warn('Firestore read warning:', e)
+      }
+
+      // إذا لم يكن المستند موجوداً وكان البريد هو بريد السوبر أدمن، أنشئه تلقائياً
+      if (!userData && isSuperAdminEmail) {
+        userData = {
+          uid,
+          email: userEmail,
+          username: 'المشرف الأعلى (SuperAdmin)',
+          role: 'admin',
+          is_banned: false,
+          created_at: new Date().toISOString(),
+          subscription: {
+            plan_id: 'enterprise',
+            plan_name: 'باقة المشرف الأعلى (SuperAdmin)',
+            status: 'active',
+            max_castles_allowed: 999,
+            current_castles_count: 0,
+            started_at: new Date().toISOString(),
+            expires_at: '2030-01-01T00:00:00Z',
+            days_remaining: 1200,
+          }
+        }
+        try {
+          await setDoc(doc(db, 'users', uid), userData, { merge: true })
+        } catch {}
+      }
+
+      const isAdmin = isSuperAdminEmail || userData?.role === 'admin'
+      if (!isAdmin) {
+        await signOut(auth)
+        recordFailedAttempt()
+        throw new Error('⛔ تم رفض الوصول: هذا الحساب لا يملك تصريح المشرف الأعلى (SuperAdmin)!')
+      }
+
+      if (userData?.is_banned) {
+        await signOut(auth)
+        throw new Error('هذا الحساب محظور من دخول النظام')
+      }
+
+      // 4. تسجيل نجاح المصادقة وتثبيت جلسة مشفرة
+      const sessionToken = `sec_admin_${uid}_${Date.now()}_${Math.random().toString(36).substring(2)}`
+      const sessionData: AdminSession = {
+        uid,
+        email: cred.user.email || email,
+        role: 'admin',
+        expiresAt: Date.now() + SESSION_DURATION_MS,
+        token: sessionToken,
+      }
+
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData))
+      sessionStorage.removeItem(FAILED_ATTEMPTS_KEY)
+      sessionStorage.removeItem(LOCK_UNTIL_KEY)
+      setFailedAttempts(0)
+      setIsLocked(false)
+      setAdminUser({ uid, ...userData } as User)
+      setIsAuthenticated(true)
+
+    } catch (err: any) {
+      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
+        recordFailedAttempt()
+        throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة')
+      }
+      throw err
+    }
+  }
+
+  const recordFailedAttempt = () => {
+    const next = failedAttempts + 1
+    setFailedAttempts(next)
+    sessionStorage.setItem(FAILED_ATTEMPTS_KEY, String(next))
+
+    if (next >= MAX_FAILED_ATTEMPTS) {
+      const lockUntil = Date.now() + LOCKOUT_DURATION_SEC * 1000
+      sessionStorage.setItem(LOCK_UNTIL_KEY, String(lockUntil))
+      setIsLocked(true)
+      setLockCountdown(LOCKOUT_DURATION_SEC)
+    }
+  }
+
+  // ─── تسجيل خروج المسؤول ─────────────────────────────────────────
+  const logoutAdmin = async () => {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY)
+    setIsAuthenticated(false)
+    setAdminUser(null)
+    try {
+      await signOut(auth)
+    } catch {}
+  }
+
+  const refreshSession = () => {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
+    if (raw) {
+      const session: AdminSession = JSON.parse(raw)
+      session.expiresAt = Date.now() + SESSION_DURATION_MS
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session))
+    }
+  }
+
+  return {
+    adminUser,
+    isAuthenticated,
+    loading,
+    failedAttempts,
+    isLocked,
+    lockCountdown,
+    loginAdmin,
+    logoutAdmin,
+    refreshSession,
+  }
+}
+
+export function useAdminAuth(): AdminAuthContextType {
+  const ctx = useContext(AdminAuthContext)
+  if (!ctx) throw new Error('useAdminAuth must be used inside AdminAuthProvider')
+  return ctx
+}
+

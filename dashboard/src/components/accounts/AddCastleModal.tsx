@@ -85,6 +85,7 @@ export function AddCastleModal({ isOpen, onClose, userId }: AddCastleModalProps)
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
             onClick={handleClose}
+            className="modal-backdrop"
             style={{
               position: 'fixed',
               inset: 0,
@@ -115,6 +116,7 @@ export function AddCastleModal({ isOpen, onClose, userId }: AddCastleModalProps)
             }}
           >
             <div
+              className="modal-box-panel"
               style={{
                 pointerEvents: 'all',
                 width: '100%',

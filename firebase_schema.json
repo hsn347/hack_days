@@ -273,25 +273,6 @@
                 }
               }
             }
-          },
-          "subcollections": {
-            "logs": {
-              "doc_id": "{log_id}",
-              "description": "سجل العمليات التاريخية للقلعة",
-              "fields": {
-                "timestamp": "2026-09-12T14:48:15Z",
-                "step": "march_manager",
-                "title": "منسق الفيالق والمسيرات",
-                "status": "success",
-                "details": {
-                  "ruins_sent": 1,
-                  "elf_status": "skipped_not_open",
-                  "gather_marches": 4,
-                  "total_queues_active": 5
-                },
-                "message": "تم إطلاق مسيرة أطلال و 4 مسيرات جمع قمح بنجاح"
-              }
-            }
           }
         }
       }

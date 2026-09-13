@@ -5,7 +5,7 @@ import {
   signOut,
   type User as FirebaseUser,
 } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import type { User } from '../types'
 
@@ -16,6 +16,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   isAdmin: boolean
+  updateUserProfile: (data: Partial<User>) => void
 }
 
 // We export this for use in createContext below
@@ -33,21 +34,36 @@ export function useAuthProvider(): AuthContextType {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+    let unsubUserDoc: (() => void) | null = null
+
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
       setFirebaseUser(fbUser)
+      if (unsubUserDoc) {
+        unsubUserDoc()
+        unsubUserDoc = null
+      }
       if (fbUser) {
-        try {
-          const snap = await getDoc(doc(db, 'users', fbUser.uid))
-          if (snap.exists()) setUser({ uid: fbUser.uid, ...snap.data() } as User)
-        } catch {
+        unsubUserDoc = onSnapshot(doc(db, 'users', fbUser.uid), (snap) => {
+          if (snap.exists()) {
+            setUser({ uid: fbUser.uid, ...snap.data() } as User)
+          } else {
+            setUser(null)
+          }
+          setLoading(false)
+        }, () => {
           setUser(null)
-        }
+          setLoading(false)
+        })
       } else {
         setUser(null)
+        setLoading(false)
       }
-      setLoading(false)
     })
-    return unsub
+
+    return () => {
+      unsubAuth()
+      if (unsubUserDoc) unsubUserDoc()
+    }
   }, [])
 
   const login = async (email: string, password: string) => {
@@ -59,6 +75,10 @@ export function useAuthProvider(): AuthContextType {
     setUser(null)
   }
 
+  const updateUserProfile = (data: Partial<User>) => {
+    setUser(prev => prev ? { ...prev, ...data } : null)
+  }
+
   return {
     firebaseUser,
     user,
@@ -66,5 +86,6 @@ export function useAuthProvider(): AuthContextType {
     login,
     logout,
     isAdmin: user?.role === 'admin',
+    updateUserProfile,
   }
 }

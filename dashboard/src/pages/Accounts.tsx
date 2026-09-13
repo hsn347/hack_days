@@ -122,6 +122,8 @@ export function AccountsPage() {
       castleIds: selectedBatchIds,
       config: changedSections,
     })
+    // تبقى الحسابات المستهدفة هي جميع الحسابات النشطة بشكل افتراضي
+    setSelectedBatchIds(activeCastles.map(c => c.id))
   }
 
   return (
@@ -131,9 +133,6 @@ export function AccountsPage() {
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div>
             <h1 className="font-bold text-white text-2xl">{t('accounts.title')}</h1>
-            <p className="mt-0.5 text-gray-500 text-xs">
-              نشط {runningCount} • {idleCount} غير نشط • الحد: {currentCount} / {maxAllowed}
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -168,12 +167,12 @@ export function AccountsPage() {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 bg-primary-900/30 p-3 border border-primary-700/30 rounded-xl"
+            className="accounts-banner flex items-center gap-3 bg-primary-900/30 border border-primary-700/30 rounded-xl p-3"
           >
             <div className="flex flex-shrink-0 justify-center items-center bg-primary-700 rounded-lg w-7 h-7">
-              <AlertTriangle size={14} className="text-primary-300" />
+              <AlertTriangle size={14} className="text-white" />
             </div>
-            <p className="text-primary-300 text-sm">
+            <p className="accounts-banner-text text-primary-300 text-sm font-medium">
               {t('accounts.banner', { count: runningCount })}
             </p>
             <span className="ms-auto badge badge-green">{runningCount} / {activeCastles.length}</span>
@@ -182,7 +181,7 @@ export function AccountsPage() {
 
         {/* Batch Settings Accordion Header */}
         {activeCastles.length > 0 && (
-          <div className="bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden transition-all duration-200 glass-card">
+          <div className="batch-settings-card bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden transition-all duration-200 glass-card">
             {/* Clickable Header Bar: clicking anywhere on this header bar toggles the batch settings open/closed */}
             <div
               onClick={() => setShowBatchSettings(s => !s)}
@@ -190,42 +189,40 @@ export function AccountsPage() {
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowBatchSettings(s => !s) } }}
               className={clsx(
-                'flex justify-between items-center p-4 sm:p-5 w-full transition-all duration-200 cursor-pointer select-none',
+                'batch-settings-header flex justify-between items-center py-2 px-3.5 sm:py-2.5 sm:px-5 w-full transition-all duration-200 cursor-pointer select-none',
                 showBatchSettings
                   ? 'bg-primary-900/30 border-b border-white/10'
                   : 'hover:bg-primary-900/25 active:bg-primary-900/40'
               )}
             >
-              <div className="flex items-center gap-3.5">
-                <div className="flex justify-center items-center bg-primary-500/20 shadow-sm border border-primary-500/30 rounded-xl w-10 h-10 text-primary-400 shrink-0">
-                  <SlidersHorizontal size={18} />
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="batch-icon-pod flex justify-center items-center bg-primary-500/20 shadow-sm border border-primary-500/30 rounded-lg w-7 h-7 sm:w-8 sm:h-8 text-primary-400 shrink-0">
+                  <SlidersHorizontal size={15} />
                 </div>
                 <div className="text-start">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-white text-sm sm:text-base">إعدادات جماعية</span>
-                  </div>
+                  <span className="batch-title font-bold text-white text-xs sm:text-sm">إعدادات جماعية</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-3.5 py-2 border border-primary-500/30 rounded-xl font-semibold text-primary-400 text-xs transition-all shrink-0">
+              <div className="batch-toggle-pill flex items-center gap-1.5 sm:gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-2.5 py-1 sm:px-3 sm:py-1.5 border border-primary-500/30 rounded-lg font-semibold text-primary-400 text-xs transition-all shrink-0">
                 <span className="hidden sm:inline">{showBatchSettings ? 'إغلاق الإعدادات' : 'فتح قائمة المهام'}</span>
-                <span className="font-bold text-sm transition-transform duration-200">{showBatchSettings ? '▲' : '▼'}</span>
+                <span className="font-bold text-xs transition-transform duration-200">{showBatchSettings ? '▲' : '▼'}</span>
               </div>
             </div>
 
             {showBatchSettings && (
-              <div className="space-y-5 bg-black/15 p-4 sm:p-5 w-full">
+              <div className="batch-settings-body space-y-5 bg-black/15 p-4 sm:p-5 w-full">
                 {/* Account Selection Box */}
-                <div className="space-y-3 bg-white/[0.03] p-4 border border-white/8 rounded-xl">
+                <div className="batch-selection-box space-y-3 bg-white/[0.03] p-4 border border-white/8 rounded-xl">
                   <div className="flex flex-wrap justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
-                      <Users size={15} className="text-primary-400" />
-                      <span className="font-semibold text-white text-xs sm:text-sm">الحسابات المستهدفة</span>
+                      <Users size={15} className="batch-users-icon text-primary-400" />
+                      <span className="batch-box-title font-semibold text-white text-xs sm:text-sm">الحسابات المستهدفة</span>
                     </div>
                     <button
                       type="button"
                       onClick={handleSelectAllBatch}
-                      className="font-medium text-primary-400 hover:text-primary-300 text-xs underline transition-colors cursor-pointer"
+                      className="batch-select-all font-medium text-primary-400 hover:text-primary-300 text-xs underline transition-colors cursor-pointer"
                     >
                       {selectedBatchIds.length === activeCastles.length ? 'إلغاء تحديد الكل' : 'تحديد جميع الحسابات'}
                     </button>
@@ -241,15 +238,15 @@ export function AccountsPage() {
                           type="button"
                           onClick={() => handleToggleBatchCastle(c.id)}
                           className={clsx(
-                            'flex items-center gap-1.5 px-2.5 py-1 border rounded-lg font-medium text-[11px] transition-all duration-150 cursor-pointer',
+                            'batch-castle-chip flex items-center gap-1.5 px-2.5 py-1 border rounded-lg font-medium text-[11px] transition-all duration-150 cursor-pointer',
                             isSelected
-                              ? 'bg-primary-600/25 border-primary-500/60 text-white shadow-sm'
-                              : 'bg-white/[0.02] border-white/10 text-gray-400 hover:border-white/20 hover:text-gray-300'
+                              ? 'chip-selected bg-primary-600/25 border-primary-500/60 text-white shadow-sm'
+                              : 'chip-unselected bg-white/[0.02] border-white/10 text-gray-400 hover:border-white/20 hover:text-gray-300'
                           )}
                         >
                           <span
                             className={clsx(
-                              'flex justify-center items-center border rounded w-3.5 h-3.5 font-bold text-[10px] transition-colors',
+                              'chip-checkbox flex justify-center items-center border rounded w-3.5 h-3.5 font-bold text-[10px] transition-colors',
                               isSelected
                                 ? 'bg-primary-500 border-primary-400 text-white'
                                 : 'border-gray-600 bg-transparent text-transparent'
@@ -257,10 +254,9 @@ export function AccountsPage() {
                           >
                             ✓
                           </span>
-                          <span className="font-semibold text-white">
+                          <span className="chip-name font-semibold text-white">
                             {c.castle_info?.lord_name || 'قلعة'}
                           </span>
-
                         </button>
                       )
                     })}
@@ -285,15 +281,16 @@ export function AccountsPage() {
 
         {/* Search input (matching reference UI Image 4 & 5) */}
         <div className="p-3 glass-card">
-          <div className="relative">
-            <Search size={15} className="top-1/2 absolute text-gray-500 -translate-y-1/2 start-3" />
+          <div className="relative flex items-center">
+            <Search size={16} className="pointer-events-none top-1/2 absolute text-gray-400 -translate-y-1/2 start-3.5 z-10" />
             <input
               id="castle-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="...البحث في البريد أو اسم القلعة"
-              className="ps-9 input-field"
+              placeholder="البحث في البريد أو اسم القلعة..."
+              className="w-full input-field !ps-10"
+              style={{ paddingInlineStart: '2.6rem' }}
             />
           </div>
         </div>

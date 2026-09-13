@@ -32,6 +32,7 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
 
   return (
     <div
+      className="task-tabs-nav"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -46,7 +47,9 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
     >
       {/* Arrow left (RTL: scroll right) */}
       <button
+        type="button"
         onClick={() => scroll('right')}
+        className="task-tabs-arrow"
         style={{
           flexShrink: 0, padding: '3px 6px',
           borderRadius: '6px', border: 'none',
@@ -74,7 +77,9 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => onChange(tab.id)}
+              className={clsx('task-tab-item', isActive && 'active', isError && 'has-error')}
               style={{
                 flexShrink: 0,
                 display: 'flex', alignItems: 'center', gap: '5px',
@@ -120,7 +125,9 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
 
       {/* Arrow right (RTL: scroll left) */}
       <button
+        type="button"
         onClick={() => scroll('left')}
+        className="task-tabs-arrow"
         style={{
           flexShrink: 0, padding: '4px 8px',
           borderRadius: '8px', border: 'none',
