@@ -57,6 +57,22 @@ SERVICE_ACCOUNT_KEY = os.path.join(_ROOT, "firebase_service_account.json")
 PROJECT_ID = "mnahel-7c8e5"
 
 
+def _kill_process_tree(proc: subprocess.Popen):
+    """إنهاء العملية وشجرتها بالكامل فوراً بدون تعليق."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.run(f"taskkill /F /T /PID {proc.pid}", shell=True, capture_output=True)
+        else:
+            proc.kill()
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
 # ══════════════════════════════════════════════════════════════════════
 # FirebaseRunner
 # ══════════════════════════════════════════════════════════════════════
@@ -157,6 +173,21 @@ class FirebaseRunner:
             self._update_status(user_id, castle_id, "error", "لا يوجد بريد إلكتروني")
             return
 
+        # فحص صلاحية الاشتراك وحالة الحظر
+        try:
+            user_snap = self.db.collection("users").document(user_id).get()
+            if user_snap.exists:
+                from core.firebase_schema import check_user_subscription
+                valid, reason = check_user_subscription(user_snap.to_dict())
+                if not valid:
+                    log.warning(f"🛑 القلعة {castle_id} ({email}): تم رفض التشغيل: {reason}")
+                    with self._lock:
+                        self._reserved.discard(castle_id)
+                    self._update_status(user_id, castle_id, "idle", f"متوقف: {reason}")
+                    return
+        except Exception as e:
+            log.warning(f"⚠️ تنبيه أثناء التحقق من اشتراك المستخدم في runner: {e}")
+
         log.info(f"🚀 [{email}] تشغيل البوت...")
         self._update_status(user_id, castle_id, "running", "البوت يعمل الآن...")
 
@@ -209,26 +240,43 @@ class FirebaseRunner:
                 self._active_procs[castle_id] = proc
                 self._reserved.discard(castle_id)
 
-            # متابعة العملية مع فحص دوري للإيقاف من لوحة التحكم
+            # متابعة العملية مع فحص دوري مستمر للحظر وانتهاء الاشتراك والإيقاف
+            forced_stop_reason = ""
             while proc.poll() is None:
                 try:
+                    # 1. فحص اشتراك المستخدم وحظر حسابه
+                    user_snap = self.db.collection("users").document(user_id).get()
+                    if user_snap.exists:
+                        from core.firebase_schema import check_user_subscription
+                        valid, reason = check_user_subscription(user_snap.to_dict() or {})
+                        if not valid:
+                            forced_stop_reason = reason
+                            log.warning(f"🛑 [{email}] كشف حظر أو انتهاء اشتراك — إنهاء فوري للعملية: {reason}")
+                            _kill_process_tree(proc)
+                            self._update_status(user_id, castle_id, "idle", f"متوقف إجبارياً: {reason}")
+                            break
+
+                    # 2. فحص حالة مستند القلعة
                     doc = (self.db.collection("users").document(user_id)
                                   .collection("castles").document(castle_id).get())
                     if doc.exists:
                         state = doc.to_dict().get("bot_status", {}).get("state", "idle")
                         if state not in ("running",):
                             log.info(f"⏹️  [{email}] إيقاف مطلوب من لوحة التحكم (state={state})")
-                            proc.terminate()
-                            proc.wait(timeout=5)
+                            _kill_process_tree(proc)
                             break
-                except Exception:
-                    pass
-                time.sleep(30)
+                except Exception as ex:
+                    log.debug(f"Runner guard exception: {ex}")
+                time.sleep(15)
 
             ret = proc.returncode
-            log.info(f"✅ [{email}] انتهى البوت (exit={ret})")
-            self._update_status(user_id, castle_id, "idle",
-                                "انتهت الدورة بنجاح" if ret == 0 else f"توقف (كود={ret})")
+            if forced_stop_reason:
+                log.info(f"🛑 [{email}] توقف البوت إجبارياً: {forced_stop_reason}")
+                self._update_status(user_id, castle_id, "idle", f"متوقف إجبارياً: {forced_stop_reason}")
+            else:
+                log.info(f"✅ [{email}] انتهى البوت (exit={ret})")
+                self._update_status(user_id, castle_id, "idle",
+                                    "انتهت الدورة بنجاح" if ret == 0 else f"توقف (كود={ret})")
 
         except Exception as e:
             log.error(f"💥 [{email}] خطأ: {e}")
@@ -253,7 +301,7 @@ class FirebaseRunner:
         with self._lock:
             proc = self._active_procs.get(castle_id)
         if proc and proc.poll() is None:
-            proc.terminate()
+            _kill_process_tree(proc)
             log.info(f"⏹️  إيقاف القلعة {castle_id[:12]}...")
 
     # ──────────────────────────────────────────────────────────────────
@@ -281,10 +329,23 @@ class FirebaseRunner:
             running = idle = 0
             for user_doc in self.db.collection("users").stream():
                 uid = user_doc.id
+                udata = user_doc.to_dict() or {}
+                from core.firebase_schema import check_user_subscription
+                is_sub_valid, sub_reason = check_user_subscription(udata)
+
                 for c in self.db.collection("users").document(uid).collection("castles").stream():
                     data  = c.to_dict() or {}
                     state = data.get("bot_status", {}).get("state", "idle")
                     email = data.get("email", "?")
+
+                    if not is_sub_valid:
+                        # المستخدم محظور أو منتهي الاشتراك — إيقاف فوري للعملية إن كانت جارية
+                        if self._is_running(c.id):
+                            log.warning(f"🛑 [{email}] إيقاف عملية قلعة لمستخدم غير مصرح له (الحظر/الاشتراك): {sub_reason}")
+                            self.stop_bot(c.id)
+                        if state != "idle":
+                            self._update_status(uid, c.id, "idle", f"متوقف: {sub_reason}")
+                        continue
 
                     if state == "running":
                         running += 1

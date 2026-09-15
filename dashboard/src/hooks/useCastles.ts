@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore'
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '../lib/firebase'
+import { startBot, stopBot, checkApiAvailable } from '../lib/botApi'
 import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
@@ -81,6 +82,7 @@ export function useCastles(userId: string) {
       return {
         items: snap.docs.map(d => {
           const data = d.data() as Record<string, unknown>
+          delete data.password
           return {
             id: d.id,
             ...data,
@@ -105,6 +107,7 @@ export function useCastle(userId: string, castleId: string) {
       const d = snap.docs.find(doc => doc.id === castleId)
       if (!d) throw new Error('Castle not found')
       const data = d.data() as Record<string, unknown>
+      delete data.password
       return {
         id: d.id,
         ...data,
@@ -222,8 +225,6 @@ export function useBotControl(userId: string) {
       castle: Castle
       state: 'running' | 'idle'
     }) => {
-      const { startBot, stopBot, checkApiAvailable } = await import('../lib/botApi')
-
       const apiAvailable = await checkApiAvailable()
 
       if (state === 'running') {
@@ -332,29 +333,40 @@ export function useAddCastle(userId: string) {
       const userRef = doc(db, 'users', userId)
       const userSnap = await getDoc(userRef)
       const userData = userSnap.data()
+      const isSuperAdmin = userData?.role === 'admin' || userData?.email?.toLowerCase().trim() === 'ibraboths@gmail.com'
       const sub = userData?.subscription
-      const maxAllowed = Number(sub?.max_castles_allowed ?? 1)
-      const currentCount = Number(sub?.current_castles_count ?? 0)
+      const maxAllowed = isSuperAdmin ? 999999 : Number(sub?.max_castles_allowed ?? 1)
 
-      // Expiration & Active status check
+      // Count actual current castles from subcollection
+      const existingCastlesSnap = await getDocs(collection(db, 'users', userId, 'castles'))
+      const existingCastles = existingCastlesSnap.docs.map(d => d.data())
+      const realActiveCount = existingCastles.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state !== 'pending' && c.is_active !== false).length
+      const realPendingCount = existingCastles.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state === 'pending').length
+
+      // Expiration & Active status check (for initial status message only)
       const now = new Date()
-      const isExpired = sub?.expires_at ? new Date(sub.expires_at).getTime() <= now.getTime() : false
-      const isSubActive = (sub?.status === 'active' || !sub?.status) && !isExpired
+      const isExpired = isSuperAdmin ? false : (sub?.expires_at ? new Date(sub.expires_at).getTime() <= now.getTime() : false)
+      const isSubActive = isSuperAdmin ? true : ((sub?.status === 'active' || !sub?.status) && !isExpired)
+      const isBanned = userData?.is_banned === true
 
       // Rule:
-      // If user is within allowed count AND subscription has not expired:
-      // IMMEDIATELY ACCEPTED without waiting for admin!
-      // Otherwise, if count >= maxAllowed or subscription is expired:
-      // goes to pending approval queue.
-      const isWithinQuota = currentCount < maxAllowed
-      const isAutoApproved = isSubActive && isWithinQuota
+      // Approval (pending queue) is STRICTLY related to exceeding the allowed castles quota (max_castles_allowed).
+      // It is completely independent of subscription expiration or ban state!
+      // If user is within quota: the castle is auto-accepted immediately (is_active: true).
+      // If the subscription is expired or user is banned, the castle is still added as active, but its state is 'idle'
+      // and locked with a status message ('متوقف بسبب انتهاء الاشتراك' / 'متوقف: تم حظر الحساب').
+      // Only when realActiveCount >= maxAllowed does the castle go to pending approval queue ('pending').
+      const isWithinQuota = isSuperAdmin || realActiveCount < maxAllowed
+      const isAutoApproved = isWithinQuota
       const isPending = !isAutoApproved
 
-      let pendingReason = ''
-      if (!isSubActive) {
-        pendingReason = 'بانتظار موافقة المسؤول (انتهت فترة الاشتراك أو الحساب غير نشط)'
-      } else if (!isWithinQuota) {
-        pendingReason = 'بانتظار موافقة المسؤول (تم تجاوز عدد الحسابات المسموح بها)'
+      let initialStatusMessage = 'جاهز للتشغيل'
+      if (!isAutoApproved) {
+        initialStatusMessage = 'بانتظار موافقة المسؤول (تم تجاوز عدد الحسابات المسموح بها)'
+      } else if (isBanned) {
+        initialStatusMessage = 'متوقف: تم حظر الحساب من قبل الإدارة'
+      } else if (isExpired || !isSubActive) {
+        initialStatusMessage = 'متوقف بسبب انتهاء الاشتراك'
       }
 
       // 2. Create new castle document
@@ -362,7 +374,7 @@ export function useAddCastle(userId: string) {
       const newCastleRef = doc(castleColRef)
 
       const emailTrimmed = email.trim()
-      const lordFallback = emailTrimmed.split('@')[0]
+      const autoName = emailTrimmed.split('@')[0] || 'قلعة'
 
       const newCastle: Record<string, unknown> = {
         castle_id: newCastleRef.id,
@@ -371,8 +383,8 @@ export function useAddCastle(userId: string) {
         is_active: isAutoApproved,
         created_at: now.toISOString(),
         castle_info: {
-          lord_name: lordFallback,
-          castle_name: 'قلعة جديدة',
+          lord_name: autoName,
+          castle_name: autoName,
           server_id: 1,
           castle_level: 1,
           lord_power: 0,
@@ -393,7 +405,7 @@ export function useAddCastle(userId: string) {
           state: isAutoApproved ? 'idle' : 'pending',
           last_run_time: null,
           next_run_time: null,
-          last_run_message: isAutoApproved ? 'جاهز للتشغيل' : pendingReason,
+          last_run_message: initialStatusMessage,
           active_marches: 0,
           max_marches: 2,
           last_error: null,
@@ -403,15 +415,16 @@ export function useAddCastle(userId: string) {
 
       await setDoc(newCastleRef, newCastle)
 
-      // 3. Increment current active count or pending count
+      // 3. Increment current active count or pending count with exact values
       if (isAutoApproved) {
         await updateDoc(userRef, {
-          'subscription.current_castles_count': currentCount + 1,
+          'subscription.current_castles_count': realActiveCount + 1,
+          'subscription.pending_castles_count': realPendingCount,
         })
       } else {
-        const pendingCount = Number(sub?.pending_castles_count ?? 0)
         await updateDoc(userRef, {
-          'subscription.pending_castles_count': pendingCount + 1,
+          'subscription.current_castles_count': realActiveCount,
+          'subscription.pending_castles_count': realPendingCount + 1,
         })
       }
 
@@ -421,6 +434,7 @@ export function useAddCastle(userId: string) {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
       qc.invalidateQueries({ queryKey: ['user', userId] })
       qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
     },
   })
 }
@@ -434,8 +448,8 @@ export function useUpdateCastleCredentials(userId: string) {
       const updates: Record<string, unknown> = {
         email: email.trim(),
       }
-      if (password) {
-        updates.password = password
+      if (password && password.trim()) {
+        updates.password = password.trim()
       }
       await updateDoc(castleRef, updates)
     },
@@ -449,31 +463,24 @@ export function useUpdateCastleCredentials(userId: string) {
 export function useDeleteCastle(userId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ castleId, wasActive }: { castleId: string; wasActive?: boolean }) => {
+    mutationFn: async ({ castleId }: { castleId: string; wasActive?: boolean }) => {
       await deleteDoc(doc(db, 'users', userId, 'castles', castleId))
+      const castlesSnap = await getDocs(collection(db, 'users', userId, 'castles'))
+      const remaining = castlesSnap.docs.map(cd => cd.data() as Record<string, unknown>)
+      const newActive = remaining.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state !== 'pending' && c.is_active !== false).length
+      const newPending = remaining.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state === 'pending').length
+
       const userRef = doc(db, 'users', userId)
-      const userSnap = await getDoc(userRef)
-      const sub = userSnap.data()?.subscription
-      if (wasActive) {
-        const currentCount = Number(sub?.current_castles_count ?? 1)
-        if (currentCount > 0) {
-          await updateDoc(userRef, {
-            'subscription.current_castles_count': currentCount - 1,
-          })
-        }
-      } else {
-        const pendingCount = Number(sub?.pending_castles_count ?? 1)
-        if (pendingCount > 0) {
-          await updateDoc(userRef, {
-            'subscription.pending_castles_count': pendingCount - 1,
-          })
-        }
-      }
+      await updateDoc(userRef, {
+        'subscription.current_castles_count': newActive,
+        'subscription.pending_castles_count': newPending,
+      })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
       qc.invalidateQueries({ queryKey: ['user', userId] })
       qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
     },
   })
 }

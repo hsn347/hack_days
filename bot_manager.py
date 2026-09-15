@@ -531,7 +531,7 @@ class AccountContext:
     def __init__(self, email: str):
         self.email: str = email
         self.uid: str = ""
-        self.lord_name: str = "غير معروف"
+        self.lord_name: str = email.split("@")[0] if email and "@" in email else (email or "قلعة")
         self.lord_level: int = 0
         self.kingdom_id: str = ""
         self.gold: int = 0
@@ -936,11 +936,52 @@ class BotManager:
                             doc_data["bot_status.last_run_time"] = now_iso
                     elif conn_state == "idle":
                         doc_data["bot_status.state"] = "idle"
+                        if message:
+                            doc_data["bot_status.last_run_message"] = message
                     ref.update(doc_data)
             except Exception:
                 pass
         import threading
         threading.Thread(target=_bg_update, daemon=True, name=f"bm-fb-{conn_state}").start()
+
+    def check_subscription_validity(self) -> Tuple[bool, str]:
+        """فحص صلاحية اشتراك المستخدم وحالة الحظر من Firestore."""
+        try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore as fb_fs
+            sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
+            if not firebase_admin._apps and os.path.exists(sak):
+                firebase_admin.initialize_app(credentials.Certificate(sak))
+            if not firebase_admin._apps:
+                return True, "Firebase غير مهيأ"
+
+            db = fb_fs.client()
+            user_doc = None
+            if getattr(self, "user_id", None):
+                user_snap = db.collection("users").document(self.user_id).get()
+                if user_snap.exists:
+                    user_doc = user_snap.to_dict() or {}
+            else:
+                # استعلام سريع مباشر عبر collection_group بدلاً من المسح المتكرر
+                castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
+                for c in castles:
+                    self.castle_id = c.id
+                    u_ref = c.reference.parent.parent
+                    if u_ref:
+                        self.user_id = u_ref.id
+                        u_snap = u_ref.get()
+                        if u_snap.exists:
+                            user_doc = u_snap.to_dict() or {}
+                    break
+
+            if not user_doc:
+                return True, "لم يتم العثور على مستند المستخدم"
+
+            from core.firebase_schema import check_user_subscription
+            return check_user_subscription(user_doc)
+        except Exception as e:
+            log.warning(f"⚠️ تنبيه أثناء التحقق من صلاحية الاشتراك: {e}")
+            return True, "تعذر التحقق"
 
     def sync_castle_resources(self) -> None:
         """تحديث بيانات موارد ومعلومات القلعة في بداية كل دورة في Firebase."""
@@ -1004,13 +1045,14 @@ class BotManager:
                         if getattr(self, "user_id", None) and getattr(self, "castle_id", None):
                             target_ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
                         else:
-                            for u in db.collection("users").stream():
-                                for c in db.collection("users").document(u.id).collection("castles").stream():
-                                    if c.to_dict().get("email", "").strip().lower() == self.email.strip().lower():
-                                        target_ref = db.collection("users").document(u.id).collection("castles").document(c.id)
-                                        break
-                                if target_ref:
-                                    break
+                            castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
+                            for c in castles:
+                                target_ref = c.reference
+                                u_ref = c.reference.parent.parent
+                                if u_ref:
+                                    self.user_id = u_ref.id
+                                    self.castle_id = c.id
+                                break
                         if target_ref:
                             update_dict = {}
                             for k, v in res_data.items():
@@ -1805,6 +1847,9 @@ class BotManager:
                     results[step_name] = {"success": False, "error": "انقطاع الاتصال وتعذر إعادة الدخول"}
                     break
 
+            clean_step_name = step_name.split('(')[0].strip()
+            self._update_bot_conn_state("connected", f"جاري تنفيذ: {clean_step_name}")
+
             print("\n" + "─" * 65)
             print(f"▶️ بدء تنفيذ: {step_name}")
             print("─" * 65)
@@ -1815,10 +1860,21 @@ class BotManager:
 
             done, pending = await asyncio.wait(
                 [step_task, disconnect_waiter],
+                timeout=300,
                 return_when=asyncio.FIRST_COMPLETED
             )
 
-            if disconnect_waiter in done:
+            if not done:
+                # انتهت مهلة الأمان (5 دقائق) والمهمة لم تنتهِ
+                log.error(f"⏰ [مهلة أمان] تجاوزت المهمة [{step_name}] الحد الأقصى للوقت (300ث) بدون استجابة — إلغاء المهمة والمتابعة.")
+                for p_task in pending:
+                    p_task.cancel()
+                    try:
+                        await p_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                res = {"success": False, "error": "تجاوز الحد الأقصى لوقت المهمة (timeout 300s)"}
+            elif disconnect_waiter in done:
                 # رُصد انقطاع الاتصال فوراً أثناء عمل المهمة (مثلاً دخول شخص آخر إلى الحساب)
                 kick_reason = self.get_disconnect_reason()
                 log.warning(f"⚡ [رصد فوري للانقطاع] انقطع اتصال الحساب فوراً أثناء تنفيذ [{step_name}] (السبب: {kick_reason})!")
@@ -2506,11 +2562,19 @@ class BotManager:
     async def run_once(self) -> Dict[str, Any]:
         """
         تشغيل دورة واحدة كاملة:
+          0. التحقق من صلاحية الاشتراك وحظر الحساب.
           1. تسجيل الدخول.
           2. الاستعلام الشامل (مع إعادة المحاولة عند انقطاع الاتصال).
           3. تنفيذ سلسلة المهام بالترتيب مع فحص الجدول الزمني لكل مهمة.
           4. إغلاق الاتصال بأمان وإعادة النتائج.
         """
+        # 0. التحقق من صلاحية الاشتراك وحظر الحساب
+        valid, reason = self.check_subscription_validity()
+        if not valid:
+            log.warning(f"🛑 [إيقاف التشغيل] {reason} — لن يتم تشغيل البوت للحساب {self.email}!")
+            self._update_bot_conn_state("idle", f"متوقف: {reason}")
+            return {"success": False, "error": reason}
+
         try:
             # 1. تسجيل الدخول
             connected = await self.login_and_connect()
@@ -2613,17 +2677,27 @@ class BotManager:
                 # حفظ حالة الجدول بعد كل دورة (ملف صغير < 1KB)
                 self.scheduler.save_state()
 
+            # التحقق من صلاحية الاشتراك وحالة الحظر بعد انتهاء الدورة الحالية بأمان
+            valid, reason = self.check_subscription_validity()
+            if not valid:
+                log.warning(f"🛑 [إيقاف الدورة المستمرة] {reason} — إيقاف البوت بعد اكتمال الدورة الحالية.")
+                self._update_bot_conn_state("idle", f"متوقف: {reason}")
+                break
+
             # حساب وقت الانتظار المتبقي
             elapsed   = (datetime.now() - start_time).total_seconds()
             remaining = max(0.0, interval_secs - elapsed)
 
             next_run = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
             log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run}")
-            self._update_bot_conn_state("waiting", f"بانتظار الدورة القادمة الساعة {next_run}")
 
             if remaining > 0:
+                self._update_bot_conn_state("waiting", f"بانتظار الدورة القادمة الساعة {next_run}")
                 log.info(f"💤 انتظار {remaining/60:.1f} دقيقة...")
+                # نوم خفيف وغير مستهلك للموارد حتى حلول موعد الدورة القادمة
                 await asyncio.sleep(remaining)
+            else:
+                self._update_bot_conn_state("connected", f"بدء الدورة التالية فوراً (#{iteration + 1})")
 
 
 

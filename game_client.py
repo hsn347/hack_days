@@ -307,8 +307,8 @@ class GateClient:
                         h_ctrl = retdata.get('heroCtrl', [])
                         if isinstance(h_ctrl, list) and h_ctrl:
                             self.heroes = list(h_ctrl)
-                    # حفظ نسخة JSON محلية تلقائياً للمطور في مجلد dumps
-                    if len(retdata) > 5:
+                    # حفظ نسخة JSON محلية فقط عند تفعيل وضع التطوير BOT_DEBUG_DUMP لمنع استهلاك القرص في الإنتاج
+                    if os.environ.get("BOT_DEBUG_DUMP") == "1" and len(retdata) > 5:
                         try:
                             os.makedirs('dumps', exist_ok=True)
                             safe_name = str(getattr(self.creds, 'email', None) or getattr(self.creds, 'uid', 'acc')).replace('@', '_at_')
@@ -424,9 +424,10 @@ class GateClient:
                 return None
             return result.get('content')
         except (asyncio.TimeoutError, ConnectionError):
+            return None
+        finally:
             self._pending.pop(sess, None)
             self._cmd_pending.pop(cmd_key, None)
-            return None
 
     def send_nowait(self, cmd: str, subcmd: str, data: dict = None):
         """إرسال بدون انتظار"""

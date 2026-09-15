@@ -1,0 +1,40 @@
+{
+  "name": "IBRA BOT",
+  "short_name": "IBRA BOT",
+  "description": "IBRA BOT — أول بوت عربي لإدارة وتحكم قلاع وحسابات Empire",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0f0a",
+  "theme_color": "#16a34a",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["utilities", "games", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png?v=3",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png?v=3",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-192x192.png?v=3",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png?v=3",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

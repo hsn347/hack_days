@@ -59,8 +59,8 @@ export function CastleDetailPage() {
                 </div>
                 <div className="mt-1 text-gray-500 dark:text-gray-400 text-sm">{castle.email}</div>
                 <div className="flex items-center gap-4 mt-2 text-gray-600 dark:text-gray-400 text-sm">
-                  <span>⚡ {(info.lord_power / 1_000_000).toFixed(1)}M قوة</span>
-                  <span>🌍 سيرفر #{info.server_id}</span>
+                  <span>⚡ {(info.lord_power / 1_000_000).toFixed(1)}M {t('accounts.power')}</span>
+                  <span>🌍 {t('accounts.server')} #{info.server_id}</span>
                   <span>📍 {info.coordinates.x}, {info.coordinates.y}</span>
                   <span>⭐ VIP {info.vip_level}</span>
                 </div>
@@ -104,7 +104,7 @@ export function CastleDetailPage() {
         {/* Task settings */}
         <div className="space-y-5 p-4 md:p-6 w-full glass-card">
           <div className="flex justify-between items-center">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-base">إعدادات المهام</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white text-base">{t('accounts.taskSettings')}</h2>
           </div>
           <div className="w-full">
             <TaskTabContent castle={castle} userId={uid} />

@@ -3,16 +3,21 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Users, Settings, LogOut,
-  Moon, Sun, Bot, Menu, X,
+  Moon, Sun, Bot, Menu, X, Shield,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../store/appStore'
 import { useAuth } from '../../hooks/useAuth'
+import { localizeUsername } from '../../lib/localize'
 import toast from 'react-hot-toast'
 
 const LANGUAGES = ['AR', 'EN', 'TR'] as const
 
-export function Sidebar() {
+export interface SidebarProps {
+  onLogoutClick?: () => void
+}
+
+export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
   const { t, i18n } = useTranslation()
   const navigate    = useNavigate()
   const { user, logout, isAdmin } = useAuth()
@@ -27,9 +32,12 @@ export function Sidebar() {
   }
 
   const handleLogout = async () => {
+    if (onLogoutClick) {
+      onLogoutClick()
+      return
+    }
     await logout()
     navigate('/login')
-    toast.success('تم تسجيل الخروج')
   }
 
   const toggleTheme = () => {
@@ -40,35 +48,41 @@ export function Sidebar() {
     { to: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
     { to: '/accounts',  icon: Users,           label: t('nav.accounts')  },
     { to: '/settings',  icon: Settings,        label: t('nav.settings')  },
+    ...(isAdmin ? [
+      {
+        to: '/admin',
+        icon: Shield,
+        label: t('nav.admin', 'الإدارة'),
+        badge: 'ROOT',
+        isSpecial: true,
+      }
+    ] : []),
   ]
 
   return (
     <>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={toggleSidebar} />
-      )}
-
-      {/* Sidebar - Always on the Left in all languages */}
+      {/* Sidebar - Desktop Only (Hidden on Mobile) */}
       <aside
         dir="ltr"
-        className={clsx(
-          'glass-sidebar fixed top-0 left-0 h-full z-50 flex flex-col border-r border-white/8 transition-transform duration-300',
-          'sidebar-width',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        )}
+        className="hidden md:flex glass-sidebar fixed top-0 left-0 h-full z-50 flex-col border-r border-gray-200 dark:border-white/8 sidebar-width"
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-white/8">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center shadow-glow">
-              <Bot size={16} className="text-white" />
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200 dark:border-white/8">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-emerald-500/30 shrink-0 p-0.5 flex items-center justify-center shadow-xs overflow-hidden">
+              <img
+                src="/logo.png?v=2"
+                alt="IBRA BOT"
+                className="w-full h-full object-contain"
+              />
             </div>
-            <span className="font-bold text-white tracking-wide">OsmanliBot</span>
+            <div className="min-w-0">
+              <span className="brand-title font-bold text-sm tracking-wide block leading-tight">IBRA BOT</span>
+              <span className="brand-tagline text-[11px] font-bold block leading-tight mt-0.5 truncate">
+                {t('tagline')}
+              </span>
+            </div>
           </div>
-          <button onClick={toggleSidebar} className="md:hidden text-gray-400 hover:text-white transition-colors">
-            <X size={18} />
-          </button>
         </div>
 
         {/* User info */}
@@ -79,8 +93,12 @@ export function Sidebar() {
                 {user.username?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?'}
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-white truncate">{user.username || user.email}</div>
-                <div className="text-xs text-gray-500">{isAdmin ? 'Admin' : 'User'}</div>
+                <div className="text-sm font-medium text-white truncate">
+                  {localizeUsername(user.username, t) || user.email}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {isAdmin ? t('roles.admin', 'Admin') : t('roles.user', 'User')}
+                </div>
               </div>
             </div>
           </div>
@@ -88,15 +106,26 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navLinks.map(({ to, icon: Icon, label }) => (
+          {navLinks.map(({ to, icon: Icon, label, badge, isSpecial }: any) => (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) => clsx('nav-item', isActive && 'active')}
+              className={({ isActive }) => clsx(
+                'nav-item flex items-center justify-between',
+                isActive && 'active',
+                isSpecial && !isActive && 'text-emerald-400/90 hover:text-emerald-300'
+              )}
               onClick={() => window.innerWidth < 768 && toggleSidebar()}
             >
-              <Icon size={18} />
-              <span>{label}</span>
+              <div className="flex items-center gap-2.5">
+                <Icon size={18} className={isSpecial ? 'text-emerald-400' : undefined} />
+                <span>{label}</span>
+              </div>
+              {badge && (
+                <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded tracking-wider">
+                  {badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -146,13 +175,5 @@ export function Sidebar() {
 
 // Mobile menu button — separate export for Layout usage
 export function MobileMenuBtn() {
-  const { toggleSidebar } = useAppStore()
-  return (
-    <button
-      onClick={toggleSidebar}
-      className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/8"
-    >
-      <Menu size={20} />
-    </button>
-  )
+  return null
 }

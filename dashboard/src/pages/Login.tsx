@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
-import { Bot, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
@@ -19,13 +19,18 @@ export function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(email, password)
-      navigate('/dashboard')
-      toast.success(t('common.success'))
+      const res = await login(email, password)
+      if (res?.isAdmin) {
+        toast.success(t('roles.admin', 'المشرف الأعلى') + ' — ' + t('common.success', 'تم الدخول بنجاح'))
+        navigate('/admin')
+      } else {
+        toast.success(t('common.success'))
+        navigate('/dashboard')
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('common.error')
-      toast.error(msg.includes('wrong-password') || msg.includes('user-not-found')
-        ? 'البريد أو كلمة المرور غير صحيحة'
+      toast.error(msg.includes('wrong-password') || msg.includes('user-not-found') || msg.includes('invalid-credential')
+        ? t('login.invalidCreds')
         : t('common.error')
       )
     } finally {
@@ -46,12 +51,13 @@ export function LoginPage() {
         style={{ boxShadow: '0 24px 64px rgba(16,185,129,0.15)' }}
       >
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary-600 flex items-center justify-center mx-auto mb-4 glow-pulse">
-            <Bot size={32} className="text-white" />
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-white border border-emerald-500/30 flex items-center justify-center mx-auto mb-3.5 p-1 shadow-md">
+            <img src="/logo.png?v=2" alt="IBRA BOT" className="w-full h-full object-contain rounded-xl" />
           </div>
-          <h1 className="text-2xl font-bold text-white">{t('appName')}</h1>
-          <p className="text-gray-500 text-sm mt-1">{t('login.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-white tracking-wide">IBRA BOT</h1>
+          <p className="text-emerald-400 font-medium text-xs mt-1">{t('tagline')}</p>
+          <p className="text-gray-400 text-xs mt-1.5">{t('login.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -106,12 +112,12 @@ export function LoginPage() {
 
         {/* Link to register */}
         <p className="text-center text-sm text-gray-500 mt-5">
-          ليس لديك حساب؟{' '}
+          {t('login.noAccount')}{' '}
           <Link
             to="/register"
             className="text-primary-400 hover:text-primary-300 font-medium transition-colors"
           >
-            إنشاء حساب جديد
+            {t('login.createAccount')}
           </Link>
         </p>
       </motion.div>

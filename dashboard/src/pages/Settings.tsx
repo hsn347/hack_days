@@ -36,7 +36,7 @@ export function SettingsPage() {
     if (!user) return
     const trimmed = username.trim()
     if (!trimmed) {
-      toast.error('يرجى كتابة اسم المستخدم')
+      toast.error(t('settings.usernameRequired'))
       return
     }
 
@@ -59,7 +59,7 @@ export function SettingsPage() {
         }
       }
 
-      toast.success(`تم حفظ الاسم الجديد: ${trimmed}`, {
+      toast.success(t('settings.profileSaved', { name: trimmed }), {
         icon: '✨',
         duration: 2500,
       })
@@ -77,8 +77,8 @@ export function SettingsPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (newPw !== confirmPw) { toast.error('كلمتا المرور غير متطابقتين'); return }
-    if (newPw.length < 6)    { toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return }
+    if (newPw !== confirmPw) { toast.error(t('settings.passwordsNotMatching')); return }
+    if (newPw.length < 6)    { toast.error(t('settings.passwordMinLength')); return }
     if (!firebaseUser?.email) return
     setSavingPw(true)
     try {
@@ -89,7 +89,7 @@ export function SettingsPage() {
       setCurrentPw(''); setNewPw(''); setConfirmPw('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
-      toast.error(msg.includes('wrong-password') ? 'كلمة المرور الحالية غير صحيحة' : t('common.error'))
+      toast.error(msg.includes('wrong-password') ? t('settings.wrongCurrentPassword') : t('common.error'))
     } finally {
       setSavingPw(false)
     }
@@ -100,18 +100,18 @@ export function SettingsPage() {
       <div className="space-y-6 mx-auto max-w-2xl">
         {/* Header */}
         <div>
-          <h1 className="settings-page-title font-bold text-white text-2xl">{t('settings.title')}</h1>
-          <p className="settings-page-desc mt-1 text-gray-500 text-sm">{t('settings.profileDesc')}</p>
+          <h1 className="font-bold text-white text-2xl settings-page-title">{t('settings.title')}</h1>
+          <p className="mt-1 text-gray-500 text-sm settings-page-desc">{t('settings.profileDesc')}</p>
         </div>
 
         {/* Profile section */}
-        <div className="settings-profile-card space-y-6 p-6 glass-card">
+        <div className="space-y-6 p-6 settings-profile-card glass-card">
           {/* Live Profile Header Banner */}
-          <div className="settings-profile-banner flex flex-wrap justify-between items-center gap-4 bg-gradient-to-r from-primary-950/50 via-primary-900/30 to-black/40 shadow-inner p-4 border border-primary-500/30 rounded-2xl">
+          <div className="flex flex-wrap justify-between items-center gap-4 bg-gradient-to-r from-primary-950/50 via-primary-900/30 to-black/40 shadow-inner p-4 border border-primary-500/30 rounded-2xl settings-profile-banner">
             <div className="flex items-center gap-3.5 min-w-0">
               {/* Avatar Circle with Ring */}
               <div className="relative shrink-0">
-                <div className="settings-avatar flex justify-center items-center bg-gradient-to-br from-primary-600 via-primary-700 to-emerald-800 shadow-[0_0_20px_rgba(16,185,129,0.35)] border border-primary-400/40 rounded-2xl w-13 h-13 font-black text-white text-2xl">
+                <div className="flex justify-center items-center bg-gradient-to-br from-primary-600 via-primary-700 to-emerald-800 shadow-[0_0_20px_rgba(16,185,129,0.35)] border border-primary-400/40 rounded-2xl w-13 h-13 font-black text-white text-2xl settings-avatar">
                   {(user?.username || username || user?.email || '?')[0].toUpperCase()}
                 </div>
               </div>
@@ -126,13 +126,13 @@ export function SettingsPage() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 4 }}
                       transition={{ duration: 0.2 }}
-                      className="settings-username-display font-bold text-white text-lg sm:text-xl truncate"
+                      className="font-bold text-white text-lg sm:text-xl truncate settings-username-display"
                     >
-                      {user?.username || username || 'مستخدم جديد'}
+                      {user?.username || username || t('settings.newUser')}
                     </motion.h3>
                   </AnimatePresence>
                 </div>
-                <p className="settings-email-display font-mono text-gray-400 text-xs truncate select-all">{user?.email}</p>
+                <p className="font-mono text-gray-400 text-xs truncate select-all settings-email-display">{user?.email}</p>
               </div>
             </div>
 
@@ -141,29 +141,29 @@ export function SettingsPage() {
                 initial={{ opacity: 0, scale: 0.85 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.85 }}
-                className="settings-success-badge flex items-center gap-1.5 bg-emerald-500/20 shadow-sm px-3 py-1.5 border border-emerald-500/40 rounded-xl font-bold text-emerald-300 text-xs"
+                className="flex items-center gap-1.5 bg-emerald-500/20 shadow-sm px-3 py-1.5 border border-emerald-500/40 rounded-xl font-bold text-emerald-300 text-xs settings-success-badge"
               >
                 <Check size={14} />
-                <span>تم الحفظ</span>
+                <span>{t('settings.saved')}</span>
               </motion.div>
             )}
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.email')}</label>
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.email')}</label>
               <input
                 id="settings-email"
                 type="email"
                 value={user?.email ?? ''}
                 readOnly
-                className="settings-readonly-input opacity-60 cursor-not-allowed input-field"
+                className="opacity-60 cursor-not-allowed settings-readonly-input input-field"
                 dir="ltr"
               />
             </div>
 
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.username')}</label>
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.username')}</label>
               <div className="relative flex items-center">
                 <input
                   id="settings-username"
@@ -181,10 +181,14 @@ export function SettingsPage() {
             </div>
 
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.castleCount')}</label>
-              <div className="settings-stat-input flex items-center gap-2 opacity-60 cursor-not-allowed input-field">
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.castleCount')}</label>
+              <div className="flex items-center gap-2 opacity-60 cursor-not-allowed settings-stat-input input-field">
                 <span className="text-primary-400">🏰</span>
-                <span>{user?.subscription?.current_castles_count ?? 0} {t('common.of')} {user?.subscription?.max_castles_allowed ?? 0}</span>
+                <span>
+                  {isAdmin || user?.role === 'admin'
+                    ? `${user?.subscription?.current_castles_count ?? 0} (غير محدود ∞)`
+                    : `${user?.subscription?.current_castles_count ?? 0} ${t('common.of')} ${user?.subscription?.max_castles_allowed ?? 0}`}
+                </span>
               </div>
             </div>
 
@@ -200,12 +204,12 @@ export function SettingsPage() {
               {savingProfile ? (
                 <>
                   <span className="border-2 border-white/30 border-t-white rounded-full w-4 h-4 animate-spin" />
-                  <span>جاري الحفظ...</span>
+                  <span>{t('settings.savingProfile')}</span>
                 </>
               ) : savedSuccess ? (
                 <>
                   <Check size={16} className="text-white" />
-                  <span>تم التحديث بنجاح!</span>
+                  <span>{t('settings.profileUpdated')}</span>
                 </>
               ) : (
                 <>
@@ -218,18 +222,18 @@ export function SettingsPage() {
         </div>
 
         {/* Change password */}
-        <div className="settings-password-card space-y-5 p-6 glass-card">
+        <div className="space-y-5 p-6 settings-password-card glass-card">
           <div className="flex items-center gap-2">
-            <div className="settings-lock-icon flex justify-center items-center bg-primary-700 rounded-lg w-7 h-7">
+            <div className="flex justify-center items-center bg-primary-700 rounded-lg w-7 h-7 settings-lock-icon">
               <Lock size={15} className="text-white" />
             </div>
-            <h2 className="settings-section-title font-semibold text-white">{t('settings.changePassword')}</h2>
+            <h2 className="font-semibold text-white settings-section-title">{t('settings.changePassword')}</h2>
           </div>
 
           <form onSubmit={handleChangePassword} className="space-y-4">
             {/* Current password */}
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.currentPassword')}</label>
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.currentPassword')}</label>
               <div className="relative">
                 <input
                   id="current-password"
@@ -241,7 +245,7 @@ export function SettingsPage() {
                   placeholder="••••••••"
                 />
                 <button type="button" onClick={() => setShowCurrent(v => !v)}
-                  className="settings-eye-btn absolute inset-y-0 flex items-center text-gray-500 hover:text-gray-300 end-3">
+                  className="absolute inset-y-0 flex items-center text-gray-500 hover:text-gray-300 settings-eye-btn end-3">
                   {showCurrent ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
@@ -249,7 +253,7 @@ export function SettingsPage() {
 
             {/* New password */}
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.newPassword')}</label>
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.newPassword')}</label>
               <div className="relative">
                 <input
                   id="new-password"
@@ -262,16 +266,16 @@ export function SettingsPage() {
                   placeholder="••••••••"
                 />
                 <button type="button" onClick={() => setShowNew(v => !v)}
-                  className="settings-eye-btn absolute inset-y-0 flex items-center text-gray-500 hover:text-gray-300 end-3">
+                  className="absolute inset-y-0 flex items-center text-gray-500 hover:text-gray-300 settings-eye-btn end-3">
                   {showNew ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              <p className="settings-hint-text mt-1 text-gray-600 text-xs">{t('settings.minChars')}</p>
+              <p className="mt-1 text-gray-600 text-xs settings-hint-text">{t('settings.minChars')}</p>
             </div>
 
             {/* Confirm password */}
             <div>
-              <label className="settings-label block mb-1.5 text-gray-400 text-sm">{t('settings.confirmPassword')}</label>
+              <label className="block mb-1.5 text-gray-400 text-sm settings-label">{t('settings.confirmPassword')}</label>
               <input
                 id="confirm-password"
                 type="password"

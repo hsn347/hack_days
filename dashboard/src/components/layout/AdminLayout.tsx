@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Shield, Lock, LogOut, ExternalLink, Activity, Users, Clock, AlertTriangle } from 'lucide-react'
-import { useAdminAuth } from '../../hooks/useAdminAuth'
+import { Shield, Lock, ExternalLink, Sun, Moon } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
+import { useAppStore } from '../../store/appStore'
 import toast from 'react-hot-toast'
 
 export interface AdminLayoutProps {
@@ -10,129 +11,86 @@ export interface AdminLayoutProps {
 }
 
 export function AdminLayout({ children, title }: AdminLayoutProps) {
-  const { adminUser, logoutAdmin } = useAdminAuth()
+  const { logout } = useAuth()
   const navigate = useNavigate()
-  const [timeLeft, setTimeLeft] = useState<string>('60:00')
+  const { theme, setTheme } = useAppStore()
 
-  // مؤقت الجلسة التنازلي التلقائي
-  useEffect(() => {
-    const raw = sessionStorage.getItem('osmanli_admin_session_token')
-    if (!raw) return
-
-    const timer = setInterval(() => {
-      try {
-        const session = JSON.parse(sessionStorage.getItem('osmanli_admin_session_token') || '{}')
-        if (session.expiresAt) {
-          const diff = session.expiresAt - Date.now()
-          if (diff <= 0) {
-            clearInterval(timer)
-            toast.error('انتهت صلاحية جلسة المسؤول لأسباب أمنية')
-            logoutAdmin()
-            navigate('/admin/login')
-          } else {
-            const mins = Math.floor(diff / 60000)
-            const secs = Math.floor((diff % 60000) / 1000)
-            setTimeLeft(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`)
-          }
-        }
-      } catch {}
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [logoutAdmin, navigate])
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
 
   const handleSecureLogout = async () => {
-    await logoutAdmin()
-    toast.success('تم قفل جلسة المسؤول بنجاح')
-    navigate('/admin/login')
+    await logout()
+    toast.success('تم تسجيل الخروج بنجاح')
+    navigate('/login')
   }
 
   return (
-    <div className="min-h-screen bg-[#060a08] text-gray-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
-      {/* ── Background Cyber Ambient Glow ── */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+    <div className="admin-layout-wrapper min-h-screen bg-slate-50 dark:bg-[#060a08] text-slate-900 dark:text-gray-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200 transition-colors">
+      {/* ── Background Ambient Glow (Dark mode only) ── */}
+      <div className="fixed inset-0 pointer-events-none z-0 hidden dark:block">
         <div className="absolute top-0 start-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl" />
         <div className="absolute bottom-10 end-1/4 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(255,255,255,0))]" />
       </div>
 
-      {/* ── Dedicated Admin Top Bar ── */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-emerald-500/20 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          {/* Logo & Portal Identity */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 via-emerald-600/30 to-amber-500/20 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-              <Shield size={20} className="text-emerald-400" />
-              <span className="absolute -top-1 -end-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+      {/* ── Simplified Admin Header ── */}
+      <header className="admin-header sticky top-0 z-30 backdrop-blur-xl bg-white/95 dark:bg-black/75 border-b border-slate-200/80 dark:border-emerald-500/20 shadow-xs transition-colors">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex items-center justify-between gap-3">
+          {/* Brand Identity */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/25 flex items-center justify-center shrink-0 shadow-xs">
+              <Shield size={18} className="text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-sm sm:text-base text-slate-900 dark:text-white tracking-tight">
+                IBRA BOT
+              </span>
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/80 dark:border-emerald-500/20 px-1.5 py-0.5 rounded-md">
+                Admin
               </span>
             </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-base tracking-wide">
-                  بوابة الإدارة المركزية
-                </span>
-                <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  ROOT ADMIN
-                </span>
-              </div>
-              <div className="text-[11px] text-gray-400 flex items-center gap-2">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>اتصال آمن ومشفّر 256-Bit SSL/TLS</span>
-              </div>
-            </div>
           </div>
 
-          {/* Center / Security Indicator */}
-          <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs">
-            <Clock size={14} className="text-amber-400" />
-            <span className="text-gray-400">صلاحية الجلسة:</span>
-            <span className="font-mono font-bold text-amber-300">{timeLeft}</span>
-          </div>
+          {/* Header Actions: Theme Toggle + Dashboard Link + Emergency Lock */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Theme Toggle (الوضع الليلي والنهاري) */}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200/80 dark:border-white/10 transition-colors cursor-pointer shadow-xs"
+              title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
+            >
+              {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-emerald-600" />}
+            </button>
 
-          {/* Right / Actions & User Profile */}
-          <div className="flex items-center gap-3">
             {/* Link to regular dashboard */}
             <Link
               to="/dashboard"
-              className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition"
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 transition active:scale-95 shadow-xs"
               title="الانتقال إلى لوحة المستخدمين العادية"
             >
               <ExternalLink size={13} />
-              <span>لوحة المستخدمين</span>
+              <span>المستخدمين</span>
             </Link>
 
-            {/* Admin Profile Chip */}
-            <div className="hidden lg:flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-3 py-1 rounded-xl text-xs">
-              <span className="text-emerald-300 font-semibold truncate max-w-[150px]">
-                {adminUser?.email || 'admin@osmanli.com'}
-              </span>
-            </div>
-
-            {/* Emergency Lock / Logout Button */}
+            {/* Lock / Logout Button */}
             <button
               onClick={handleSecureLogout}
-              className="flex items-center gap-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-95"
+              className="flex items-center gap-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-3 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
               title="إغلاق وقفل الجلسة فوراً"
             >
               <Lock size={13} />
-              <span>قفل الجلسة</span>
+              <span>قفل</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* ── Main Content Area ── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 relative">
         {children}
       </main>
-
-      {/* ── Footer ── */}
-      <footer className="border-t border-white/10 py-4 text-center text-xs text-gray-500 relative z-10 bg-black/40 backdrop-blur-md">
-        <span>OsmanliBot Core Security Gateway • Zero-Trust Policy Enforced</span>
-      </footer>
     </div>
   )
 }
+

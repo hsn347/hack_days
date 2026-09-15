@@ -1,5 +1,6 @@
 import React from 'react'
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import type { TaskTab } from '../../types'
 
 // مطابق للموقع المرجعي بالضبط
@@ -23,6 +24,7 @@ interface TaskTabsProps {
 }
 
 export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
+  const { t } = useTranslation()
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
   const scroll = (dir: 'left' | 'right') => {
@@ -105,7 +107,7 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
               }}
             >
               <span style={{ fontSize: '13px', lineHeight: 1 }}>{tab.emoji}</span>
-              <span>{tab.label}</span>
+              <span>{t(`tabs.${tab.id}`, tab.label)}</span>
               {isError && (
                 <span
                   style={{

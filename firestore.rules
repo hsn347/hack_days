@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ─────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'ibraboths@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() ||
+        (isSignedIn() && (
+          request.auth.token.role == 'admin' ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        ));
+    }
+
+    // ── Users Collection Rules ────────────────────────────────────────
+    match /users/{userId} {
+      // السماح بالقراءة للمالك أو للمشرفين
+      allow read: if isOwner(userId) || isAdmin();
+
+      // إنشاء الحساب للمالك عند التسجيل مع حظر تزييف صلاحيات المشرف أو الحظر
+      allow create: if (isOwner(userId) &&
+        (isSuperAdmin() || request.resource.data.role != 'admin') &&
+        request.resource.data.is_banned != true
+      ) || isAdmin();
+
+      // تحديث الحساب:
+      // المشرف يملك صلاحية كاملة.
+      // المستخدم العادي يُمنع منعاً باتاً من تعديل رتبته (role) أو حالة الحظر أو تفاصيل الاشتراك.
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role',
+          'is_banned',
+          'subscription.status',
+          'subscription.plan_id',
+          'subscription.plan_name',
+          'subscription.expires_at',
+          'subscription.max_castles_allowed'
+        ])
+      );
+
+      // الحذف للمشرفين فقط
+      allow delete: if isAdmin();
+
+      // ── Castles Subcollection Rules ───────────────────────────────
+      match /castles/{castleId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) || isAdmin();
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // ── Collection Group queries (للبحث عن القلاع) ──────────────────
+    match /{path=**}/castles/{castleId} {
+      allow read: if isAdmin();
+    }
+  }
+}

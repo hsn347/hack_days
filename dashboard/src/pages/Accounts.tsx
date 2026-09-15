@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Play, Square, Plus, AlertTriangle, Clock, SlidersHorizontal, Users } from 'lucide-react'
+import { Search, Play, Square, Plus, Clock, SlidersHorizontal, Users, Lock, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Layout } from '../components/layout/Layout'
@@ -9,6 +9,7 @@ import { TaskTabContent } from '../components/accounts/TaskTabContent'
 import { AddCastleModal } from '../components/accounts/AddCastleModal'
 import { EditCastleModal } from '../components/accounts/EditCastleModal'
 import { ConfirmStopModal } from '../components/accounts/ConfirmStopModal'
+import { ConfirmDeleteCastleModal } from '../components/accounts/ConfirmDeleteCastleModal'
 import { useAuth } from '../hooks/useAuth'
 import { useCastles, useUpdateBotState, useBotControl, useDeleteCastle, useBatchUpdateCastleConfigs } from '../hooks/useCastles'
 import type { Castle, CastleConfig } from '../types'
@@ -22,6 +23,7 @@ export function AccountsPage() {
   const [search, setSearch] = useState('')
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editingCastle, setEditingCastle] = useState<Castle | null>(null)
+  const [deletingTarget, setDeletingTarget] = useState<{ id: string; wasActive?: boolean } | null>(null)
   const [showBatchSettings, setShowBatchSettings] = useState(false)
   const [showStopAllModal, setShowStopAllModal] = useState(false)
 
@@ -40,12 +42,16 @@ export function AccountsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return allCastles
-    return allCastles.filter(c =>
-      c.castle_info.lord_name.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.castle_info.alliance_name?.toLowerCase().includes(q) ||
-      c.castle_id.toLowerCase().includes(q)
-    )
+    return allCastles.filter(c => {
+      const emailPrefix = (c.email || '').split('@')[0].toLowerCase()
+      return (
+        c.castle_info.lord_name.toLowerCase().includes(q) ||
+        emailPrefix.includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.castle_info.alliance_name?.toLowerCase().includes(q) ||
+        c.castle_id.toLowerCase().includes(q)
+      )
+    })
   }, [allCastles, search])
 
   // Partition into pending vs active
@@ -64,11 +70,27 @@ export function AccountsPage() {
   const maxAllowed = user?.subscription?.max_castles_allowed ?? 1
   const currentCount = user?.subscription?.current_castles_count ?? activeCastles.length
 
+  const isSuperAdmin = user?.role === 'admin' || user?.email?.trim().toLowerCase() === 'ibraboths@gmail.com'
+  const isBanned = !isSuperAdmin && Boolean(user?.is_banned)
+  const isExpired = !isSuperAdmin && (
+    user?.subscription?.status === 'expired' ||
+    (user?.subscription?.expires_at ? new Date(user.subscription.expires_at).getTime() < Date.now() : false)
+  )
+  const isRunBlocked = isBanned || isExpired
+
   const handleRunAll = () => {
+    if (isBanned) {
+      toast.error(t('accounts.bannedToast'))
+      return
+    }
+    if (isExpired) {
+      toast.error(t('accounts.expiredToast'))
+      return
+    }
     activeCastles.forEach(c =>
       botControl.mutate({ castle: c, state: 'running' })
     )
-    toast.success(`تم إرسال أمر التشغيل لـ ${activeCastles.length} حساب`)
+    toast.success(t('accounts.commandSentRun', { count: activeCastles.length }))
   }
 
   const handleStopAll = () => {
@@ -80,14 +102,24 @@ export function AccountsPage() {
       botControl.mutate({ castle: c, state: 'idle' })
     )
     setShowStopAllModal(false)
-    toast.success('تم إرسال أمر الإيقاف لجميع الحسابات بنجاح')
+    toast.success(t('accounts.commandSentStop'))
   }
 
   const handleDelete = (id: string, wasActive?: boolean) => {
-    if (!confirm(t('accounts.confirmDelete'))) return
-    deleteCastle.mutate({ castleId: id, wasActive }, {
-      onSuccess: () => toast.success('تم حذف الحساب بنجاح'),
-      onError:   () => toast.error(t('common.error')),
+    setDeletingTarget({ id, wasActive })
+  }
+
+  const handleConfirmDelete = () => {
+    if (!deletingTarget) return
+    deleteCastle.mutate({ castleId: deletingTarget.id, wasActive: deletingTarget.wasActive }, {
+      onSuccess: () => {
+        toast.success(t('accounts.deleteSuccess'))
+        setDeletingTarget(null)
+      },
+      onError: () => {
+        toast.error(t('common.error'))
+        setDeletingTarget(null)
+      },
     })
   }
 
@@ -115,7 +147,7 @@ export function AccountsPage() {
 
   const handleBatchSave = async (changedSections: Partial<CastleConfig>) => {
     if (selectedBatchIds.length === 0) {
-      toast.error('❌ يرجى تحديد حساب واحد على الأقل لتطبيق الإعدادات عليه!')
+      toast.error(t('accounts.selectAtLeastOneBatch'))
       throw new Error('No castles selected')
     }
     await batchUpdate.mutateAsync({
@@ -129,59 +161,101 @@ export function AccountsPage() {
   return (
     <Layout title={t('accounts.title')}>
       <div className="space-y-4">
-        {/* Page header matching reference UI Image 4 & 6 */}
-        <div className="flex flex-wrap justify-between items-center gap-3">
-          <div>
-            <h1 className="font-bold text-white text-2xl">{t('accounts.title')}</h1>
+        {/* Page header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center justify-between">
+            <h1 className="font-bold text-white text-xl sm:text-2xl">{t('accounts.title')}</h1>
+            {/* Quick status pill on mobile */}
+            <div className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs">
+              <span className={clsx('w-2 h-2 rounded-full', runningCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500')} />
+              <span className="text-gray-300 font-medium">{activeCastles.length} {t('accounts.accountUnit')}</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+          <div className="grid grid-cols-2 sm:flex items-center gap-2">
             <button
-              onClick={handleStopAll}
-              disabled={runningCount === 0}
-              className="flex items-center gap-1.5 disabled:opacity-50 text-sm btn-secondary"
+              onClick={() => setAddModalOpen(true)}
+              className="col-span-2 sm:col-span-1 order-first sm:order-last flex items-center justify-center gap-2 py-2.5 sm:py-2 px-4 shadow-glow text-sm font-bold btn-primary rounded-xl active:scale-[0.98] transition-all"
+              id="add-account-btn"
             >
-              <Square size={14} />
-              {t('accounts.stopAll')}
+              <Plus size={16} />
+              <span>{t('accounts.addAccount')}</span>
             </button>
             <button
               onClick={handleRunAll}
               disabled={activeCastles.length === 0}
-              className="flex items-center gap-1.5 disabled:opacity-50 text-sm btn-primary"
+              className={clsx(
+                'flex items-center justify-center gap-1.5 py-2 px-3 text-xs sm:text-sm font-semibold rounded-xl active:scale-[0.98] transition-all',
+                isRunBlocked
+                  ? 'btn-run-all-locked bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 cursor-pointer'
+                  : 'btn-primary disabled:opacity-50'
+              )}
+              title={isBanned ? t('accounts.bannedTooltip') : isExpired ? t('accounts.expiredTooltip') : undefined}
             >
-              <Play size={14} />
-              {t('accounts.runAll')}
+              {isRunBlocked ? (
+                <>
+                  <Lock size={13} className="text-rose-400 btn-lock-icon" />
+                  <span>{t('accounts.runAll')} ({isBanned ? t('accounts.lockedBanned') : t('accounts.lockedExpired')})</span>
+                </>
+              ) : (
+                <>
+                  <Play size={13} />
+                  <span>{t('accounts.runAll')}</span>
+                </>
+              )}
             </button>
             <button
-              onClick={() => setAddModalOpen(true)}
-              className="flex items-center gap-1.5 shadow-glow text-sm btn-primary"
-              id="add-account-btn"
+              onClick={handleStopAll}
+              disabled={runningCount === 0}
+              className="flex items-center justify-center gap-1.5 py-2 px-3 disabled:opacity-50 text-xs sm:text-sm font-semibold btn-secondary rounded-xl active:scale-[0.98] transition-all"
             >
-              <Plus size={14} />
-              <span>حساب جديد </span>
+              <Square size={13} />
+              <span>{t('accounts.stopAll')}</span>
             </button>
           </div>
         </div>
 
-        {/* Banner (if running) */}
-        {runningCount > 0 && (
+        {/* Banner if banned or expired */}
+        {isBanned && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="accounts-banner flex items-center gap-3 bg-primary-900/30 border border-primary-700/30 rounded-xl p-3"
+            className="account-banner-banned flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-950 dark:text-rose-100 shadow-xs"
           >
-            <div className="flex flex-shrink-0 justify-center items-center bg-primary-700 rounded-lg w-7 h-7">
-              <AlertTriangle size={14} className="text-white" />
+            <div className="banner-icon-box w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-400">
+              <ShieldAlert size={20} />
             </div>
-            <p className="accounts-banner-text text-primary-300 text-sm font-medium">
-              {t('accounts.banner', { count: runningCount })}
-            </p>
-            <span className="ms-auto badge badge-green">{runningCount} / {activeCastles.length}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="banner-title font-bold text-sm text-rose-950 dark:text-rose-100">{t('dashboard.bannedTitle')}</span>
+                <span className="badge badge-red text-[10px] py-0.5">{t('dashboard.bannedBadge')}</span>
+              </div>
+              <p className="banner-desc text-xs text-rose-800 dark:text-rose-300/90 mt-0.5">{t('accounts.bannedBanner')}</p>
+            </div>
+          </motion.div>
+        )}
+        {!isBanned && isExpired && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="account-banner-expired flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-rose-500/15 border border-rose-500/35 text-rose-950 dark:text-rose-100 shadow-xs"
+          >
+            <div className="banner-icon-box w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-400">
+              <AlertTriangle size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="banner-title font-bold text-sm text-rose-950 dark:text-rose-100">{t('dashboard.expiredTitle')}</span>
+                <span className="badge badge-red text-[10px] py-0.5">{t('status.expired')}</span>
+              </div>
+              <p className="banner-desc text-xs text-rose-800 dark:text-rose-300/90 mt-0.5">{t('accounts.expiredBanner')}</p>
+            </div>
           </motion.div>
         )}
 
         {/* Batch Settings Accordion Header */}
         {activeCastles.length > 0 && (
-          <div className="batch-settings-card bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden transition-all duration-200 glass-card">
+          <div className="batch-settings-card bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden glass-card">
             {/* Clickable Header Bar: clicking anywhere on this header bar toggles the batch settings open/closed */}
             <div
               onClick={() => setShowBatchSettings(s => !s)}
@@ -189,7 +263,7 @@ export function AccountsPage() {
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowBatchSettings(s => !s) } }}
               className={clsx(
-                'batch-settings-header flex justify-between items-center py-2 px-3.5 sm:py-2.5 sm:px-5 w-full transition-all duration-200 cursor-pointer select-none',
+                'batch-settings-header flex justify-between items-center py-2 px-3.5 sm:py-2.5 sm:px-5 w-full cursor-pointer select-none',
                 showBatchSettings
                   ? 'bg-primary-900/30 border-b border-white/10'
                   : 'hover:bg-primary-900/25 active:bg-primary-900/40'
@@ -200,13 +274,13 @@ export function AccountsPage() {
                   <SlidersHorizontal size={15} />
                 </div>
                 <div className="text-start">
-                  <span className="batch-title font-bold text-white text-xs sm:text-sm">إعدادات جماعية</span>
+                  <span className="batch-title font-bold text-white text-xs sm:text-sm">{t('accounts.batchSettings')}</span>
                 </div>
               </div>
 
-              <div className="batch-toggle-pill flex items-center gap-1.5 sm:gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-2.5 py-1 sm:px-3 sm:py-1.5 border border-primary-500/30 rounded-lg font-semibold text-primary-400 text-xs transition-all shrink-0">
-                <span className="hidden sm:inline">{showBatchSettings ? 'إغلاق الإعدادات' : 'فتح قائمة المهام'}</span>
-                <span className="font-bold text-xs transition-transform duration-200">{showBatchSettings ? '▲' : '▼'}</span>
+              <div className="batch-toggle-pill flex items-center gap-1.5 sm:gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-2.5 py-1 sm:px-3 sm:py-1.5 border border-primary-500/30 rounded-lg font-semibold text-primary-400 text-xs shrink-0">
+                <span className="hidden sm:inline">{showBatchSettings ? t('accounts.closeSettings') : t('accounts.openTaskList')}</span>
+                <span className="font-bold text-xs">{showBatchSettings ? '▲' : '▼'}</span>
               </div>
             </div>
 
@@ -217,14 +291,14 @@ export function AccountsPage() {
                   <div className="flex flex-wrap justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
                       <Users size={15} className="batch-users-icon text-primary-400" />
-                      <span className="batch-box-title font-semibold text-white text-xs sm:text-sm">الحسابات المستهدفة</span>
+                      <span className="batch-box-title font-semibold text-white text-xs sm:text-sm">{t('accounts.targetAccounts')}</span>
                     </div>
                     <button
                       type="button"
                       onClick={handleSelectAllBatch}
                       className="batch-select-all font-medium text-primary-400 hover:text-primary-300 text-xs underline transition-colors cursor-pointer"
                     >
-                      {selectedBatchIds.length === activeCastles.length ? 'إلغاء تحديد الكل' : 'تحديد جميع الحسابات'}
+                      {selectedBatchIds.length === activeCastles.length ? t('accounts.deselectAll') : t('accounts.selectAll')}
                     </button>
                   </div>
 
@@ -255,7 +329,12 @@ export function AccountsPage() {
                             ✓
                           </span>
                           <span className="chip-name font-semibold text-white">
-                            {c.castle_info?.lord_name || 'قلعة'}
+                            {(() => {
+                              const prefix = (c.email || '').split('@')[0] || 'قلعة'
+                              return (c.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(c.castle_info.lord_name))
+                                ? c.castle_info.lord_name
+                                : prefix
+                            })()}
                           </span>
                         </button>
                       )
@@ -280,7 +359,7 @@ export function AccountsPage() {
         )}
 
         {/* Search input (matching reference UI Image 4 & 5) */}
-        <div className="p-3 glass-card">
+        <div className="p-2.5 sm:p-3 glass-card">
           <div className="relative flex items-center">
             <Search size={16} className="pointer-events-none top-1/2 absolute text-gray-400 -translate-y-1/2 start-3.5 z-10" />
             <input
@@ -288,10 +367,19 @@ export function AccountsPage() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="البحث في البريد أو اسم القلعة..."
-              className="w-full input-field !ps-10"
+              placeholder={t('accounts.searchPlaceholder')}
+              className="w-full input-field !ps-10 text-sm sm:text-base"
               style={{ paddingInlineStart: '2.6rem' }}
             />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/15 transition-colors cursor-pointer"
+                title={t('accounts.clearSearch')}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -301,16 +389,16 @@ export function AccountsPage() {
         ) : allCastles.length === 0 ? (
           <div className="space-y-4 p-8 py-16 text-center glass-card">
             <span className="text-5xl">🏰</span>
-            <h2 className="font-bold text-white text-lg">لا توجد حسابات مضافة بعد</h2>
+            <h2 className="font-bold text-white text-lg">{t('accounts.noAccounts')}</h2>
             <p className="mx-auto max-w-sm text-gray-500 text-sm">
-              أضف حساب قلعتك الأول لتبدأ بإدارة الموارد والمهام تلقائياً عبر البوت.
+              {t('accounts.noAccountsDesc')}
             </p>
             <button
               onClick={() => setAddModalOpen(true)}
               className="inline-flex gap-2 btn-primary"
             >
               <Plus size={16} />
-              <span>إضافة حساب جديد</span>
+              <span>{t('accounts.addFirstCastle')}</span>
             </button>
           </div>
         ) : (
@@ -320,7 +408,7 @@ export function AccountsPage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 font-semibold text-yellow-500 text-sm">
                   <Clock size={16} />
-                  <span>طابور التسجيل ({pendingCastles.length})</span>
+                  <span>{t('accounts.regQueue')} ({pendingCastles.length})</span>
                 </div>
                 <div className="space-y-3">
                   {pendingCastles.map((castle, idx) => (
@@ -343,7 +431,7 @@ export function AccountsPage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 font-semibold text-emerald-500 text-sm">
                   <span className="bg-emerald-500 shadow-glow rounded-full w-2.5 h-2.5" />
-                  <span>نشط ({activeCastles.length})</span>
+                  <span>{t('accounts.active')} ({activeCastles.length})</span>
                 </div>
                 <div className="space-y-3">
                   {activeCastles.map((castle, idx) => (
@@ -362,7 +450,7 @@ export function AccountsPage() {
 
             {filtered.length === 0 && search && (
               <div className="py-12 text-gray-500 text-center">
-                لم يتم العثور على أي حساب يطابق البحث "{search}"
+                {t('accounts.noMatchingAccounts', { query: search })}
               </div>
             )}
           </div>
@@ -392,6 +480,14 @@ export function AccountsPage() {
         onConfirm={handleConfirmStopAll}
         isAll={true}
         count={runningCount}
+      />
+
+      {/* Confirm Delete Castle Modal */}
+      <ConfirmDeleteCastleModal
+        isOpen={!!deletingTarget}
+        onClose={() => setDeletingTarget(null)}
+        onConfirm={handleConfirmDelete}
+        isPending={deleteCastle.isPending}
       />
     </Layout>
   )

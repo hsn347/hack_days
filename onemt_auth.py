@@ -61,8 +61,8 @@ def sdk_login(email: str, password: str, device_id: str = None) -> dict:
         "User-Agent": "okhttp/3.14.9"
     }
     
-    resp = requests.post(API_URL, data=final_json, headers=headers, timeout=10)
     try:
+        resp = requests.post(API_URL, data=final_json, headers=headers, timeout=12)
         data = resp.json()
         rtncode = data.get('rtncode', '')
         if rtncode in ('0', '00000', 'SUCCESS', 0):
@@ -83,11 +83,23 @@ def sdk_login(email: str, password: str, device_id: str = None) -> dict:
                 "error_msg": data.get('rtnmsg', 'Login failed'),
                 "raw": data
             }
+    except requests.exceptions.Timeout:
+        return {
+            "success": False,
+            "error_msg": "انتهت مهلة الاتصال بخوادم المصادقة (Request Timeout)",
+            "raw": None
+        }
+    except requests.exceptions.RequestException as re:
+        return {
+            "success": False,
+            "error_msg": f"تعذر الوصول لخوادم المصادقة (خطأ اتصال بالشبكة): {re}",
+            "raw": None
+        }
     except Exception as e:
         return {
             "success": False,
-            "error_msg": f"JSON parse error: {e}",
-            "raw": resp.text
+            "error_msg": f"خطأ أثناء معالجة استجابة تسجيل الدخول: {e}",
+            "raw": getattr(resp, 'text', '') if 'resp' in locals() else None
         }
 
 if __name__ == "__main__":

@@ -111,6 +111,9 @@ def create_castle_document(
     """إنشاء مستند قلعة جديدة متضمناً معلوماتها العامة والموارد والمخطط الكامل للمهام."""
     now = datetime.now(timezone.utc).isoformat()
     coords = coordinates or {"x": 0, "y": 0}
+    auto_name = email.split("@")[0] if email and "@" in email else (email or "قلعة")
+    actual_lord_name = auto_name if (not lord_name or lord_name == "لورد الإمبراطورية") else lord_name
+    actual_castle_name = auto_name if (not castle_name or castle_name == "القلعة الملكية") else castle_name
 
     # دمج التكوين المخصص فوق DEFAULT_FIREBASE_USER_CONFIG
     merged_config = copy.deepcopy(DEFAULT_FIREBASE_USER_CONFIG)
@@ -127,8 +130,8 @@ def create_castle_document(
         "is_active": True,
         "created_at": now,
         "castle_info": {
-            "lord_name": lord_name,
-            "castle_name": castle_name,
+            "lord_name": actual_lord_name,
+            "castle_name": actual_castle_name,
             "server_id": server_id,
             "castle_level": castle_level,
             "lord_power": lord_power,
@@ -172,6 +175,10 @@ def check_user_subscription(user_doc: Dict[str, Any]) -> Tuple[bool, str]:
     if not user_doc:
         return False, "المستخدم غير موجود"
 
+    # المشرف الأعلى يملك صلاحية مطلقة دائمة ولا يخضع لانتهاء الاشتراك أو الحظر
+    if user_doc.get("role") == "admin" or str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
+        return True, "المشرف الأعلى - صلاحية مطلقة غير محدودة مدى الحياة"
+
     if user_doc.get("is_banned"):
         return False, "الحساب محظور من قبل الإدارة"
 
@@ -183,8 +190,10 @@ def check_user_subscription(user_doc: Dict[str, Any]) -> Tuple[bool, str]:
     expires_at_raw = sub.get("expires_at")
     if expires_at_raw:
         try:
-            # معالجة تواريخ ISO
-            expires_at = datetime.fromisoformat(str(expires_at_raw).replace("Z", "+00:00"))
+            d_str = str(expires_at_raw).strip().replace("Z", "+00:00")
+            expires_at = datetime.fromisoformat(d_str)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
             now = datetime.now(timezone.utc)
             if now > expires_at:
                 return False, f"انتهت صلاحية الاشتراك بتاريخ: {expires_at.strftime('%Y-%m-%d %H:%M')}"
@@ -199,6 +208,11 @@ def can_user_add_castle(user_doc: Dict[str, Any], current_count: Optional[int] =
     فحص ما إذا كان المستخدم يملك سعة لإضافة قلعة جديدة وفق باقته:
     يعيد: (مسموح_أم_لا, عدد_القلاع_الحالي, الحد_الأقصى_المسموح)
     """
+    # المشرف الأعلى يملك صلاحية مطلقة لإضافة عدد غير محدود من القلاع
+    if user_doc.get("role") == "admin" or str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
+        curr = int(user_doc.get("subscription", {}).get("current_castles_count", 0)) if current_count is None else int(current_count)
+        return True, curr, 999999
+
     sub = user_doc.get("subscription", {})
     max_allowed = int(sub.get("max_castles_allowed", 1))
 

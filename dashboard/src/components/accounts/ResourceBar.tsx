@@ -38,7 +38,7 @@ export function ResourceBar({ resources, compact }: ResourceBarProps) {
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({})
 
   return (
-    <div className={`flex flex-wrap items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
+    <div className={`grid grid-cols-3 sm:flex sm:flex-wrap items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
       {RESOURCE_META.map(({ key, icon, emoji, color, label }) => {
         const val = resources[key as keyof Resources]
         if (typeof val !== 'number') return null

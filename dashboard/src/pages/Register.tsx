@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
-import { Bot, Eye, EyeOff, UserPlus } from 'lucide-react'
+import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
@@ -21,8 +21,8 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password !== confirm) { toast.error('كلمتا المرور غير متطابقتين'); return }
-    if (password.length < 6)  { toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return }
+    if (password !== confirm) { toast.error(t('register.passwordMismatch')); return }
+    if (password.length < 6)  { toast.error(t('register.passwordTooShort')); return }
 
     setLoading(true)
     try {
@@ -46,16 +46,16 @@ export function RegisterPage() {
           current_castles_count:  0,
         },
       })
-      toast.success('تم إنشاء الحساب بنجاح!')
+      toast.success(t('register.success'))
       navigate('/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       if (msg.includes('email-already-in-use')) {
-        toast.error('هذا البريد مستخدم بالفعل')
+        toast.error(t('register.emailInUse'))
       } else if (msg.includes('invalid-email')) {
-        toast.error('البريد الإلكتروني غير صالح')
+        toast.error(t('register.invalidEmail'))
       } else {
-        toast.error('حدث خطأ أثناء إنشاء الحساب')
+        toast.error(t('register.createError', t('common.error')))
       }
     } finally {
       setLoading(false)
@@ -75,31 +75,32 @@ export function RegisterPage() {
         style={{ boxShadow: '0 24px 64px rgba(16,185,129,0.15)' }}
       >
         {/* Logo */}
-        <div className="text-center mb-7">
-          <div className="w-14 h-14 rounded-2xl bg-primary-600 flex items-center justify-center mx-auto mb-3 glow-pulse">
-            <Bot size={28} className="text-white" />
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-2xl bg-white border border-emerald-500/30 flex items-center justify-center mx-auto mb-3 p-1 shadow-md">
+            <img src="/logo.png?v=2" alt="IBRA BOT" className="w-full h-full object-contain rounded-xl" />
           </div>
-          <h1 className="text-xl font-bold text-white">إنشاء حساب جديد</h1>
-          <p className="text-gray-500 text-sm mt-1">انضم إلى OsmanliBot</p>
+          <h1 className="text-xl font-bold text-white tracking-wide">{t('register.title')}</h1>
+          <p className="text-emerald-400 font-medium text-xs mt-1">{t('tagline')}</p>
+          <p className="text-gray-400 text-xs mt-1">{t('register.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {/* Username */}
           <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">الاسم المعروض</label>
+            <label className="text-sm text-gray-400 mb-1.5 block">{t('register.username')}</label>
             <input
               id="reg-username"
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
               className="input-field"
-              placeholder="مثال: أبو عمر"
+              placeholder={t('register.usernamePlaceholder')}
             />
           </div>
 
           {/* Email */}
           <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">البريد الإلكتروني</label>
+            <label className="text-sm text-gray-400 mb-1.5 block">{t('register.email')}</label>
             <input
               id="reg-email"
               type="email"
@@ -114,7 +115,7 @@ export function RegisterPage() {
 
           {/* Password */}
           <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">كلمة المرور</label>
+            <label className="text-sm text-gray-400 mb-1.5 block">{t('register.password')}</label>
             <div className="relative">
               <input
                 id="reg-password"
@@ -124,7 +125,7 @@ export function RegisterPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="input-field pe-10"
-                placeholder="6 أحرف على الأقل"
+                placeholder={t('register.passwordTooShort')}
               />
               <button
                 type="button"
@@ -138,7 +139,7 @@ export function RegisterPage() {
 
           {/* Confirm Password */}
           <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">تأكيد كلمة المرور</label>
+            <label className="text-sm text-gray-400 mb-1.5 block">{t('register.confirmPassword')}</label>
             <input
               id="reg-confirm"
               type="password"
@@ -147,14 +148,14 @@ export function RegisterPage() {
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               className="input-field"
-              placeholder="أعد كتابة كلمة المرور"
+              placeholder={t('register.confirmPassword')}
             />
           </div>
 
           {/* Free plan notice */}
           <div className="flex items-center gap-2 p-3 rounded-xl bg-primary-900/20 border border-primary-700/25 text-xs text-primary-300">
             <span>🎁</span>
-            <span>الخطة المجانية تشمل قلعة واحدة لمدة 7 أيام</span>
+            <span>{t('register.freePlanNotice')}</span>
           </div>
 
           {/* Submit */}
@@ -165,11 +166,11 @@ export function RegisterPage() {
             className="btn-primary w-full py-3 gap-2 mt-1"
           >
             {loading ? (
-              'جارٍ إنشاء الحساب...'
+              t('register.loading')
             ) : (
               <>
                 <UserPlus size={16} />
-                إنشاء حساب
+                {t('register.submit')}
               </>
             )}
           </button>
@@ -177,12 +178,12 @@ export function RegisterPage() {
 
         {/* Back to login */}
         <p className="text-center text-sm text-gray-500 mt-5">
-          لديك حساب بالفعل؟{' '}
+          {t('register.hasAccount')}{' '}
           <Link
             to="/login"
             className="text-primary-400 hover:text-primary-300 font-medium transition-colors"
           >
-            تسجيل الدخول
+            {t('register.signIn')}
           </Link>
         </p>
       </motion.div>

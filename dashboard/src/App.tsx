@@ -8,24 +8,16 @@ import { DashboardPage }   from './pages/Dashboard'
 import { AccountsPage }    from './pages/Accounts'
 import { CastleDetailPage }from './pages/CastleDetail'
 import { AdminPage }       from './pages/Admin'
-import { AdminLoginPage }  from './pages/AdminLogin'
 import { SettingsPage }    from './pages/Settings'
 import { AuthContext, useAuthProvider } from './hooks/useAuth'
-import { AdminAuthContext, useAdminAuthProvider, useAdminAuth } from './hooks/useAdminAuth'
 import { queryClient }     from './lib/queryClient'
 import { useAppStore }     from './store/appStore'
-import './lib/i18n'
+import i18n from './lib/i18n'
 
 // ─── Auth Provider (Regular Users) ─────────────────────────
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const auth = useAuthProvider()
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
-}
-
-// ─── Admin Auth Provider (SuperAdmin Only) ─────────────────
-function AdminAuthProvider({ children }: { children: React.ReactNode }) {
-  const adminAuth = useAdminAuthProvider()
-  return <AdminAuthContext.Provider value={adminAuth}>{children}</AdminAuthContext.Provider>
 }
 
 // ─── Private Route (Regular Users) ─────────────────────────
@@ -42,16 +34,19 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 // ─── Admin Route (SuperAdmin Only) ─────────────────────────
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAdminAuth()
-  if (loading) return (
-    <div className="min-h-screen bg-[#060a08] flex items-center justify-center text-emerald-400">
+  const ctx = React.useContext(AuthContext)
+
+  if (ctx?.loading) return (
+    <div className="min-h-screen bg-slate-50 dark:bg-[#060a08] flex items-center justify-center text-emerald-600 dark:text-emerald-400">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
-        <span className="text-xs font-mono">التحقق من تصريح المشرف الأعلى...</span>
+        <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+        <span className="text-xs font-mono">التحقق من الصلاحيات...</span>
       </div>
     </div>
   )
-  if (!isAuthenticated) return <Navigate to="/admin/login" replace />
+
+  if (!ctx?.firebaseUser) return <Navigate to="/login" replace />
+  if (!ctx?.isAdmin) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -73,6 +68,9 @@ function ThemeEffect() {
   React.useEffect(() => {
     document.documentElement.dir = 'ltr'
     document.documentElement.lang = language
+    if (i18n.language !== language) {
+      i18n.changeLanguage(language)
+    }
   }, [language])
   return null
 }
@@ -81,38 +79,36 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AdminAuthProvider>
-          <ThemeEffect />
-          <BrowserRouter>
-            <Routes>
-              {/* Public User Auth */}
-              <Route path="/login"    element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <ThemeEffect />
+        <BrowserRouter>
+          <Routes>
+            {/* Public User Auth */}
+            <Route path="/login"    element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-              {/* Protected User Dashboard */}
-              <Route path="/dashboard" element={
-                <PrivateRoute><DashboardPage /></PrivateRoute>
-              } />
-              <Route path="/accounts" element={
-                <PrivateRoute><AccountsPage /></PrivateRoute>
-              } />
-              <Route path="/accounts/:id" element={
-                <PrivateRoute><CastleDetailPage /></PrivateRoute>
-              } />
-              <Route path="/settings" element={
-                <PrivateRoute><SettingsPage /></PrivateRoute>
-              } />
+            {/* Protected User Dashboard */}
+            <Route path="/dashboard" element={
+              <PrivateRoute><DashboardPage /></PrivateRoute>
+            } />
+            <Route path="/accounts" element={
+              <PrivateRoute><AccountsPage /></PrivateRoute>
+            } />
+            <Route path="/accounts/:id" element={
+              <PrivateRoute><CastleDetailPage /></PrivateRoute>
+            } />
+            <Route path="/settings" element={
+              <PrivateRoute><SettingsPage /></PrivateRoute>
+            } />
 
-              {/* 🛡️ Independent SuperAdmin Secure Gateway */}
-              <Route path="/admin/login" element={<AdminLoginPage />} />
-              <Route path="/admin" element={
-                <AdminRoute><AdminPage /></AdminRoute>
-              } />
+            {/* 🛡️ Admin Portal (Only accessible by Admin via regular login) */}
+            <Route path="/admin" element={
+              <AdminRoute><AdminPage /></AdminRoute>
+            } />
 
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </BrowserRouter>
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
 
         <Toaster
           position="bottom-center"
@@ -128,7 +124,6 @@ export default function App() {
             error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
           }}
         />
-        </AdminAuthProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

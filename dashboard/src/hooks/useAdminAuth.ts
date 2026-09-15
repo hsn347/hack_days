@@ -68,7 +68,7 @@ export function useAdminAuthProvider(): AdminAuthContextType {
     return () => clearInterval(timer)
   }, [])
 
-  // ─── التحقق من الجلسة المخزنة عند الإقلاع ─────────────────────
+  // ─── التحقق من الجلسة المخزنة وتزامن تسجيل الدخول مع Firebase ─────
   useEffect(() => {
     const verifySession = async () => {
       try {
@@ -82,7 +82,6 @@ export function useAdminAuthProvider(): AdminAuthContextType {
 
         const session: AdminSession = JSON.parse(raw)
         if (Date.now() > session.expiresAt) {
-          // انتهت صلاحية الجلسة
           sessionStorage.removeItem(ADMIN_SESSION_KEY)
           setIsAuthenticated(false)
           setAdminUser(null)
@@ -114,7 +113,37 @@ export function useAdminAuthProvider(): AdminAuthContextType {
       }
     }
 
-    verifySession()
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const userEmail = (fbUser.email || '').trim().toLowerCase()
+        const isSuperAdminEmail = userEmail === 'ibraboths@gmail.com'
+
+        let userData: any = null
+        try {
+          const snap = await getDoc(doc(db, 'users', fbUser.uid))
+          if (snap.exists()) userData = snap.data()
+        } catch {}
+
+        if ((userData && userData.role === 'admin') || isSuperAdminEmail) {
+          const sessionToken = `sec_admin_${fbUser.uid}_${Date.now()}`
+          const sessionData: AdminSession = {
+            uid: fbUser.uid,
+            email: fbUser.email || userEmail,
+            role: 'admin',
+            expiresAt: Date.now() + SESSION_DURATION_MS,
+            token: sessionToken,
+          }
+          sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData))
+          setAdminUser({ uid: fbUser.uid, ...(userData || {}), email: fbUser.email, role: 'admin' } as User)
+          setIsAuthenticated(true)
+          setLoading(false)
+          return
+        }
+      }
+      verifySession()
+    })
+
+    return () => unsub()
   }, [])
 
   // ─── تسجيل دخول المسؤول ─────────────────────────────────────────

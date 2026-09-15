@@ -2,6 +2,7 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, Square, X, ShieldAlert, Crown } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export interface ConfirmStopModalProps {
   isOpen: boolean
@@ -24,6 +25,7 @@ export function ConfirmStopModal({
   count = 0,
   isPending = false,
 }: ConfirmStopModalProps) {
+  const { t } = useTranslation()
   if (typeof document === 'undefined') return null
 
   return createPortal(
@@ -92,6 +94,7 @@ export function ConfirmStopModal({
                   type="button"
                   onClick={onClose}
                   className="absolute top-4 start-4 p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  title={t('modals.close')}
                 >
                   <X size={18} />
                 </button>
@@ -104,12 +107,12 @@ export function ConfirmStopModal({
 
                 {/* Title */}
                 <h3 className="text-xl font-bold text-white mb-1.5">
-                  {isAll ? 'إيقاف جميع البوتات النشطة' : 'تأكيد إيقاف البوت'}
+                  {isAll ? t('modals.stopAllTitle') : t('modals.stopTitle')}
                 </h3>
                 <p className="text-xs text-gray-400 mb-4">
                   {isAll
-                    ? `أنت على وشك إيقاف تشغيل البوت لجميع الحسابات النشطة (${count} حساب).`
-                    : 'هل أنت متأكد من رغبتك في إيقاف تشغيل البوت لهذا الحساب؟'}
+                    ? t('modals.stopAllDesc', { count })
+                    : t('modals.stopDesc')}
                 </p>
 
                 {/* Account Info Card (When single castle) */}
@@ -120,7 +123,7 @@ export function ConfirmStopModal({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold text-white truncate">
-                        {lordName || 'قلعة اللورد'}
+                        {lordName || 'Castle'}
                       </div>
                       {email && (
                         <div className="text-[11px] text-gray-400 font-mono truncate">
@@ -135,7 +138,7 @@ export function ConfirmStopModal({
                 <div className="modal-notice-box mb-6 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-start text-xs text-rose-200/90 leading-relaxed flex items-start gap-2.5">
                   <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5" />
                   <span>
-                    سيتم إيقاف العمليات الحالية وإغلاق اتصال اللعبة بأمان، ولن يُنفّذ البوت أي دورات قادمة حتى تعيد تشغيله يدوياً.
+                    {t('modals.stopNotice')}
                   </span>
                 </div>
 
@@ -147,7 +150,7 @@ export function ConfirmStopModal({
                     disabled={isPending}
                     className="modal-cancel-btn flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-300 bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer disabled:opacity-50"
                   >
-                    تراجع / إلغاء
+                    {t('modals.cancelDismiss')}
                   </button>
                   <button
                     type="button"
@@ -156,7 +159,7 @@ export function ConfirmStopModal({
                     className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-[0_0_20px_rgba(244,63,94,0.35)] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-95"
                   >
                     <Square size={13} className="fill-white" />
-                    <span>{isPending ? 'جاري الإيقاف...' : 'نعم، إيقاف البوت'}</span>
+                    <span>{isPending ? t('modals.stopping') : t('modals.confirmStopBtn')}</span>
                   </button>
                 </div>
               </div>

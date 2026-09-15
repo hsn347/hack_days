@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Eye, EyeOff, RotateCw, Loader2, Mail, Lock, Edit3 } from 'lucide-react'
+import { X, RotateCw, Loader2, Mail, Lock, Edit3 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useUpdateCastleCredentials } from '../../hooks/useCastles'
 import type { Castle } from '../../types'
 import toast from 'react-hot-toast'
@@ -14,18 +15,18 @@ interface EditCastleModalProps {
 }
 
 export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleModalProps) {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
 
   const updateMutation = useUpdateCastleCredentials(userId)
 
   useEffect(() => {
     if (castle) {
       setEmail(castle.email || '')
-      setPassword(castle.password || '')
+      setPassword('') // أبداً لا يتم ملء أو استرجاع كلمة المرور الحالية
     }
-  }, [castle])
+  }, [castle, isOpen])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -38,7 +39,7 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) {
-      toast.error('يرجى كتابة البريد الإلكتروني')
+      toast.error(t('modals.fillAllFields'))
       return
     }
 
@@ -46,12 +47,12 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
       await updateMutation.mutateAsync({
         castleId: castle!.id,
         email: email.trim(),
-        password: password || undefined,
+        password: password.trim() || undefined,
       })
-      toast.success('✅ تم حفظ بيانات الاعتماد بنجاح!')
+      toast.success('✅ ' + t('common.success'))
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'فشل تحديث البيانات'
+      const msg = err instanceof Error ? err.message : t('common.error')
       toast.error(msg)
     }
   }
@@ -71,7 +72,7 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
+            transition={{ duration: 0.18 }}
             onClick={handleClose}
             className="modal-backdrop"
             style={{
@@ -84,14 +85,8 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
             }}
           />
 
-          {/* Modal Panel */}
-          <motion.div
-            key="edit-panel"
-            initial={{ scale: 0.92, opacity: 0, y: 24 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.94, opacity: 0, y: 16 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-            onClick={e => e.stopPropagation()}
+          {/* Modal Panel Container */}
+          <div
             style={{
               position: 'fixed',
               inset: 0,
@@ -103,19 +98,16 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
               pointerEvents: 'none',
             }}
           >
-            <div
-              className="modal-box-panel"
+            <motion.div
+              key="edit-panel"
+              initial={{ scale: 0.94, opacity: 0, y: 16 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 12 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onClick={e => e.stopPropagation()}
+              className="edit-castle-modal-box relative w-full max-w-[440px] rounded-2xl overflow-hidden shadow-2xl"
               style={{
                 pointerEvents: 'all',
-                width: '100%',
-                maxWidth: '440px',
-                background: 'linear-gradient(145deg, rgba(10,20,12,0.92) 0%, rgba(14,26,14,0.88) 100%)',
-                border: '1px solid rgba(34,197,94,0.22)',
-                borderRadius: '20px',
-                backdropFilter: 'blur(40px)',
-                WebkitBackdropFilter: 'blur(40px)',
-                boxShadow: '0 0 0 1px rgba(34,197,94,0.08), 0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(16,185,129,0.12)',
-                overflow: 'hidden',
               }}
             >
               {/* Green glow accent bar */}
@@ -127,31 +119,20 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                 }}
               />
 
-              <div style={{ padding: '28px 28px 24px' }}>
+              <div className="p-6 sm:p-7">
                 {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="flex items-start justify-between mb-5">
+                  <div className="flex items-center gap-3">
                     <div
-                      style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #065f46 0%, #047857 100%)',
-                        border: '1px solid rgba(16,185,129,0.35)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 0 16px rgba(16,185,129,0.25)',
-                        flexShrink: 0,
-                      }}
+                      className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600/25 to-teal-600/25 border border-emerald-500/40 flex items-center justify-center shrink-0 shadow-sm"
                     >
-                      <Edit3 size={18} color="#6ee7b7" />
+                      <Edit3 size={18} className="text-emerald-400" />
                     </div>
                     <div>
-                      <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f0fdf4', letterSpacing: '-0.01em' }}>
-                        تعديل بيانات الاعتماد
+                      <h2 className="edit-modal-title m-0 text-base font-bold text-gray-900 dark:text-emerald-50">
+                        {t('modals.editCastleTitle')}
                       </h2>
-                      <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#6b7280' }}>
+                      <p className="edit-modal-subtitle m-0 text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-[240px]">
                         {castle.email}
                       </p>
                     </div>
@@ -161,27 +142,8 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                     type="button"
                     onClick={handleClose}
                     disabled={updateMutation.isPending}
-                    style={{
-                      padding: '6px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: '#9ca3af',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => {
-                      const t = e.currentTarget
-                      t.style.background = 'rgba(255,255,255,0.1)'
-                      t.style.color = '#fff'
-                    }}
-                    onMouseLeave={e => {
-                      const t = e.currentTarget
-                      t.style.background = 'rgba(255,255,255,0.05)'
-                      t.style.color = '#9ca3af'
-                    }}
+                    className="edit-modal-btn-close p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-200 dark:border-white/8 transition-colors cursor-pointer"
+                    title={t('modals.close')}
                   >
                     <X size={16} />
                   </button>
@@ -189,20 +151,13 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
 
                 {/* Form */}
                 <form onSubmit={handleSubmit}>
-                  {/* Email */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px' }}>
-                      البريد الإلكتروني
+                  {/* Email Field */}
+                  <div className="mb-4">
+                    <label className="edit-modal-label block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      {t('settings.email')}
                     </label>
-                    <div style={{ position: 'relative' }}>
-                      <Mail size={15} style={{
-                        position: 'absolute',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        right: '12px',
-                        color: '#4b5563',
-                        pointerEvents: 'none',
-                      }} />
+                    <div className="relative">
+                      <Mail size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 pointer-events-none" />
                       <input
                         id="edit-castle-email"
                         type="email"
@@ -210,193 +165,68 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         dir="ltr"
-                        style={{
-                          width: '100%',
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          borderRadius: '12px',
-                          padding: '11px 40px 11px 14px',
-                          fontSize: '14px',
-                          color: '#f0fdf4',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                          transition: 'border-color 0.2s, box-shadow 0.2s',
-                          fontFamily: 'inherit',
-                        }}
-                        onFocus={e => {
-                          e.target.style.borderColor = 'rgba(34,197,94,0.5)'
-                          e.target.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.10)'
-                          e.target.style.background = 'rgba(255,255,255,0.07)'
-                        }}
-                        onBlur={e => {
-                          e.target.style.borderColor = 'rgba(255,255,255,0.10)'
-                          e.target.style.boxShadow = 'none'
-                          e.target.style.background = 'rgba(255,255,255,0.05)'
-                        }}
+                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-emerald-50 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                   </div>
 
-                  {/* Password */}
-                  <div style={{ marginBottom: '24px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#9ca3af', marginBottom: '8px' }}>
-                      كلمة المرور
+                  {/* Password Field */}
+                  <div className="mb-6">
+                    <label className="edit-modal-label block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      {t('settings.newPassword')}
                     </label>
-                    <div style={{ position: 'relative' }}>
-                      <Lock size={15} style={{
-                        position: 'absolute',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        right: '12px',
-                        color: '#4b5563',
-                        pointerEvents: 'none',
-                      }} />
+                    <div className="relative">
+                      <Lock size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 pointer-events-none" />
                       <input
                         id="edit-castle-password"
-                        type={showPassword ? 'text' : 'password'}
+                        type="password"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder={t('modals.leaveEmptyToKeep')}
                         dir="ltr"
-                        style={{
-                          width: '100%',
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          borderRadius: '12px',
-                          padding: '11px 40px 11px 44px',
-                          fontSize: '14px',
-                          color: '#f0fdf4',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                          transition: 'border-color 0.2s, box-shadow 0.2s',
-                          fontFamily: 'inherit',
-                          letterSpacing: showPassword ? 'normal' : '0.15em',
-                        }}
-                        onFocus={e => {
-                          e.target.style.borderColor = 'rgba(34,197,94,0.5)'
-                          e.target.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.10)'
-                          e.target.style.background = 'rgba(255,255,255,0.07)'
-                        }}
-                        onBlur={e => {
-                          e.target.style.borderColor = 'rgba(255,255,255,0.10)'
-                          e.target.style.boxShadow = 'none'
-                          e.target.style.background = 'rgba(255,255,255,0.05)'
-                        }}
+                        autoComplete="new-password"
+                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-emerald-50 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(v => !v)}
-                        style={{
-                          position: 'absolute',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          left: '12px',
-                          background: 'none',
-                          border: 'none',
-                          color: '#6b7280',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          display: 'flex',
-                          alignItems: 'center',
-                        }}
-                      >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
                     </div>
                   </div>
 
                   {/* Divider */}
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', marginBottom: '20px' }} />
+                  <div className="edit-modal-divider h-[1px] bg-gray-200 dark:bg-white/8 mb-5" />
 
-                  {/* Buttons */}
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  {/* Action Buttons */}
+                  <div className="flex gap-2.5">
                     <button
                       type="button"
                       onClick={handleClose}
                       disabled={updateMutation.isPending}
-                      style={{
-                        flex: 1,
-                        padding: '11px',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.10)',
-                        background: 'rgba(255,255,255,0.05)',
-                        color: '#9ca3af',
-                        fontSize: '14px',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        fontFamily: 'inherit',
-                      }}
-                      onMouseEnter={e => {
-                        const t = e.currentTarget
-                        t.style.background = 'rgba(255,255,255,0.09)'
-                        t.style.color = '#d1d5db'
-                      }}
-                      onMouseLeave={e => {
-                        const t = e.currentTarget
-                        t.style.background = 'rgba(255,255,255,0.05)'
-                        t.style.color = '#9ca3af'
-                      }}
+                      className="edit-modal-btn-cancel flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border border-gray-300 dark:border-white/10 transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      إلغاء
+                      {t('modals.cancel')}
                     </button>
 
                     <button
                       type="submit"
                       id="submit-edit-castle"
                       disabled={updateMutation.isPending}
-                      style={{
-                        flex: 1,
-                        padding: '11px',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(34,197,94,0.40)',
-                        background: updateMutation.isPending
-                          ? 'rgba(16,185,129,0.25)'
-                          : 'linear-gradient(135deg, #059669 0%, #10b981 50%, #22c55e 100%)',
-                        color: '#fff',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: updateMutation.isPending ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        boxShadow: updateMutation.isPending ? 'none' : '0 4px 20px rgba(16,185,129,0.35)',
-                        transition: 'all 0.18s',
-                        fontFamily: 'inherit',
-                      }}
-                      onMouseEnter={e => {
-                        if (!updateMutation.isPending) {
-                          const t = e.currentTarget
-                          t.style.boxShadow = '0 6px 28px rgba(16,185,129,0.50)'
-                          t.style.transform = 'translateY(-1px)'
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (!updateMutation.isPending) {
-                          const t = e.currentTarget
-                          t.style.boxShadow = '0 4px 20px rgba(16,185,129,0.35)'
-                          t.style.transform = 'translateY(0)'
-                        }
-                      }}
+                      className="edit-modal-btn-submit flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-98"
                     >
                       {updateMutation.isPending ? (
                         <>
-                          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                          <span>جارٍ الحفظ...</span>
+                          <Loader2 size={15} className="animate-spin" />
+                          <span>{t('modals.saving')}</span>
                         </>
                       ) : (
                         <>
-                          <RotateCw size={15} />
-                          <span>حفظ وإعادة المحاولة</span>
+                          <RotateCw size={14} />
+                          <span>{t('modals.saveChanges')}</span>
                         </>
                       )}
                     </button>
                   </div>
                 </form>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>,

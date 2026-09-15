@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Search, Shield, Trash2, Edit, Ban, CheckCircle, Clock, X,
-  Layers, Calendar, Plus, Minus, AlertTriangle
+  Layers, Calendar, Plus, Minus, AlertTriangle, Users,
+  Infinity, PauseCircle, RotateCcw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AdminLayout } from '../components/layout/AdminLayout'
@@ -12,12 +14,31 @@ import {
 } from '../hooks/useUsers'
 import { useCastles, useDeleteCastle } from '../hooks/useCastles'
 import { useQueryClient } from '@tanstack/react-query'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, collection, getDocs } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { Navigate } from 'react-router-dom'
-import { useAdminAuth } from '../hooks/useAdminAuth'
+import { useAuth } from '../hooks/useAuth'
 import type { User, Subscription, Castle } from '../types'
 import toast from 'react-hot-toast'
+
+export const isSuperAdminUser = (u?: Partial<User> | null) => {
+  if (!u) return false
+  const email = (u.email || '').toLowerCase().trim()
+  return u.role === 'admin' || email === 'ibraboths@gmail.com'
+}
+
+const formatDate = (d: Date | null) => {
+  if (!d || isNaN(d.getTime())) return '—'
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+const toYMD = (d: Date | null) => {
+  if (!d || isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 // ─── Confirm Dialog ──────────────────────────────────────────
 function ConfirmDialog({
@@ -26,13 +47,13 @@ function ConfirmDialog({
   title: string; message: string; email?: string;
   onConfirm: () => void; onCancel: () => void; loading?: boolean
 }) {
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+  return createPortal(
+    <div className="z-[100] fixed inset-0 flex justify-center items-center p-3 sm:p-4 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm"
         onClick={onCancel}
       />
       <motion.div
@@ -40,27 +61,27 @@ function ConfirmDialog({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.92, y: 16 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-xs bg-[#0c1410] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        className="z-10 relative bg-white dark:bg-[#0c1410] shadow-2xl border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-xs sm:max-w-sm overflow-hidden text-gray-900 dark:text-gray-100 admin-modal"
       >
         {/* Red accent top line */}
-        <div className="h-0.5 w-full bg-gradient-to-r from-red-500/0 via-red-500 to-red-500/0" />
+        <div className="bg-gradient-to-r from-red-500/0 via-red-500 to-red-500/0 w-full h-1" />
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-4 sm:p-6">
           {/* Icon + Title */}
-          <div className="flex flex-col items-center text-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-              <AlertTriangle size={26} className="text-red-400" />
+          <div className="flex flex-col items-center gap-2.5 text-center">
+            <div className="flex justify-center items-center bg-red-500/10 border border-red-500/20 rounded-2xl w-12 h-12">
+              <AlertTriangle size={24} className="text-red-500 dark:text-red-400" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">{title}</h3>
-              <p className="text-xs text-gray-500 mt-1 leading-relaxed">{message}</p>
+              <h3 className="font-bold text-gray-900 dark:text-white text-base">{title}</h3>
+              <p className="mt-1 text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{message}</p>
             </div>
           </div>
 
           {/* Email badge */}
           {email && (
-            <div className="bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2 text-center">
-              <span className="text-xs font-mono text-gray-300 truncate block">{email}</span>
+            <div className="bg-gray-50 dark:bg-white/[0.03] px-3 py-2 border border-gray-200 dark:border-white/8 rounded-xl text-center">
+              <span className="block font-mono text-gray-700 dark:text-gray-300 text-xs truncate select-all">{email}</span>
             </div>
           )}
 
@@ -70,7 +91,7 @@ function ConfirmDialog({
               type="button"
               onClick={onCancel}
               disabled={loading}
-              className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:border-white/20 text-sm font-medium transition-all"
+              className="flex-1 hover:bg-gray-100 dark:hover:bg-white/5 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl font-semibold text-gray-700 hover:text-gray-900 dark:hover:text-white dark:text-gray-300 text-sm transition-all cursor-pointer"
             >
               إلغاء
             </button>
@@ -78,10 +99,10 @@ function ConfirmDialog({
               type="button"
               onClick={onConfirm}
               disabled={loading}
-              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-all disabled:opacity-50 active:scale-[0.98] flex items-center justify-center gap-1.5"
+              className="flex flex-1 justify-center items-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 shadow-md py-2.5 rounded-xl font-bold text-white text-sm active:scale-[0.98] transition-all cursor-pointer"
             >
               {loading ? (
-                <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />جارٍ الحذف...</>
+                <><div className="border-2 border-white/30 border-t-white rounded-full w-3.5 h-3.5 animate-spin" />جارٍ الحذف...</>
               ) : (
                 <><Trash2 size={13} />حذف نهائياً</>
               )}
@@ -89,32 +110,57 @@ function ConfirmDialog({
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
 // Stepper Component
+// Stepper Component
 function Stepper({
-  value, min = 1, max = 999, onChange, color = 'emerald',
+  value, min = 1, max = 3650, onChange, color = 'emerald', unit = '',
 }: {
-  value: number; min?: number; max?: number; onChange: (v: number) => void; color?: 'emerald' | 'primary'
+  value: number; min?: number; max?: number; onChange: (v: number) => void; color?: 'emerald' | 'primary'; unit?: string
 }) {
-  const accent = color === 'emerald' ? 'text-emerald-400' : 'text-primary-400'
+  const accent = color === 'emerald' ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary-600 dark:text-primary-400'
   const btnBg = color === 'emerald'
-    ? 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300'
-    : 'bg-primary-500/15 hover:bg-primary-500/30 text-primary-300'
+    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/30 dark:text-emerald-300'
+    : 'bg-primary-100 hover:bg-primary-200 text-primary-800 dark:bg-primary-500/15 dark:hover:bg-primary-500/30 dark:text-primary-300'
   return (
-    <div className="flex items-center gap-3">
-      <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
-        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-25 ${btnBg}`}>
-        <Minus size={15} />
+    <div className="flex justify-center items-center gap-3 sm:gap-4">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-25 ${btnBg} cursor-pointer shrink-0`}
+      >
+        <Minus size={18} />
       </button>
-      <input type="number" min={min} max={max} value={value}
-        onChange={e => onChange(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
-        className={`w-14 text-center font-extrabold text-3xl bg-transparent border-0 focus:ring-0 p-0 ${accent}`} />
-      <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
-        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-25 ${btnBg}`}>
-        <Plus size={15} />
+      <div className="flex justify-center items-center gap-1">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={value || ''}
+          onFocus={e => e.currentTarget.select()}
+          onClick={e => e.currentTarget.select()}
+          onChange={e => {
+            const parsed = parseInt(e.target.value, 10)
+            if (isNaN(parsed)) onChange(min)
+            else onChange(Math.max(min, Math.min(max, parsed)))
+          }}
+          className={`w-20 sm:w-24 text-center font-black text-2xl sm:text-3xl bg-transparent border-0 focus:ring-0 p-0 cursor-text select-all ${accent}`}
+          dir="ltr"
+        />
+        {unit && <span className="font-bold text-slate-500 dark:text-slate-400 text-xs select-none">{unit}</span>}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-25 ${btnBg} cursor-pointer shrink-0`}
+      >
+        <Plus size={18} />
       </button>
     </div>
   )
@@ -124,14 +170,21 @@ function Stepper({
 function QuickChips({ options, value, onSelect, color = 'emerald' }: {
   options: { label: string; value: number }[]; value: number; onSelect: (v: number) => void; color?: 'emerald' | 'primary'
 }) {
-  const activeClass = color === 'emerald' ? 'bg-emerald-500 text-black' : 'bg-primary-500 text-black'
+  const activeClass = color === 'emerald'
+    ? 'bg-emerald-600 text-white shadow-xs dark:bg-emerald-500 dark:text-black dark:shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+    : 'bg-primary-600 text-white shadow-xs dark:bg-primary-500 dark:text-black dark:shadow-[0_0_12px_rgba(34,197,94,0.4)]'
+  const inactiveClass = 'bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'
   return (
-    <div className="flex items-center gap-1.5 flex-wrap justify-center">
+    <div className="flex flex-wrap justify-center items-center gap-1.5 pt-1">
       {options.map(opt => (
-        <button key={opt.value} type="button" onClick={() => onSelect(opt.value)}
-          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-            value === opt.value ? activeClass : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
-          }`}>
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onSelect(opt.value)}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            value === opt.value ? activeClass : inactiveClass
+          }`}
+        >
           {opt.label}
         </button>
       ))}
@@ -139,117 +192,252 @@ function QuickChips({ options, value, onSelect, color = 'emerald' }: {
   )
 }
 
-// Modal 1: Edit User Subscription
+// Modal 1: Edit User Subscription & Status
 function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
   const qc = useQueryClient()
   const [saving, setSaving] = useState(false)
-  const [castles, setCastles] = useState(Number(user.subscription?.max_castles_allowed ?? 1))
-  const [months, setMonths] = useState(Number(user.subscription?.months_duration ?? 1) || 1)
-  const [extendFromCurrent, setExtendFromCurrent] = useState(true)
+  const [castles, setCastles] = useState<number>(Number(user.subscription?.max_castles_allowed ?? 1))
+  const [isBanned, setIsBanned] = useState<boolean>(Boolean(user.is_banned))
+
   const now = new Date()
   const currentExp = user.subscription?.expires_at ? new Date(user.subscription.expires_at) : null
   const isCurrentValid = currentExp && currentExp.getTime() > now.getTime()
-  const baseDate = extendFromCurrent && isCurrentValid ? currentExp : now
-  const newExp = new Date(baseDate.getTime())
-  newExp.setMonth(newExp.getMonth() + months)
-  const daysLeft = Math.max(0, Math.ceil((newExp.getTime() - now.getTime()) / 86400000))
+  const initialBase = isCurrentValid ? currentExp : now
+
+  // targetDate starts from current valid expiration date, or from now if expired
+  const [targetDate, setTargetDate] = useState<Date>(initialBase)
+
+  const isZero = targetDate.getTime() <= now.getTime()
+  const daysRemaining = isZero ? 0 : Math.ceil((targetDate.getTime() - now.getTime()) / 86400000)
+
+  // Handlers for adding duration onto current target
+  const addDays = (numDays: number) => {
+    setTargetDate(prev => {
+      // If currently zeroed or expired, start adding from today
+      const base = prev.getTime() > now.getTime() ? prev : now
+      return new Date(base.getTime() + numDays * 86400000)
+    })
+  }
+
+  const handleReset = () => {
+    setTargetDate(now)
+  }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const sub: Partial<Subscription> = {
-        plan_id: `${castles}_castles`,
-        plan_name: `${castles} حساب`,
-        started_at: user.subscription?.started_at || now.toISOString(),
-        expires_at: newExp.toISOString(),
-        days_remaining: daysLeft,
-        months_duration: months,
-        max_castles_allowed: castles,
-      }
-      await updateDoc(doc(db, 'users', user.uid), { subscription: sub })
+      const isZeroed = targetDate.getTime() <= now.getTime()
+      const finalDays = isZeroed ? 0 : daysRemaining
+      const finalStatus = isZeroed ? 'expired' : 'active'
+      const finalExpiresAt = isZeroed ? now.toISOString() : targetDate.toISOString()
+
+      // Fetch real castles count to ensure it is never wiped or desynced
+      const castlesSnap = await getDocs(collection(db, 'users', user.uid, 'castles'))
+      const actualCastles = castlesSnap.docs.map(d => d.data() as Castle)
+      const activeCastlesCount = actualCastles.filter(c => c.bot_status?.state !== 'pending' && c.is_active !== false).length
+      const pendingCastlesCount = actualCastles.filter(c => c.bot_status?.state === 'pending').length
+
+      await updateDoc(doc(db, 'users', user.uid), {
+        'subscription.plan_id': `${castles}_castles_${finalDays}d`,
+        'subscription.plan_name': isZeroed ? `${castles} حساب (منتهي)` : `${castles} حساب (${finalDays} يوم)`,
+        'subscription.started_at': user.subscription?.started_at || now.toISOString(),
+        'subscription.expires_at': finalExpiresAt,
+        'subscription.days_remaining': finalDays,
+        'subscription.months_duration': Math.max(1, Math.round(finalDays / 30)),
+        'subscription.max_castles_allowed': castles,
+        'subscription.status': finalStatus,
+        'subscription.current_castles_count': activeCastlesCount,
+        'subscription.pending_castles_count': pendingCastlesCount,
+        is_banned: isBanned,
+      })
+
       qc.invalidateQueries({ queryKey: ['admin_users'] })
       qc.invalidateQueries({ queryKey: ['admin_stats'] })
       toast.success('تم حفظ التعديلات بنجاح')
       onClose()
-    } catch { toast.error('حدث خطأ أثناء الحفظ') }
-    finally { setSaving(false) }
+    } catch {
+      toast.error('حدث خطأ أثناء الحفظ')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+  return createPortal(
+    <div className="z-[100] fixed inset-0 flex justify-center items-center p-3 sm:p-4 overflow-y-auto" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm" />
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 12 }} transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-sm bg-[#0c1410] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
-        onClick={e => e.stopPropagation()}>
-        <div className="h-0.5 w-full bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0" />
-        <div className="p-6 space-y-5">
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.15 }}
+        className="z-10 relative bg-white dark:bg-[#0c1410] shadow-2xl my-auto border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-sm sm:max-w-md overflow-hidden text-gray-900 dark:text-gray-100 admin-modal"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="bg-gradient-to-r from-emerald-500/0 via-emerald-500 to-emerald-500/0 w-full h-1" />
+        <div className="space-y-4 p-4 sm:p-5">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-white text-base">تعديل الاشتراك</h3>
-              <p className="text-xs text-gray-500 mt-0.5 font-mono truncate max-w-[220px]">{user.email}</p>
+          <div className="flex justify-between items-center gap-3 pb-3 border-gray-200 dark:border-white/8 border-b">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex justify-center items-center bg-emerald-100/90 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-500/30 rounded-xl w-10 h-10 font-black text-emerald-800 dark:text-emerald-400 text-xs shrink-0">
+                {(user.username || user.email)?.[0]?.toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">
+                    {user.username || 'تعديل المستخدم'}
+                  </h3>
+                  {isBanned && (
+                    <span className="py-0.5 text-[10px] badge badge-red shrink-0">محظور</span>
+                  )}
+                </div>
+                <p className="mt-0.5 font-mono text-gray-500 dark:text-gray-400 text-xs truncate select-all">
+                  {user.email}
+                </p>
+              </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all">
-              <X size={15} />
+            <button
+              onClick={onClose}
+              className="flex justify-center items-center bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full w-8 h-8 text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400 transition-all cursor-pointer shrink-0"
+            >
+              <X size={16} />
             </button>
           </div>
 
-          {/* Castles */}
-          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/8 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
-              <Layers size={13} className="text-primary-400" />
-              <span>عدد الحسابات المسموحة</span>
+          {/* Section 1: Castles Quota */}
+          <div className="space-y-2.5 bg-gray-50 dark:bg-white/[0.03] p-3 sm:p-3.5 border border-gray-200 dark:border-white/8 rounded-xl">
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
+                <Layers size={14} className="text-primary-600 dark:text-primary-400" />
+                <span>عدد الحسابات المسموحة</span>
+              </div>
+              <span className="font-mono text-slate-500 dark:text-slate-400 text-xs">
+                (الموجود فعلياً: <strong className="font-bold text-emerald-600 dark:text-emerald-400">{user.subscription?.current_castles_count ?? 0}</strong>)
+              </span>
             </div>
-            <div className="flex justify-center"><Stepper value={castles} onChange={setCastles} max={500} color="primary" /></div>
-            <QuickChips options={[{label:'1',value:1},{label:'3',value:3},{label:'5',value:5},{label:'10',value:10},{label:'20',value:20}]} value={castles} onSelect={setCastles} color="primary" />
+            <div className="flex justify-center py-0.5">
+              <Stepper value={castles} onChange={setCastles} max={500} color="primary" unit="" />
+            </div>
+            <QuickChips
+              options={[{label:'1',value:1},{label:'3',value:3},{label:'5',value:5},{label:'10',value:10},{label:'20',value:20}]}
+              value={castles}
+              onSelect={setCastles}
+              color="primary"
+            />
           </div>
 
-          {/* Months */}
-          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/8 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
-              <Calendar size={13} className="text-emerald-400" />
-              <span>مدة الاشتراك (بالأشهر)</span>
+          {/* Section 2: Subscription Duration (فقط زر شهر وزر أسبوع وزر تصفير مع عرض فوري) */}
+          <div className="space-y-3.5 bg-gray-50 dark:bg-white/[0.03] p-3.5 sm:p-4 border border-gray-200 dark:border-white/8 rounded-xl">
+            <div className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300 text-xs">
+              <Calendar size={14} className="text-emerald-600 dark:text-emerald-400" />
+              <span>مدة الاشتراك</span>
             </div>
-            <div className="flex justify-center"><Stepper value={months} onChange={setMonths} max={60} color="emerald" /></div>
-            <QuickChips options={[{label:'1ش',value:1},{label:'3ش',value:3},{label:'6ش',value:6},{label:'سنة',value:12},{label:'سنتان',value:24}]} value={months} onSelect={setMonths} color="emerald" />
-            {isCurrentValid && (
+
+            {/* Live Instant Expiry & Days Display with Editable Date Picker */}
+            <div className={`p-3 sm:p-3.5 rounded-xl border transition-all ${
+              isZero
+                ? 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-200 dark:border-rose-500/30'
+                : 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-500/30'
+            }`}>
+              <div className="flex justify-between items-center gap-2 text-xs">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">تاريخ الانتهاء:</span>
+                <input
+                  type="date"
+                  value={toYMD(targetDate)}
+                  onChange={e => {
+                    const [y, m, d] = e.target.value.split('-').map(Number)
+                    if (y && m && d) {
+                      setTargetDate(new Date(y, m - 1, d, 23, 59, 59))
+                    }
+                  }}
+                  className="bg-white dark:bg-black/40 px-2.5 py-1 border border-slate-300 dark:border-white/15 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-bold text-slate-900 dark:text-white text-xs transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+              <div className="flex justify-between items-center mt-2 pt-2 border-slate-200/60 dark:border-white/5 border-t text-xs">
+                <span className="font-medium text-slate-600 dark:text-slate-400">الأيام المتبقية:</span>
+                <span className={`font-bold text-sm ${isZero ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                  {isZero ? 'منتهي الآن (0 يوم)' : `${daysRemaining} يوم`}
+                </span>
+              </div>
+            </div>
+
+            {/* Duration Action Buttons: + شهر | + أسبوع | تصفير */}
+            <div className="gap-2 grid grid-cols-3 pt-0.5">
               <button
                 type="button"
-                onClick={() => setExtendFromCurrent(v => !v)}
-                className={`w-full flex items-center justify-between gap-3 mt-1 pt-2.5 border-t border-white/5 transition-all`}
+                onClick={() => addDays(30)}
+                className="flex justify-center items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 shadow-xs px-2 py-2.5 rounded-xl font-bold text-white text-xs active:scale-95 transition-all cursor-pointer"
               >
-                <span className={`text-[11px] transition-colors ${extendFromCurrent ? 'text-emerald-400' : 'text-gray-500'}`}>
-                  إضافة الأشهر بعد الانتهاء الحالي
-                  <span className="block text-[10px] font-mono text-gray-600 mt-0.5">{currentExp.toLocaleDateString('ar')}</span>
-                </span>
-                {/* Toggle switch */}
-                <div className={`relative w-9 h-5 rounded-full transition-all duration-200 shrink-0 ${extendFromCurrent ? 'bg-emerald-500' : 'bg-white/10'}`}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full shadow transition-all duration-200 ${extendFromCurrent ? 'bg-white translate-x-4' : 'bg-white/40 translate-x-0.5'}`} />
-                </div>
+                <Plus size={14} />
+                <span>+ شهر (30ي)</span>
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={() => addDays(7)}
+                className="flex justify-center items-center gap-1.5 bg-primary-600 hover:bg-primary-500 shadow-xs px-2 py-2.5 rounded-xl font-bold text-white text-xs active:scale-95 transition-all cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>+ أسبوع (7ي)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReset}
+                className="flex justify-center items-center gap-1.5 bg-gray-100 hover:bg-rose-50 dark:bg-white/5 dark:hover:bg-rose-950/30 px-2 py-2.5 border border-gray-200 hover:border-rose-300 dark:border-white/10 rounded-xl font-bold text-gray-700 hover:text-rose-600 dark:hover:text-rose-400 dark:text-gray-300 text-xs active:scale-95 transition-all cursor-pointer"
+              >
+                <RotateCcw size={13} />
+                <span>تصفير</span>
+              </button>
+            </div>
           </div>
 
-          {/* Expiry preview */}
-          <div className="flex items-center justify-between px-1 text-xs">
-            <span className="text-gray-500">تاريخ الانتهاء:</span>
-            <span className="font-mono text-white font-semibold">{newExp.toLocaleDateString('ar')} <span className="text-emerald-400">({daysLeft} يوم)</span></span>
+          {/* Section 3: Ban Account Action Button (حظر الحساب) */}
+          <div className="pt-0.5">
+            <button
+              type="button"
+              onClick={() => setIsBanned(v => !v)}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-[0.99] ${
+                isBanned
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40 hover:bg-emerald-100'
+                  : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30 hover:bg-rose-100 dark:hover:bg-rose-900/40'
+              }`}
+            >
+              {isBanned ? (
+                <>
+                  <CheckCircle size={15} />
+                  <span>إلغاء حظر الحساب (الحساب محظور حالياً)</span>
+                </>
+              ) : (
+                <>
+                  <Ban size={15} />
+                  <span>حظر هذا الحساب</span>
+                </>
+              )}
+            </button>
           </div>
 
-
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:border-white/20 text-sm font-medium transition-all">إلغاء</button>
-            <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all disabled:opacity-50 active:scale-[0.98]">
+          {/* Footer Actions */}
+          <div className="flex gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 hover:bg-gray-100 dark:hover:bg-white/5 py-3 border border-gray-200 dark:border-white/10 rounded-xl font-semibold text-gray-700 hover:text-gray-900 dark:hover:text-white dark:text-gray-300 text-sm transition-all cursor-pointer"
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 shadow-md py-3 rounded-xl font-bold text-white text-sm active:scale-[0.98] transition-all cursor-pointer"
+            >
               {saving ? 'جارٍ الحفظ...' : 'حفظ'}
             </button>
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -263,72 +451,77 @@ function UserCastlesModal({ user, onClose }: { user: User; onClose: () => void }
   const pending = castlesList.filter((c: Castle) => c.bot_status?.state === 'pending')
   const active = castlesList.filter((c: Castle) => c.bot_status?.state !== 'pending')
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+  return createPortal(
+    <div className="z-[100] fixed inset-0 flex justify-center items-center p-3 sm:p-4 overflow-y-auto" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm" />
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 12 }} transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-lg bg-[#0c1410] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
-        onClick={e => e.stopPropagation()}>
-        <div className="h-0.5 w-full bg-gradient-to-r from-primary-500/0 via-primary-500 to-primary-500/0 shrink-0" />
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        transition={{ duration: 0.15 }}
+        className="z-10 relative flex flex-col bg-white dark:bg-[#0c1410] shadow-2xl my-auto border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-lg max-h-[88vh] overflow-hidden text-gray-900 dark:text-gray-100 admin-modal"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="bg-gradient-to-r from-primary-500/0 via-primary-500 to-primary-500/0 w-full h-1 shrink-0" />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center text-lg">🏰</div>
-            <div>
-              <h3 className="font-semibold text-white text-sm">حسابات المستخدم</h3>
-              <p className="text-[11px] text-gray-500 font-mono truncate max-w-[200px]">{user.email}</p>
+        <div className="flex justify-between items-center px-4 sm:px-5 py-3.5 sm:py-4 border-gray-200 dark:border-white/8 border-b shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex justify-center items-center bg-primary-500/10 border border-primary-500/20 rounded-xl w-9 h-9 text-lg shrink-0">🏰</div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-gray-900 dark:text-white text-sm truncate">
+                {user.username ? `قلاع: ${user.username}` : 'حسابات المستخدم'}
+              </h3>
+              <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate select-all">{user.email}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all">
+          <button onClick={onClose} className="flex justify-center items-center bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-full w-8 h-8 text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400 transition-all cursor-pointer shrink-0">
             <X size={15} />
           </button>
         </div>
 
         {/* Stats bar */}
-        <div className="flex border-b border-white/8 shrink-0">
+        <div className="flex bg-gray-50 dark:bg-black/20 border-gray-200 dark:border-white/8 border-b shrink-0">
           {[
-            { label: 'الحد المسموح', value: user.subscription?.max_castles_allowed ?? 1, color: 'text-primary-400' },
-            { label: 'نشطة', value: active.length, color: 'text-emerald-400' },
-            { label: 'انتظار', value: pending.length, color: pending.length > 0 ? 'text-yellow-400' : 'text-gray-500' },
+            { label: 'الحد المسموح', value: user.subscription?.max_castles_allowed ?? 1, color: 'text-primary-600 dark:text-primary-400' },
+            { label: 'نشطة', value: active.length, color: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'انتظار', value: pending.length, color: pending.length > 0 ? 'text-amber-600 dark:text-yellow-400' : 'text-gray-400' },
           ].map((s, i) => (
-            <div key={i} className="flex-1 py-3 text-center border-l border-white/8 first:border-l-0">
-              <div className={`font-bold font-mono text-lg ${s.color}`}>{s.value}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{s.label}</div>
+            <div key={i} className="flex-1 py-2.5 sm:py-3 border-gray-200 dark:border-white/8 border-l first:border-l-0 text-center">
+              <div className={`font-bold font-mono text-base sm:text-lg ${s.color}`}>{s.value}</div>
+              <div className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">{s.label}</div>
             </div>
           ))}
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+        <div className="flex-1 space-y-4 p-3.5 sm:p-5 overflow-y-auto">
           {isLoading ? (
-            <div className="py-10 text-center text-gray-500 text-sm">جارٍ التحميل...</div>
+            <div className="py-10 text-gray-500 dark:text-gray-400 text-sm text-center">جارٍ التحميل...</div>
           ) : castlesList.length === 0 ? (
-            <div className="py-10 text-center text-gray-500 text-sm">لا توجد حسابات مضافة لهذا المستخدم.</div>
+            <div className="py-10 text-gray-500 dark:text-gray-400 text-sm text-center">لا توجد حسابات مضافة لهذا المستخدم.</div>
           ) : (
             <>
               {pending.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-yellow-400 font-semibold">
+                  <div className="flex items-center gap-2 font-bold text-amber-600 dark:text-yellow-400 text-xs">
                     <Clock size={13} /><span>بانتظار الموافقة ({pending.length})</span>
                   </div>
                   {pending.map(c => (
-                    <div key={c.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20">
+                    <div key={c.id} className="flex justify-between items-center gap-2.5 bg-amber-50 dark:bg-yellow-500/5 p-3 border border-amber-200 dark:border-yellow-500/20 rounded-xl">
                       <div className="min-w-0">
-                        <div className="text-sm text-white font-medium truncate">{c.castle_info?.castle_name || c.castle_info?.lord_name || 'قلعة'}</div>
-                        <div className="text-[11px] text-gray-500 font-mono truncate">{c.email}</div>
+                        <div className="font-semibold text-gray-900 dark:text-white text-sm truncate">{c.castle_info?.castle_name || c.castle_info?.lord_name || 'قلعة'}</div>
+                        <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate">{c.email}</div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button disabled={approveCastle.isPending}
                           onClick={() => approveCastle.mutate({userId:user.uid,castleId:c.id},{onSuccess:()=>toast.success('تمت الموافقة'),onError:()=>toast.error('حدث خطأ')})}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all">
+                          className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 shadow-xs px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-white text-xs active:scale-95 transition-all cursor-pointer">
                           <CheckCircle size={12} />قبول
                         </button>
                         <button disabled={rejectCastle.isPending}
                           onClick={() => { if(!confirm(`رفض وحذف الحساب (${c.email})؟`)) return; rejectCastle.mutate({userId:user.uid,castleId:c.id},{onSuccess:()=>toast.success('تم الرفض'),onError:()=>toast.error('حدث خطأ')}) }}
-                          className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-all">
+                          className="flex justify-center items-center bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 border border-red-200 dark:border-transparent rounded-lg w-8 h-8 text-red-600 dark:text-red-400 active:scale-95 transition-all cursor-pointer">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -338,21 +531,21 @@ function UserCastlesModal({ user, onClose }: { user: User; onClose: () => void }
               )}
               {active.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                  <div className="flex items-center gap-2 font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                    <span className="inline-block bg-emerald-500 rounded-full w-1.5 h-1.5" />
                     <span>الحسابات النشطة ({active.length})</span>
                   </div>
                   {active.map(c => (
-                    <div key={c.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/8 hover:border-white/12 transition-colors">
+                    <div key={c.id} className="flex justify-between items-center gap-2.5 bg-gray-50 dark:bg-white/[0.02] p-3 border border-gray-200 hover:border-gray-300 dark:border-white/8 dark:hover:border-white/12 rounded-xl transition-colors">
                       <div className="min-w-0">
-                        <div className="text-sm text-white font-medium truncate">{c.castle_info?.castle_name || c.castle_info?.lord_name || 'قلعة'}</div>
-                        <div className="text-[11px] text-gray-500 font-mono truncate">{c.email}</div>
+                        <div className="font-medium text-gray-900 dark:text-white text-sm truncate">{c.castle_info?.castle_name || c.castle_info?.lord_name || 'قلعة'}</div>
+                        <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400 truncate">{c.email}</div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="badge badge-green text-[10px] py-0.5">نشط</span>
+                        <span className="py-0.5 text-[10px] badge badge-green">نشط</span>
                         <button
                           onClick={() => { if(!confirm(`حذف الحساب "${c.email}"؟`)) return; deleteCastle.mutate({castleId:c.id,wasActive:true},{onSuccess:()=>toast.success('تم الحذف'),onError:()=>toast.error('حدث خطأ')}) }}
-                          className="w-7 h-7 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center transition-all">
+                          className="flex justify-center items-center hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg w-7 h-7 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all cursor-pointer">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -365,18 +558,19 @@ function UserCastlesModal({ user, onClose }: { user: User; onClose: () => void }
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/8 shrink-0">
-          <button onClick={onClose} className="w-full py-2 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:border-white/20 text-sm font-medium transition-all">إغلاق</button>
+        <div className="px-4 sm:px-5 py-3 border-gray-200 dark:border-white/8 border-t shrink-0">
+          <button onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-white/5 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl w-full font-semibold text-gray-700 hover:text-gray-900 dark:hover:text-white dark:text-gray-300 text-sm transition-all cursor-pointer">إغلاق</button>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
 // Main Admin Page
 export function AdminPage() {
   const { t } = useTranslation()
-  const { isAuthenticated, loading: authLoading } = useAdminAuth()
+  const { firebaseUser, isAdmin, loading: authLoading } = useAuth()
   const [search, setSearch] = useState('')
   const [editUser, setEditUser] = useState<User | null>(null)
   const [manageCastlesUser, setManageCastlesUser] = useState<User | null>(null)
@@ -389,27 +583,41 @@ export function AdminPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#060a08] flex items-center justify-center text-emerald-400">
+      <div className="flex justify-center items-center bg-gray-50 dark:bg-[#060a08] min-h-screen text-emerald-500">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
-          <span className="text-xs font-mono">التحقق من الصلاحيات...</span>
+          <div className="border-2 border-emerald-500/30 border-t-emerald-500 rounded-full w-8 h-8 animate-spin" />
+          <span className="font-mono text-xs">التحقق من الصلاحيات...</span>
         </div>
       </div>
     )
   }
 
-  if (!isAuthenticated) return <Navigate to="/admin/login" replace />
+  if (!firebaseUser) return <Navigate to="/login" replace />
+  if (!isAdmin) return <Navigate to="/dashboard" replace />
 
-  const filtered = search
-    ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()) || u.uid.includes(search))
-    : users
+  // فلترة قائمة المستخدمين لعرض العملاء والمشتركين فقط واستبعاد حساب المشرف الأعلى نهائياً
+  const clientUsers = users.filter(u => !isSuperAdminUser(u))
+  const filtered = (search
+    ? clientUsers.filter(u => u.email.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()) || u.uid.includes(search))
+    : clientUsers
+  ).slice().sort((a, b) => (b.subscription?.current_castles_count || 0) - (a.subscription?.current_castles_count || 0))
 
   const handleBan = (u: User) => {
+    if (isSuperAdminUser(u)) {
+      toast.error('لا يمكن حظر حساب المشرف الأعلى!')
+      return
+    }
     if (!confirm(u.is_banned ? 'رفع الحظر عن هذا المستخدم؟' : 'حظر هذا المستخدم؟')) return
     banUser.mutate({uid:u.uid,ban:!u.is_banned},{onSuccess:()=>toast.success(t('common.success')),onError:()=>toast.error(t('common.error'))})
   }
 
-  const handleDelete = (u: User) => setConfirmDeleteUser(u)
+  const handleDelete = (u: User) => {
+    if (isSuperAdminUser(u)) {
+      toast.error('لا يمكن حذف حساب المشرف الأعلى!')
+      return
+    }
+    setConfirmDeleteUser(u)
+  }
 
   const doDelete = () => {
     if (!confirmDeleteUser) return
@@ -429,134 +637,342 @@ export function AdminPage() {
 
   return (
     <AdminLayout title={t('admin.title')}>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        {/* Header */}
+        <div className="flex sm:flex-row flex-col justify-between sm:items-center gap-2.5 sm:gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Shield size={24} className="text-primary-400" />
+            <h1 className="flex items-center gap-2 font-black text-gray-900 dark:text-white text-xl sm:text-2xl">
+              <Shield size={22} className="text-emerald-600 dark:text-emerald-400" />
               <span>{t('admin.title')}</span>
             </h1>
-            <p className="text-xs text-gray-500 mt-1">إدارة المستخدمين، الحسابات المسموحة، مدة الاشتراك، وقبول الطلبات</p>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="gap-3 sm:gap-4 grid grid-cols-2 lg:grid-cols-4">
           {[
-            {label:t('admin.totalUsers'),value:stats?.totalUsers??'—',icon:'👥',color:'text-blue-400',bg:'bg-blue-600/10 border-blue-600/20'},
-            {label:t('admin.activeSubscriptions'),value:stats?.activeSubscriptions??'—',icon:'✅',color:'text-green-400',bg:'bg-green-600/10 border-green-600/20'},
-            {label:t('admin.totalCastlesAll'),value:stats?.totalCastles??'—',icon:'🏰',color:'text-yellow-400',bg:'bg-yellow-600/10 border-yellow-600/20'},
-            {label:'في الانتظار',value:users.reduce((acc,u)=>acc+(u.subscription?.pending_castles_count||0),0),icon:'⏳',color:'text-primary-400',bg:'bg-primary-600/10 border-primary-600/20'},
-          ].map((s,i)=>(
-            <motion.div key={s.label} initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:i*0.07}} className={`glass-card p-5 border ${s.bg}`}>
-              <div className="text-2xl mb-2">{s.icon}</div>
-              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+            {
+              label: t('admin.totalUsers'),
+              value: stats?.totalUsers ?? '—',
+              icon: '👥',
+              color: 'text-blue-600 dark:text-blue-400',
+              bg: 'bg-white dark:bg-white/[0.03]',
+              border: 'border-slate-200/80 dark:border-white/8',
+              iconBg: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400',
+            },
+            {
+              label: t('admin.activeSubscriptions'),
+              value: stats?.activeSubscriptions ?? '—',
+              icon: '✅',
+              color: 'text-emerald-600 dark:text-emerald-400',
+              bg: 'bg-white dark:bg-white/[0.03]',
+              border: 'border-slate-200/80 dark:border-white/8',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            },
+            {
+              label: t('admin.totalCastlesAll'),
+              value: stats?.totalCastles ?? '—',
+              icon: '🏰',
+              color: 'text-amber-600 dark:text-amber-400',
+              bg: 'bg-white dark:bg-white/[0.03]',
+              border: 'border-slate-200/80 dark:border-white/8',
+              iconBg: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+            },
+            {
+              label: 'في الانتظار',
+              value: users.reduce((acc, u) => acc + (u.subscription?.pending_castles_count || 0), 0),
+              icon: '⏳',
+              color: 'text-purple-600 dark:text-purple-400',
+              bg: 'bg-white dark:bg-white/[0.03]',
+              border: 'border-slate-200/80 dark:border-white/8',
+              iconBg: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
+            },
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className={`admin-stat-card p-4 sm:p-5 rounded-2xl border ${s.border} ${s.bg} shadow-xs hover:shadow-sm transition-all`}
+            >
+              <div className="flex justify-between items-center gap-2 mb-2">
+                <span className="font-semibold text-slate-500 dark:text-slate-400 text-xs truncate">{s.label}</span>
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${s.iconBg}`}>
+                  {s.icon}
+                </span>
+              </div>
+              <div className={`text-2xl sm:text-3xl font-black ${s.color} tracking-tight font-mono`}>
+                {s.value}
+              </div>
             </motion.div>
           ))}
         </div>
 
-        {/* Users Table */}
-        <div className="glass-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/8 flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="font-semibold text-white flex items-center gap-2">
+        {/* Users Section */}
+        <div className="admin-table-container bg-white dark:bg-[#0c1410] shadow-xs border border-slate-200/80 dark:border-white/8 rounded-2xl overflow-hidden admin-card">
+          {/* Header & Search */}
+          <div className="flex sm:flex-row flex-col justify-between sm:items-center gap-3 bg-slate-50/50 dark:bg-white/[0.01] px-4 sm:px-6 py-3.5 sm:py-4 border-slate-200/80 dark:border-white/8 border-b">
+            <h2 className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-base">
+              <Users size={18} className="text-emerald-600 dark:text-emerald-400" />
               <span>{t('admin.users')}</span>
-              <span className="text-xs font-normal text-gray-500">({filtered.length})</span>
+              <span className="bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 border border-slate-300/60 dark:border-white/10 rounded-full font-bold text-slate-700 dark:text-slate-300 text-xs">
+                {filtered.length}
+              </span>
             </h2>
-            <div className="relative flex items-center">
-              <Search size={14} className="pointer-events-none top-1/2 absolute text-gray-500 -translate-y-1/2 start-3 z-10" />
+            <div className="relative flex items-center w-full sm:w-auto">
+              <Search size={15} className="top-1/2 z-10 absolute text-slate-400 -translate-y-1/2 pointer-events-none start-3" />
               <input
                 id="admin-search"
                 type="text"
                 value={search}
-                onChange={e=>setSearch(e.target.value)}
+                onChange={e => setSearch(e.target.value)}
                 placeholder={t('admin.searchUsers')}
-                className="input-field !ps-9 py-1.5 text-sm w-64"
+                className="bg-slate-100/80 focus:bg-white dark:bg-white/5 shadow-xs py-2 ps-9 pe-3 border border-slate-200 focus:border-emerald-500 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 w-full sm:w-64 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm transition-all"
                 style={{ paddingInlineStart: '2.4rem' }}
               />
             </div>
           </div>
+
           {isLoading ? (
-            <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
+            <div className="py-16 text-slate-400 text-center">{t('common.loading')}</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/8 text-gray-500 text-xs">
-                    <th className="px-5 py-3 text-start">المستخدم</th>
-                    <th className="px-3 py-3 text-start">{t('admin.role')}</th>
-                    <th className="px-3 py-3 text-center">الحسابات</th>
-                    <th className="px-3 py-3 text-start">انتهاء الاشتراك</th>
-                    <th className="px-3 py-3 text-start">الحالة</th>
-                    <th className="px-5 py-3 text-end">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filtered.map(u => {
-                    const expDate = u.subscription?.expires_at ? new Date(u.subscription.expires_at) : null
-                    const isExpired = expDate ? expDate.getTime() <= Date.now() : false
-                    const daysLeft = expDate ? Math.ceil((expDate.getTime()-Date.now())/86400000) : 0
-                    const pendingCount = Number(u.subscription?.pending_castles_count || 0)
-                    return (
-                      <tr key={u.uid} onClick={() => setEditUser(u)} className="hover:bg-white/[0.06] cursor-pointer transition-colors group">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary-900/60 border border-primary-700/30 flex items-center justify-center text-xs font-bold text-primary-400 flex-shrink-0">
-                              {(u.username||u.email)?.[0]?.toUpperCase()}
+            <>
+              {/* ── Desktop Table (md: and up) ── */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="admin-table-head bg-slate-50/75 dark:bg-white/[0.01] border-slate-200/80 dark:border-white/8 border-b font-semibold text-slate-500 dark:text-slate-400 text-xs uppercase">
+                      <th className="px-5 py-3 text-start">المستخدم</th>
+                      <th className="px-3 py-3 text-start">{t('admin.role')}</th>
+                      <th className="px-3 py-3 text-center">الحسابات</th>
+                      <th className="px-3 py-3 text-start">انتهاء الاشتراك</th>
+                      <th className="px-3 py-3 text-start">الحالة</th>
+                      <th className="px-5 py-3 text-end">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {filtered.map(u => {
+                      const expDate = u.subscription?.expires_at ? new Date(u.subscription.expires_at) : null
+                      const isLifetime = expDate ? expDate.getFullYear() >= 2090 : false
+                      const isExpired = !isLifetime && expDate ? expDate.getTime() <= Date.now() : false
+                      const daysLeft = isLifetime ? 99999 : (expDate ? Math.ceil((expDate.getTime()-Date.now())/86400000) : 0)
+                      const isSuspended = u.subscription?.status === 'suspended'
+                      const pendingCount = Number(u.subscription?.pending_castles_count || 0)
+                      return (
+                        <tr
+                          key={u.uid}
+                          onClick={() => setEditUser(u)}
+                          className="group admin-table-row hover:bg-slate-50/80 dark:hover:bg-white/[0.04] transition-colors cursor-pointer"
+                        >
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="flex flex-shrink-0 justify-center items-center bg-emerald-100/80 dark:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-700/30 rounded-xl w-9 h-9 font-black text-emerald-800 dark:text-emerald-400 text-xs">
+                                {(u.username||u.email)?.[0]?.toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-900 dark:text-white truncate">
+                                  {u.username || '—'}
+                                </div>
+                                <div className="font-mono text-slate-500 dark:text-slate-400 text-xs truncate">{u.email}</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="text-white font-medium">{u.username||'—'}</div>
-                              <div className="text-gray-500 text-xs">{u.email}</div>
+                          </td>
+                          <td className="px-3 py-3.5">
+                            <span className={`badge ${u.role==='admin'?'badge-yellow':'badge-gray'}`}>{u.role==='admin'?'Admin':'User'}</span>
+                          </td>
+                          <td className="px-3 py-3.5 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="font-mono text-sm">
+                                <span className="font-black text-emerald-600 dark:text-emerald-400">{u.subscription?.current_castles_count ?? 0}</span>
+                                <span className="font-normal text-slate-400"> / {u.subscription?.max_castles_allowed ?? 1}</span>
+                              </div>
+                              {pendingCount > 0 && (
+                                <button onClick={e => { e.stopPropagation(); setManageCastlesUser(u) }} className="flex items-center gap-1 hover:bg-yellow-500/30 text-[10px] animate-pulse cursor-pointer badge badge-yellow">
+                                  <Clock size={10} /><span>{pendingCount} انتظار</span>
+                                </button>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className={`badge ${u.role==='admin'?'badge-yellow':'badge-gray'}`}>{u.role==='admin'?'👑 Admin':'User'}</span>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="text-sm">
-                              <span className="text-white font-semibold">{u.subscription?.current_castles_count??0}</span>
-                              <span className="text-gray-500">/{u.subscription?.max_castles_allowed??1}</span>
-                            </div>
-                            {pendingCount > 0 && (
-                              <button onClick={e => { e.stopPropagation(); setManageCastlesUser(u) }} className="badge badge-yellow text-[10px] animate-pulse hover:bg-yellow-500/30 cursor-pointer flex items-center gap-1">
-                                <Clock size={10} /><span>{pendingCount} انتظار</span>
+                          </td>
+                          <td className="px-3 py-3.5 text-xs">
+                            {expDate ? (
+                              <div>
+                                <div className={`font-semibold font-mono ${isLifetime ? 'text-emerald-700 dark:text-emerald-400' : isExpired ? 'text-rose-600 dark:text-red-400' : 'text-slate-900 dark:text-gray-200'}`} dir="ltr">
+                                  {isLifetime ? 'دائم مفتوح' : formatDate(expDate)}
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-slate-500 dark:text-gray-400">
+                                  {isLifetime ? '∞ غير محدود' : isExpired ? t('dashboard.expiredBadge', 'منتهي') : daysLeft > 60 ? `~${Math.round(daysLeft/30)} أشهر` : `${daysLeft} يوم`}
+                                </div>
+                              </div>
+                            ) : <span className="text-slate-400">—</span>}
+                          </td>
+                          <td className="px-3 py-3.5">
+                            {u.is_banned ? <span className="badge badge-red">{t('dashboard.bannedBadge', 'محظور')}</span>
+                             : isSuspended ? <span className="badge badge-yellow">مجمّد</span>
+                             : isLifetime ? <span className="flex items-center gap-1 badge badge-green"><Infinity size={11} /> دائم</span>
+                             : isExpired ? <span className="badge badge-red">{t('dashboard.expiredBadge', 'منتهي')}</span>
+                             : u.subscription?.status==='active' ? <span className="badge badge-green">نشط</span>
+                             : <span className="badge badge-gray">{u.subscription?.status||'—'}</span>}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex justify-end items-center gap-1.5">
+                              <button onClick={e=>{e.stopPropagation();setManageCastlesUser(u)}} className="hover:bg-primary-50 dark:hover:bg-primary-600/20 p-2 rounded-xl text-primary-600 hover:text-primary-800 dark:hover:text-white dark:text-primary-400 transition-colors cursor-pointer" title="إدارة القلاع"><Layers size={15}/></button>
+                              <button onClick={e=>{e.stopPropagation();setEditUser(u)}} className="hover:bg-slate-100 dark:hover:bg-white/8 p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:hover:text-white dark:text-gray-300 transition-colors cursor-pointer" title="تعديل الاشتراك"><Edit size={14}/></button>
+                              <button onClick={e=>{e.stopPropagation();handleBan(u)}} className={`p-2 rounded-xl transition-colors cursor-pointer ${u.is_banned?'text-emerald-700 dark:text-green-400 hover:bg-emerald-50 dark:hover:bg-green-600/10':'text-amber-700 dark:text-yellow-400 hover:bg-amber-50 dark:hover:bg-yellow-600/10'}`} title={u.is_banned?t('admin.unbanUser'):t('admin.banUser')}>
+                                {u.is_banned?<CheckCircle size={14}/>:<Ban size={14}/>}
                               </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-xs">
-                          {expDate ? (
-                            <div>
-                              <div className={`font-medium ${isExpired?'text-red-400':'text-gray-200'}`}>{expDate.toLocaleDateString('ar')}</div>
-                              <div className="text-[11px] text-gray-500 mt-0.5">{isExpired?'منتهي':daysLeft>60?`~${Math.round(daysLeft/30)} أشهر`:`${daysLeft} يوم`}</div>
+                              <button onClick={e=>{e.stopPropagation();handleDelete(u)}} className="hover:bg-rose-50 dark:hover:bg-red-600/10 p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-red-400 transition-colors cursor-pointer" title="حذف المستخدم"><Trash2 size={14}/></button>
                             </div>
-                          ) : <span className="text-gray-500">—</span>}
-                        </td>
-                        <td className="px-3 py-3">
-                          {u.is_banned ? <span className="badge badge-red">محظور</span>
-                           : isExpired ? <span className="badge badge-red">منتهي</span>
-                           : u.subscription?.status==='active' ? <span className="badge badge-green">نشط</span>
-                           : <span className="badge badge-gray">{u.subscription?.status||'—'}</span>}
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-1 justify-end">
-                            <button onClick={e=>{e.stopPropagation();setManageCastlesUser(u)}} className="p-1.5 rounded-lg text-primary-400 hover:text-white hover:bg-primary-600/20 transition-colors" title="إدارة الحسابات"><Layers size={15}/></button>
-                            <button onClick={e=>{e.stopPropagation();setEditUser(u)}} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/8 transition-colors" title="تعديل الاشتراك"><Edit size={14}/></button>
-                            <button onClick={e=>{e.stopPropagation();handleBan(u)}} className={`p-1.5 rounded-lg transition-colors ${u.is_banned?'text-green-400 hover:bg-green-600/10':'text-yellow-400 hover:bg-yellow-600/10'}`} title={u.is_banned?t('admin.unbanUser'):t('admin.banUser')}>
-                              {u.is_banned?<CheckCircle size={14}/>:<Ban size={14}/>}
-                            </button>
-                            <button onClick={e=>{e.stopPropagation();handleDelete(u)}} className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-600/10 transition-colors" title="حذف المستخدم"><Trash2 size={14}/></button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ── Mobile User Cards (md:hidden) ── */}
+              <div className="md:hidden block space-y-3 bg-slate-50/50 dark:bg-black/10 p-3">
+                {filtered.map(u => {
+                  const expDate = u.subscription?.expires_at ? new Date(u.subscription.expires_at) : null
+                  const isLifetime = expDate ? expDate.getFullYear() >= 2090 : false
+                  const isExpired = !isLifetime && expDate ? expDate.getTime() <= Date.now() : false
+                  const daysLeft = isLifetime ? 99999 : (expDate ? Math.ceil((expDate.getTime()-Date.now())/86400000) : 0)
+                  const isSuspended = u.subscription?.status === 'suspended'
+                  const pendingCount = Number(u.subscription?.pending_castles_count || 0)
+
+                  return (
+                    <div
+                      key={u.uid}
+                      onClick={() => setEditUser(u)}
+                      className="space-y-3 bg-white hover:bg-slate-50 dark:bg-white/[0.025] dark:hover:bg-white/[0.05] shadow-xs hover:shadow-sm p-4 border border-slate-200/90 dark:border-white/8 rounded-2xl active:scale-[0.99] transition-all cursor-pointer admin-user-card"
+                    >
+                      {/* Top: User info + badges */}
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex justify-center items-center bg-emerald-100/90 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-500/30 rounded-xl w-10 h-10 font-black text-emerald-800 dark:text-emerald-400 text-xs shrink-0">
+                            {(u.username||u.email)?.[0]?.toUpperCase()}
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              {filtered.length === 0 && <div className="text-center py-12 text-gray-500">لا توجد نتائج تطابق البحث</div>}
-            </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 dark:text-white text-sm truncate">{u.username || '—'}</div>
+                            <div className="font-mono text-slate-500 dark:text-slate-400 text-xs truncate select-all">{u.email}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`badge ${u.role==='admin'?'badge-yellow':'badge-gray'} text-[10px] py-0.5`}>
+                            {u.role==='admin'?'Admin':'User'}
+                          </span>
+                          {u.is_banned ? (
+                            <span className="py-0.5 text-[10px] badge badge-red">محظور</span>
+                          ) : isSuspended ? (
+                            <span className="py-0.5 text-[10px] badge badge-yellow">مجمّد</span>
+                          ) : isLifetime ? (
+                            <span className="flex items-center gap-1 py-0.5 text-[10px] badge badge-green">
+                              <Infinity size={10} /> دائم
+                            </span>
+                          ) : isExpired ? (
+                            <span className="py-0.5 text-[10px] badge badge-red">{t('dashboard.expiredBadge', 'منتهي')}</span>
+                          ) : (
+                            <span className="py-0.5 text-[10px] badge badge-green">نشط</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Metrics Pill Grid */}
+                      <div className="gap-2.5 grid grid-cols-2 bg-slate-50 dark:bg-black/30 p-2.5 border border-slate-100 dark:border-white/5 rounded-xl text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="flex justify-center items-center bg-primary-50 dark:bg-primary-500/10 border border-primary-100 dark:border-primary-500/20 rounded-lg w-7 h-7 shrink-0">
+                            <Layers size={13} className="text-primary-600 dark:text-primary-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-[10px] text-slate-500 dark:text-slate-400">القلاع (النشطة / الحد)</div>
+                            <div className="flex items-center gap-1 font-mono text-xs">
+                              <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                {u.subscription?.current_castles_count ?? 0}
+                              </span>
+                              <span className="font-medium text-slate-400">
+                                / {u.subscription?.max_castles_allowed ?? 1}
+                              </span>
+                              {pendingCount > 0 && (
+                                <span className="ms-1 bg-amber-100/90 dark:bg-amber-900/40 px-1 py-0.2 border border-amber-200 dark:border-amber-700/40 rounded font-bold text-[9px] text-amber-700 dark:text-amber-300">
+                                  +{pendingCount}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex justify-center items-center bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-lg w-7 h-7 shrink-0">
+                            <Calendar size={13} className="text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-[10px] text-slate-500 dark:text-slate-400">الاشتراك</div>
+                            <div className="font-mono font-bold text-xs" dir="ltr">
+                              {expDate ? (
+                                <span className={isLifetime ? 'text-emerald-700 dark:text-emerald-300 font-bold' : isExpired ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-emerald-700 dark:text-emerald-300 font-bold'}>
+                                  {isLifetime ? 'دائم مفتوح' : formatDate(expDate)}
+                                  <span className="ms-1 font-sans font-normal text-[10px] text-slate-500 dark:text-slate-400">
+                                    ({isLifetime ? '∞' : isExpired ? t('dashboard.expiredBadge', 'منتهي') : `${daysLeft}ي`})
+                                  </span>
+                                </span>
+                              ) : <span className="text-slate-400">—</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons (Mobile single row) */}
+                      <div className="flex justify-between items-center gap-1.5 pt-1" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setEditUser(u)}
+                          className="flex flex-1 justify-center items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 shadow-xs px-3 py-2 dark:border dark:border-emerald-500/30 rounded-xl font-bold text-white dark:text-emerald-300 text-xs active:scale-95 transition cursor-pointer"
+                        >
+                          <Edit size={13} />
+                          <span>تعديل الاشتراك</span>
+                        </button>
+
+                        <button
+                          onClick={() => setManageCastlesUser(u)}
+                          className="flex justify-center items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 shadow-xs px-3 py-2 border border-slate-200/80 dark:border-white/10 rounded-xl font-bold text-slate-800 dark:text-slate-200 text-xs active:scale-95 transition cursor-pointer"
+                          title="إدارة القلاع"
+                        >
+                          <Layers size={13} className="text-primary-600 dark:text-primary-400" />
+                          <span>القلاع</span>
+                          {pendingCount > 0 && (
+                            <span className="bg-amber-500 px-1.5 rounded-full font-black text-[9px] text-white">{pendingCount}</span>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => handleBan(u)}
+                          className={`p-2 rounded-xl border transition active:scale-95 cursor-pointer shadow-xs ${
+                            u.is_banned
+                              ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                              : 'bg-amber-50 hover:bg-amber-100 dark:bg-yellow-500/10 border-amber-200 dark:border-yellow-500/25 text-amber-700 dark:text-yellow-400'
+                          }`}
+                          title={u.is_banned ? t('admin.unbanUser') : t('admin.banUser')}
+                        >
+                          {u.is_banned ? <CheckCircle size={15} /> : <Ban size={15} />}
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(u)}
+                          className="bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 shadow-xs p-2 border border-rose-200 dark:border-rose-500/25 rounded-xl text-rose-600 dark:text-rose-400 active:scale-95 transition cursor-pointer"
+                          title="حذف المستخدم"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {filtered.length === 0 && (
+                <div className="py-16 text-slate-400 text-center">لا توجد نتائج تطابق البحث</div>
+              )}
+            </>
           )}
         </div>
       </div>
