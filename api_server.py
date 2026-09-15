@@ -657,14 +657,14 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
     if not is_admin and caller_uid != req.user_id:
         raise HTTPException(status_code=403, detail="غير مصرح بتشغيل قلاع مستخدم آخر")
 
-    # 1. التحقق من صلاحية الاشتراك وحظر الحساب
+    # 1. التحقق من صلاحية الاشتراك وحظر الحساب (بحد زمني 4 ثوانٍ لضمان استجابة سريعة)
     try:
         _ensure_firebase()
         import firebase_admin
         from firebase_admin import firestore as fb_fs
         if firebase_admin._apps:
             db = fb_fs.client()
-            user_snap = db.collection("users").document(req.user_id).get()
+            user_snap = db.collection("users").document(req.user_id).get(timeout=4)
             if user_snap.exists:
                 user_doc = user_snap.to_dict() or {}
                 from core.firebase_schema import check_user_subscription
