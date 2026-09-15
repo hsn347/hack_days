@@ -177,8 +177,8 @@ def _ensure_firebase():
 _ensure_firebase()
 
 
-def _update_firebase_status(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None):
-    """يحدّث bot_status في Firestore (state + conn_state + message)."""
+def _update_firebase_status(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None, next_run_time: Optional[str] = None):
+    """يحدّث bot_status في Firestore (state + conn_state + message + next_run_time)."""
     try:
         _ensure_firebase()
         import firebase_admin
@@ -192,6 +192,8 @@ def _update_firebase_status(user_id: str, castle_id: str, state: str, message: s
                 "bot_status.state":            state,
                 "bot_status.last_run_message": message,
             }
+            if next_run_time:
+                updates["bot_status.next_run_time"] = next_run_time
             if conn_state is not None:
                 updates["bot_status.conn_state"]   = conn_state
                 updates["bot_status.conn_message"] = message
@@ -211,6 +213,29 @@ def _update_firebase_status(user_id: str, castle_id: str, state: str, message: s
                 updates["bot_status.conn_updated"] = now_iso
 
             ref.update(updates)
+
+        # ── تحديث كاش قاعدة بيانات SQLite المحلية ──
+        try:
+            from core.database import upsert_castle_conn_state
+            effective_conn = conn_state
+            if effective_conn is None:
+                if state in ("idle", "error"):
+                    effective_conn = state
+                elif state == "running":
+                    effective_conn = "connected"
+                elif state == "waiting":
+                    effective_conn = "waiting"
+            effective_email = _castle_emails.get(castle_id) or castle_id
+            upsert_castle_conn_state(
+                email=effective_email,
+                conn_state=effective_conn or state,
+                message=message,
+                next_run_time=next_run_time,
+                user_id=user_id,
+                castle_id=castle_id
+            )
+        except Exception:
+            pass
     except Exception as e:
         log.debug(f"Firebase status update skipped: {e}")
 
@@ -219,7 +244,7 @@ _fb_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fb-sync")
 _fb_lock = threading.Lock()
 _last_fb_updates: Dict[str, Tuple[float, str, Optional[str]]] = {}
 
-def update_firebase_status_async(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None, force: bool = False):
+def update_firebase_status_async(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None, force: bool = False, next_run_time: Optional[str] = None):
     """تحديث Firestore عبر ThreadPoolExecutor مع خنق (Throttling) لمنع إرهاق الخادم وتجاوز حدود الحصص."""
     now = time.time()
     with _fb_lock:
@@ -231,7 +256,7 @@ def update_firebase_status_async(user_id: str, castle_id: str, state: str, messa
                 return
         _last_fb_updates[castle_id] = (now, state, conn_state)
 
-    _fb_executor.submit(_update_firebase_status, user_id, castle_id, state, message, conn_state)
+    _fb_executor.submit(_update_firebase_status, user_id, castle_id, state, message, conn_state, next_run_time)
 
 
 def _sync_castle_to_firebase(email: str, data: dict, user_id: Optional[str] = None, castle_id: Optional[str] = None):
@@ -265,6 +290,19 @@ def _sync_castle_to_firebase(email: str, data: dict, user_id: Optional[str] = No
                         flat_data[k] = v
                 target_ref.update(flat_data)
                 log.info(f"💾 [API Sync] تم تحديث موارد وبيانات القلعة {email} في Firestore بنجاح ✅")
+
+        # ── تحديث كاش قاعدة بيانات SQLite المحلية ──
+        try:
+            from core.database import upsert_castle_resources
+            upsert_castle_resources(
+                email=email,
+                resources=data.get("resources", {}),
+                castle_info=data.get("castle_info", {}),
+                user_id=user_id,
+                castle_id=castle_id
+            )
+        except Exception:
+            pass
     except Exception as e:
         log.warning(f"⚠️ [API Sync Warning]: {e}")
 
@@ -475,16 +513,18 @@ def _bot_thread(req: StartBotRequest):
                                 parts = line.split("[FIREBASE_EVENT]", 1)[1].strip()
                                 import re
                                 m_st = re.search(r'conn_state=(\w+)', parts)
-                                m_msg = re.search(r'message=(.+)$', parts)
+                                m_nr = re.search(r'next_run_time=(\S+)', parts)
+                                m_msg = re.search(r'message=(.+?)(?:\s+next_run_time=\S+)?$', parts)
                                 ev_state = m_st.group(1) if m_st else ""
                                 ev_msg = m_msg.group(1).strip() if m_msg else ""
+                                ev_nr = m_nr.group(1) if m_nr else None
                                 if ev_state and not stop_event.is_set():
                                     with _lock:
                                         prev_ev = _conn_states.get(castle_id)
                                         _conn_states[castle_id] = ev_state
                                     if prev_ev != ev_state:
                                         bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
-                                        update_firebase_status_async(user_id, castle_id, bs, ev_msg or line, ev_state)
+                                        update_firebase_status_async(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
                             except Exception as ex:
                                 log.debug(f"Firebase event parse error: {ex}")
 
@@ -871,6 +911,24 @@ def update_conn_state(req: ConnStateRequest):
     return {"ok": True}
 
 
+# ── endpoints سريعة لقراءة كاش القلاع من قاعدة بيانات SQLite المحلية ──
+@app.get("/api/local/castles")
+def get_local_castles(user_id: Optional[str] = None):
+    """جلب قائمة بكافة القلاع وحالاتها المخزنة محلياً في SQLite بسرعة فائقة."""
+    from core.database import get_all_castles
+    return {"castles": get_all_castles(user_id=user_id)}
+
+
+@app.get("/api/local/castles/{identifier}")
+def get_local_castle(identifier: str):
+    """استرجاع بيانات وحالة قلعة معينة من قاعدة بيانات SQLite المحلية بلمح البصر."""
+    from core.database import get_castle
+    c = get_castle(identifier)
+    if not c:
+        raise HTTPException(status_code=404, detail="Castle not found in local database")
+    return {"castle": c}
+
+
 @app.get("/api/castle-data/{email}")
 async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: Optional[str] = None, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
@@ -893,46 +951,61 @@ async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: 
         if not ok:
             raise HTTPException(status_code=503, detail="تعذر الاتصال بسيرفر اللعبة")
 
-        # 3. انتظار حزم التهيئة
-        for _ in range(25):
+        # 3. انتظار حزم التهيئة الأولية
+        for _ in range(15):
             await asyncio.sleep(0.3)
             if len(conn.init_data) > 0:
                 break
 
-        # 4. استخراج البيانات الأساسية والموارد
-        lord_ctrl  = conn.init_data.get("lordInfoCtrl", {})
-        base_info  = lord_ctrl.get("base", {}) if isinstance(lord_ctrl, dict) else {}
-        fc_info    = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
-        city_ctrl  = conn.init_data.get("cityCtrl", {})
-        reslist    = city_ctrl.get("reslist", {}) if isinstance(city_ctrl, dict) else {}
+        # 4. استعلام مباني وموارد المدينة (1001/1)
+        r_city = None
+        try:
+            r_city = await asyncio.wait_for(conn.query("1001", "1", {}, timeout=8), timeout=10)
+        except Exception:
+            pass
 
-        food    = int(float(reslist.get("1002", 0)))
-        wood    = int(float(reslist.get("1003", 0)))
-        iron    = int(float(reslist.get("1004", 0)))
-        diamond = int(float(reslist.get("1005", 0)))
-        gold    = int(base_info.get("gold", 0))
-        stamina = int(base_info.get("health", 100))
+        city_data = r_city.get("data", {}) if r_city and isinstance(r_city, dict) else {}
+        city_ctrl = conn.init_data.get("cityCtrl", {})
+        reslist   = city_data.get("reslist") or city_ctrl.get("reslist", {})
+        saferes   = city_data.get("saferes") or city_ctrl.get("saferes", {})
+        blist     = city_data.get("blist") or city_ctrl.get("blist", [])
+
+        # استعلام بيانات اللورد والقوة (1002/7) إذا لم تكن متوفرة في init_data
+        lord_ctrl = conn.init_data.get("lordInfoCtrl", {})
+        base_info = lord_ctrl.get("base", {}) if isinstance(lord_ctrl, dict) else {}
+        fc_info   = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
+
+        if not base_info or not fc_info:
+            uid_val = getattr(conn, "uid", None) or getattr(account, "user_id", None)
+            if uid_val:
+                try:
+                    uid_int = int(uid_val) if str(uid_val).isdigit() else uid_val
+                    r_lord = await asyncio.wait_for(conn.query("1002", "7", {"uid": uid_int}, timeout=6), timeout=8)
+                    if r_lord and isinstance(r_lord.get("data"), dict):
+                        base_info = r_lord["data"].get("base", {}) or base_info
+                        fc_info   = r_lord["data"].get("fcInfo", {}) or fc_info
+                except Exception:
+                    pass
+
+        food    = int(float(reslist.get("1002", saferes.get("1002", 0))))
+        wood    = int(float(reslist.get("1003", saferes.get("1003", 0))))
+        iron    = int(float(reslist.get("1004", saferes.get("1004", 0))))
+        diamond = int(float(reslist.get("1005", saferes.get("1005", 0))))
+        gold    = int(float(base_info.get("gold", reslist.get("1006", saferes.get("1006", 0)))))
+        stamina = int(float(base_info.get("health", 100)))
         pos     = base_info.get("sourcePos", {})
         coords  = {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
 
         castle_lv  = 0
         walls_lv   = 0
 
-        # استعلام المباني لجلب مستوى القلعة
-        try:
-            r_city = await asyncio.wait_for(conn.query("1001", "1", {}, timeout=8), timeout=10)
-            blist  = r_city.get("data", {}).get("blist", []) if r_city else []
-            if not blist and "cityCtrl" in conn.init_data:
-                blist = conn.init_data["cityCtrl"].get("blist", [])
-            for b in blist:
-                bid = int(b.get("bid", 0))
-                lv  = int(b.get("lv", 0))
-                if bid == 101:
-                    castle_lv = lv
-                elif bid == 102:
-                    walls_lv  = lv
-        except Exception:
-            pass
+        for b in blist:
+            bid = int(b.get("bid", 0))
+            lv  = int(b.get("lv", 0))
+            if bid == 101:
+                castle_lv = lv
+            elif bid == 102:
+                walls_lv  = lv
 
         now_iso = datetime.now(timezone.utc).isoformat()
         res_data = {
@@ -949,7 +1022,7 @@ async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: 
             "lord_power":   int(fc_info.get("totalFc", 0)),
             "castle_level": max(1, castle_lv),
             "walls_level":  walls_lv,
-            "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition")).isdigit() else 1,
+            "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition", "")).isdigit() else 1,
             "coordinates":  coords,
             "uid":          str(base_info.get("uid", getattr(account, "user_id", ""))),
         }

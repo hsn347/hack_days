@@ -92,6 +92,7 @@ export interface MarchManagerConfig extends BaseTaskConfig {
   invaders: { enabled: boolean; level: number; formation_id: number; count: number }
   rebels: { enabled: boolean; level: number; formation_id: number; count: number }
   stronghold: { enabled: boolean; level: number; count: number; formation_id: number }
+  gold_gather?: { enabled: boolean; locations?: GoldLocation[] }
   gather: { enabled: boolean; res_type: number; level: number; search_range: number }
 }
 
@@ -180,7 +181,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   march_manager: {
     enabled: true,
     max_queues: 4,
-    priority_order: ['gather', 'combat'],
+    priority_order: ['transport', 'ruins', 'combat', 'stronghold', 'gold_gather', 'gather'],
     transport: { enabled: false, target_x: null, target_y: null, resource_ids: [] },
     ruins: { enabled: false, explore_time: 120, formation_id: 1 },
     combat: { enabled: false, choice: 'invaders', level: 15, formation_id: 1, count: 5 },
@@ -188,6 +189,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
     invaders: { enabled: false, level: 15, formation_id: 1, count: 5 },
     rebels: { enabled: false, level: 5, formation_id: 1, count: 1 },
     stronghold: { enabled: false, level: 5, count: 1, formation_id: 1 },
+    gold_gather: { enabled: false, locations: [] },
     gather: { enabled: false, res_type: 2, level: 5, search_range: 20 },
   },
   gold_gather: { enabled: false, locations: [] },

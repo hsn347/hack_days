@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Play, Square, Plus, Clock, SlidersHorizontal, Users, Lock, ShieldAlert, AlertTriangle } from 'lucide-react'
+import { Search, Play, Square, Plus, Clock, SlidersHorizontal, Users, Lock, ShieldAlert, AlertTriangle, Copy, CheckCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Layout } from '../components/layout/Layout'
@@ -34,6 +34,7 @@ export function AccountsPage() {
   const batchUpdate  = useBatchUpdateCastleConfigs(uid)
 
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([])
+  const [batchTemplateCastleId, setBatchTemplateCastleId] = useState<string>('')
   const [hasInitializedBatch, setHasInitializedBatch] = useState(false)
 
   const allCastles = data?.pages.flatMap(p => p.items) ?? []
@@ -123,13 +124,47 @@ export function AccountsPage() {
     })
   }
 
-  // مزامنة الحسابات النشطة المختارة تلقائياً مع أول تحميل
+  // مزامنة الحسابات النشطة وتعيين أول قلعة كقالب افتراضي تلقائياً مع أول تحميل
   useEffect(() => {
     if (!hasInitializedBatch && activeCastles.length > 0) {
       setSelectedBatchIds(activeCastles.map(c => c.id))
+      setBatchTemplateCastleId(activeCastles[0].id)
       setHasInitializedBatch(true)
     }
   }, [activeCastles, hasInitializedBatch])
+
+  // القلعة المعتمدة كقالب للإعدادات الجماعية
+  const templateCastle = useMemo(() => {
+    if (activeCastles.length === 0) return null
+    return activeCastles.find(c => c.id === batchTemplateCastleId) || activeCastles[0]
+  }, [activeCastles, batchTemplateCastleId])
+
+  const handleSetAsBatchTemplate = (castleId: string) => {
+    setBatchTemplateCastleId(castleId)
+    setShowBatchSettings(true)
+    const target = activeCastles.find(c => c.id === castleId)
+    const name = (target?.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(target.castle_info.lord_name))
+      ? target.castle_info.lord_name
+      : (target?.email || '').split('@')[0] || 'القلعة'
+    toast.success(t('accounts.templateLoadedToast', { name }))
+  }
+
+  const handleApplyAllTemplateSettings = async () => {
+    if (!templateCastle) return
+    if (selectedBatchIds.length === 0) {
+      toast.error(t('accounts.selectAtLeastOneBatch'))
+      return
+    }
+    try {
+      await batchUpdate.mutateAsync({
+        castleIds: selectedBatchIds,
+        config: templateCastle.config,
+      })
+      toast.success(t('accounts.applyAllSuccess', { count: selectedBatchIds.length }))
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
 
   const handleSelectAllBatch = () => {
     if (selectedBatchIds.length === activeCastles.length) {
@@ -342,16 +377,66 @@ export function AccountsPage() {
                   </div>
                 </div>
 
-                {/* Batch target: TaskTabContent */}
-                <div className="w-full">
-                  <TaskTabContent
-                    castle={activeCastles[0]}
-                    userId={uid}
-                    isBatchMode={true}
-                    batchTargetCount={selectedBatchIds.length}
-                    onBatchSave={handleBatchSave}
-                  />
+                {/* Source Template Castle Box */}
+                <div className="batch-template-box space-y-3 bg-white/[0.03] p-4 border border-white/8 rounded-xl">
+                  <div className="flex flex-wrap justify-between items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <Copy size={15} className="text-primary-400 shrink-0" />
+                      <span className="batch-box-title font-semibold text-white text-xs sm:text-sm">
+                        {t('accounts.templateCastle')}
+                      </span>
+                    </div>
+
+                    {templateCastle && (
+                      <button
+                        type="button"
+                        onClick={handleApplyAllTemplateSettings}
+                        disabled={batchUpdate.isPending || selectedBatchIds.length === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-600 hover:bg-primary-500 active:scale-95 text-white disabled:opacity-50 transition-all cursor-pointer shadow-sm"
+                        title={t('accounts.applyAllFromTemplate')}
+                      >
+                        <CheckCheck size={14} />
+                        <span>{t('accounts.applyAllFromTemplate')}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+                    <label className="text-xs text-gray-400 shrink-0">
+                      {t('accounts.copyFromCastle')}
+                    </label>
+                    <select
+                      value={templateCastle?.id || ''}
+                      onChange={(e) => setBatchTemplateCastleId(e.target.value)}
+                      className="input-field !py-2 !px-3 text-xs sm:text-sm rounded-lg flex-1 cursor-pointer"
+                    >
+                      {activeCastles.map(c => {
+                        const prefix = (c.email || '').split('@')[0] || 'قلعة'
+                        const name = (c.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(c.castle_info.lord_name))
+                          ? c.castle_info.lord_name
+                          : prefix
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {name} — ({c.email})
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
                 </div>
+
+                {/* Batch target: TaskTabContent */}
+                {templateCastle && (
+                  <div className="w-full">
+                    <TaskTabContent
+                      castle={templateCastle}
+                      userId={uid}
+                      isBatchMode={true}
+                      batchTargetCount={selectedBatchIds.length}
+                      onBatchSave={handleBatchSave}
+                    />
+                  </div>
+                )}
 
               </div>
             )}
@@ -442,6 +527,7 @@ export function AccountsPage() {
                       index={idx}
                       onDelete={() => handleDelete(castle.id, true)}
                       onEdit={() => setEditingCastle(castle)}
+                      onSetBatchTemplate={handleSetAsBatchTemplate}
                     />
                   ))}
                 </div>

@@ -1,21 +1,12 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from 'recharts'
 import { Layout } from '../components/layout/Layout'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { useAuth } from '../hooks/useAuth'
 import { useCastles } from '../hooks/useCastles'
 import { motion } from 'framer-motion'
 import { Plus, Users, Shield, Zap, Bot, Crown, AlertTriangle, AlertCircle, ShieldAlert } from 'lucide-react'
-
-const chartData = Array.from({ length: 12 }, (_, i) => ({
-  name: `${i + 1}:00`,
-  active: Math.floor(Math.random() * 8) + 2,
-  tasks: Math.floor(Math.random() * 50) + 20,
-}))
 
 import { localizePlanName, localizeUsername } from '../lib/localize'
 
@@ -283,34 +274,6 @@ export function DashboardPage() {
             </div>
           </div>
         )}
-
-        {/* Activity chart */}
-        <div className="p-5 glass-card">
-          <h2 className="mb-4 font-semibold text-sm brand-title">{t('dashboard.botOverview')}</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gradActive" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradTasks" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#6ee7b7" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#6ee7b7" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" stroke="#4b5563" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#4b5563" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: '#111a11', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '12px' }}
-                labelStyle={{ color: '#9ca3af' }}
-              />
-              <Area type="monotone" dataKey="active" stroke="#10b981" fill="url(#gradActive)" strokeWidth={2} name={t('dashboard.chartActiveCastles')} />
-              <Area type="monotone" dataKey="tasks"  stroke="#6ee7b7" fill="url(#gradTasks)"  strokeWidth={1.5} name={t('dashboard.chartCompletedTasks')} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
 
         {/* Recent castles */}
         {allCastles.length > 0 && (

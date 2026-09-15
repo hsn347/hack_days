@@ -71,6 +71,19 @@ DEFAULT_MIN_RESOURCES = 15     # الحد الأدنى من الرصيد الم�
 DEFAULT_MIN_RES_RATIO = 0.70   # نسبة الموارد المتبقية من إجمالي المنجم (70% فما فوق لقبول الحقل)
 
 
+def _safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
+    """تحويل آمن للأعداد الصحيحة يحمي من السلاسل النصية الفارغة والأخطاء غير المتوقعة."""
+    if val is None:
+        return default
+    try:
+        s = str(val).strip()
+        if not s:
+            return default
+        return int(float(s))
+    except (ValueError, TypeError):
+        return default
+
+
 # ════════════════════════════════════════════════════════════════════
 #  إدارة تاريخ الاستبعاد المشترك والذكي
 # ════════════════════════════════════════════════════════════════════
@@ -743,11 +756,7 @@ class GoldGatherTask(BaseTask):
     # ── المهمة الرئيسية ───────────────────────────────────────────
 
     async def run(self) -> TaskResult:
-        cfg = self.config
-        alliance_tag  = str(cfg.get('alliance_tag') or "").strip().upper()
-        self.alliance_tag = alliance_tag
-        center_x      = cfg.get('center_x')
-        center_y      = cfg.get('center_y')
+        cfg = self.config or {}
         subtype_mode  = cfg.get('subtype', 'auto')
         min_lv        = int(cfg.get('min_lv', DEFAULT_MIN_LV))
         max_lv        = int(cfg.get('max_lv', DEFAULT_MAX_LV))
@@ -760,106 +769,63 @@ class GoldGatherTask(BaseTask):
         self.min_res   = int(cfg.get('min_res', DEFAULT_MIN_RESOURCES))
         self.min_ratio = float(cfg.get('min_ratio', DEFAULT_MIN_RES_RATIO))
 
-        # استخراج الإحداثيات إذا أُدخلت كنص "x,y"
-        if not center_x or not center_y:
-            coords = cfg.get('coords')
-            if coords and ',' in str(coords):
-                parts = str(coords).split(',')
-                center_x, center_y = int(parts[0].strip()), int(parts[1].strip())
+        # استخراج قائمة التحالفات والمواقع المستهدفة (دعم تحالفات متعددة من Firebase أو سطر الأوامر)
+        raw_locations = cfg.get('locations') or cfg.get('alliances') or []
+        target_alliances: List[Dict[str, Any]] = []
 
-        # محاولة تحميل رايات التحالف لتطبيق حدود التحالف الدقيقة
-        flags_file = cfg.get('flags_file')
-        if not flags_file:
-            candidates = [
-                f"flags_{alliance_tag}.json",
-                f"flags_{alliance_tag.lower()}.json",
-                "flags_181.json" if alliance_tag == "181" else None
-            ]
-            for cf in candidates:
-                if cf and os.path.exists(cf):
-                    flags_file = cf
-                    break
+        if isinstance(raw_locations, list) and raw_locations:
+            for loc in raw_locations:
+                if not isinstance(loc, dict):
+                    continue
+                tag = str(loc.get('alliance_tag') or loc.get('tag') or "").strip().upper()
+                raw_x = loc.get('x') if loc.get('x') is not None else loc.get('center_x')
+                raw_y = loc.get('y') if loc.get('y') is not None else loc.get('center_y')
+                if (raw_x is None or raw_y is None) and loc.get('coords'):
+                    c_parts = str(loc.get('coords')).split(',')
+                    if len(c_parts) >= 2:
+                        raw_x, raw_y = c_parts[0], c_parts[1]
+                lx = _safe_int(raw_x)
+                ly = _safe_int(raw_y)
+                if (lx is not None and ly is not None and (lx > 0 or ly > 0)) or tag:
+                    target_alliances.append({
+                        "alliance_tag": tag,
+                        "center_x": lx,
+                        "center_y": ly,
+                        "flags_file": loc.get('flags_file'),
+                    })
 
-        if flags_file and os.path.exists(flags_file):
-            try:
-                with open(flags_file, 'r', encoding='utf-8') as f:
-                    f_data = json.load(f)
-                raw_flags = f_data.get('flags', [])
-                # تطبيق قاعدة التعديل: نقص 1 من x و y للحصول على الإحداثيات الحقيقية
-                self.flags = [(fl['x'] - 1, fl['y'] - 1) for fl in raw_flags if 'x' in fl and 'y' in fl]
-                self.flags_file = flags_file
-                self.log.info(f"🚩 تم تحميل {len(self.flags)} راية لتحالف [{alliance_tag}] من {flags_file} وتطبيق قاعدة الإزاحة (-1)")
-            except Exception as e:
-                self.log.warning(f"⚠️ فشل قراءة ملف الرايات {flags_file}: {e}")
+        # دعم توافق الإعداد الفردي الكلاسيكي (--tag و -x و -y أو --coords)
+        if not target_alliances:
+            single_tag = str(cfg.get('alliance_tag') or cfg.get('tag') or "").strip().upper()
+            raw_sx = cfg.get('center_x') if cfg.get('center_x') is not None else cfg.get('x')
+            raw_sy = cfg.get('center_y') if cfg.get('center_y') is not None else cfg.get('y')
+            if raw_sx is None or raw_sy is None:
+                coords = cfg.get('coords')
+                if coords and ',' in str(coords):
+                    parts = str(coords).split(',')
+                    raw_sx = parts[0]
+                    raw_sy = parts[1] if len(parts) > 1 else None
+            single_x = _safe_int(raw_sx)
+            single_y = _safe_int(raw_sy)
+            if single_tag or (single_x is not None and single_y is not None):
+                target_alliances.append({
+                    "alliance_tag": single_tag,
+                    "center_x": single_x,
+                    "center_y": single_y,
+                    "flags_file": cfg.get('flags_file'),
+                })
 
-        if center_x is None or center_y is None:
-            if not self.flags:
-                self.log.error("❌ لم تُحدَّد إحداثيات مركز التحالف (--center-x, --center-y أو --coords) ولا توجد رايات محملة!")
-                return TaskResult.fail("لم تُحدَّد إحداثيات مركز التحالف المستهدف")
-            else:
-                cx, cy = int(self.flags[0][0]), int(self.flags[0][1])
-                self.log.info(f"ℹ️ لم يتم تحديد قلعة القيادة، سيتم الاعتماد على أول راية كمركز ارتكاز ({cx}, {cy})")
-        else:
-            cx, cy = int(center_x), int(center_y)
-
-        self.log.info(
-            f"🪙 بدء مهمة جمع الذهب | تحالف=[{alliance_tag}] | مركز=({cx}, {cy}) | "
-            f"نطاق={search_range} (أدنى مسافة={min_dist}) | لفل={min_lv}-{max_lv} | مسيرات={max_marches} | "
-            f"حماية الموارد: رصيد>={self.min_res} ونسبة>={int(self.min_ratio*100)}%"
-        )
-
-        # 1. فحص مبنى قيادة التحالف (إن وُجد)
-        if center_x is not None and center_y is not None:
-            await self._verify_alliance_center(cx, cy, alliance_tag)
-
-        # 2. البحث الذكي عن حقول الذهب المتاحة في أراضي التحالف
-        current_range = search_range
-        max_search_range = 100
-
-        mines, active_subtype = await self._find_target_mines(
-            cx, cy, alliance_tag, subtype_mode, min_lv, max_lv, current_range, min_dist=min_dist
-        )
-
-        # إذا لم يُعثر على حقول كافية في النطاق الأولي، نوسع النطاق تلقائياً حتى 100
-        while not mines and current_range < max_search_range:
-            current_range = min(max_search_range, current_range + 20)
-            self.log.info(f"🔄 لم يتم العثور على حقول في النطاق السابق، جاري توسيع النطاق إلى {current_range} مربعات...")
-            mines, active_subtype = await self._find_target_mines(
-                cx, cy, alliance_tag, subtype_mode, min_lv, max_lv, current_range, min_dist=min_dist
-            )
-
-        if not mines:
-            self.log.warning(f"⚠️ لم يُعثر على أي حقول ذهب متاحة وغير مشغولة تابعة لـ [{alliance_tag}] حول ({cx}, {cy}) حتى نطاق {current_range}!")
-            return TaskResult.fail(f"لا توجد حقول ذهب شاغرة تتبع تحالف {alliance_tag}", retry_after=60)
-
-        res_title = "🪙 ذهب التحالف (Gold)" if active_subtype == SUBTYPE_GOLD else "🔮 ميثريل/ذهب السماء (Sky Gold)"
-        self.log.info(f"🎯 تم العثور على {len(mines)} حقل مؤكد وتابع لـ [{alliance_tag}] من نوع {res_title}:")
-        for idx, m in enumerate(mines[:8], 1):
-            tot_str = f"/{m['total']:,}" if m.get('total') else ""
-            self.log.info(
-                f"   {idx}. حقل ({m['x']}, {m['y']}) لفل={m['lv']} | مسافة={m['dist']} مربعات | "
-                f"متبقي={m['remain']:,}{tot_str} | ID={m['id']} [{','.join(m['tags'])}]"
-            )
-
-        # في حال طلب الفحص فقط (--check-only)
-        if check_only:
-            return TaskResult.ok(
-                f"✅ تم اكتشاف {len(mines)} حقل ذهب متاح تابع لـ [{alliance_tag}]",
-                total_found=len(mines),
-                sample_mines=mines[:5]
-            )
-
-        # 3. استعلام طوابير القلعة المشغولة حالياً وأهدافها
-        my_target_ids, my_target_coords = self._get_my_active_targets()
-        current_active_queues = len(my_target_coords)
-        self.log.info(f"🚩 طوابير المسيرات المشغولة حالياً بقلعتك: {current_active_queues}")
-        for (mx, my) in my_target_coords:
-            self.log.info(f"   ↳ مسيرة نشطة سابقة متجهة نحو ({mx}, {my})")
+        if not target_alliances:
+            self.log.error("❌ لم تُحدَّد أي تحالفات مستهدفة لجمع الذهب (--tag, --center-x, --center-y أو locations)!")
+            return TaskResult.fail("لم تُحدَّد أي تحالفات مستهدفة لجمع الذهب")
 
         # نمط جميع الفيالق المتوفرة بالقلعة
         all_marches_mode = (max_marches <= 0)
-        target_limit = 10 if all_marches_mode else max_marches
-        self.log.info(f"⚔️ خطة الإرسال: {'استغلال جميع الفيالق المتوفرة بالقلعة حتى امتلاء الطوابير 🚀' if all_marches_mode else f'إرسال حتى {max_marches} فيالق'}")
+        self.log.info(
+            f"🪙 بدء مهمة جمع الذهب | إجمالي التحالفات المضافة: {len(target_alliances)} | "
+            f"نطاق={search_range} (أدنى مسافة={min_dist}) | لفل={min_lv}-{max_lv} | "
+            f"خطة الإرسال: {'استغلال جميع الفيالق المتوفرة بالقلعة حتى الامتلاء 🚀' if all_marches_mode else f'إرسال حتى {max_marches} فيالق'}"
+        )
 
         if not self._heroes:
             await self._load_heroes()
@@ -871,76 +837,179 @@ class GoldGatherTask(BaseTask):
 
         failed_attempts = 0
         max_failed_attempts = 15
+        stop_reason = None
+        successful_alliances: List[str] = []
+        sample_check_mines: List[Dict[str, Any]] = []
 
-        current_range = search_range
-        max_search_range = 100
+        # 3. استعلام طوابير القلعة المشغولة حالياً وأهدافها مسبقاً
+        my_target_ids, my_target_coords = self._get_my_active_targets()
+        current_active_queues = len(my_target_coords)
+        self.log.info(f"🚩 طوابير المسيرات المشغولة حالياً بقلعتك: {current_active_queues}")
+        for (mx, my) in my_target_coords:
+            self.log.info(f"   ↳ مسيرة نشطة سابقة متجهة نحو ({mx}, {my})")
 
-        while (all_marches_mode or sent_count < max_marches):
-            if not mines:
-                # إذا فرغت الحقول المتاحة وما زالت هناك طوابير شاغرة بالقلعة:
-                if current_range < max_search_range:
-                    current_range = min(max_search_range, current_range + 20)
-                    self.log.info(
-                        f"🔄 توسيع نطاق البحث تلقائياً إلى {current_range} مربعات لجلب حقول جديدة تابعة لـ [{alliance_tag}]..."
-                    )
-                    more_mines, _ = await self._find_target_mines(
-                        cx, cy, alliance_tag, active_subtype, min_lv, max_lv, current_range, min_dist=min_dist
-                    )
-                    if more_mines:
-                        mines = more_mines
-                        self.log.info(f"✨ تم العثور على {len(mines)} حقل إضافي بعد توسيع النطاق إلى {current_range}!")
-                        continue
-
-                self.log.info(f"ℹ️ استُنفدت جميع حقول الذهب المكتشفة في هذا النطاق (أقصى نطاق تم مسحه: {current_range}).")
+        # ── حلقة فحص التحالفات بالترتيب: إذا لم يجد ذهب في تحالف ينتقل للتالي ──
+        for idx_alliance, alliance_entry in enumerate(target_alliances, 1):
+            if not all_marches_mode and sent_count >= max_marches:
                 break
 
-            if failed_attempts >= max_failed_attempts:
-                self.log.warning(f"⚠️ تم الوصول للحد الأقصى من المحاولات المتتالية غير الناجحة ({max_failed_attempts}).")
-                break
+            alliance_tag = alliance_entry.get('alliance_tag', '')
+            self.alliance_tag = alliance_tag
+            center_x     = alliance_entry.get('center_x')
+            center_y     = alliance_entry.get('center_y')
+            flags_file   = alliance_entry.get('flags_file') or cfg.get('flags_file')
 
-            target_mine = mines.pop(0)
-            march_label = f"({sent_count + 1})" if all_marches_mode else f"({sent_count + 1}/{max_marches})"
-            self.log.info(f"🚀 محاولة إرسال مسيرة الجمع رقم {march_label} نحو ({target_mine['x']}, {target_mine['y']})...")
+            # محاولة تحميل رايات التحالف لتطبيق حدود التحالف الدقيقة لهذا التحالف
+            self.flags = []
+            self.flags_file = ""
+            if not flags_file and alliance_tag:
+                candidates = [
+                    f"flags_{alliance_tag}.json",
+                    f"flags_{alliance_tag.lower()}.json",
+                    "flags_181.json" if alliance_tag == "181" else None
+                ]
+                for cf in candidates:
+                    if cf and os.path.exists(cf):
+                        flags_file = cf
+                        break
 
-            result_code = await self._send_one_march(target_mine, active_subtype, troops_cfg)
+            if flags_file and os.path.exists(flags_file):
+                try:
+                    with open(flags_file, 'r', encoding='utf-8') as f:
+                        f_data = json.load(f)
+                    raw_flags = f_data.get('flags', [])
+                    self.flags = [(fl['x'] - 1, fl['y'] - 1) for fl in raw_flags if 'x' in fl and 'y' in fl]
+                    self.flags_file = flags_file
+                    self.log.info(f"🚩 تم تحميل {len(self.flags)} راية لتحالف [{alliance_tag}] من {flags_file} وتطبيق قاعدة الإزاحة (-1)")
+                except Exception as e:
+                    self.log.warning(f"⚠️ فشل قراءة ملف الرايات {flags_file}: {e}")
 
-            if result_code == "SUCCESS":
-                sent_count += 1
-                self._exclude.add(target_mine['id'])
-                # تسجيل الحقل في سجل الحماية المشترك بين الحسابات لمنع أي حساب آخر من استهدافه
-                record_shared_target(
-                    target_id=target_mine['id'],
-                    x=target_mine['x'],
-                    y=target_mine['y'],
-                    email=getattr(self.conn.creds, 'email', str(self.uid)),
-                    uid=self.uid,
-                    tag=alliance_tag
-                )
-                failed_attempts = 0
-                await asyncio.sleep(5.0)  # تأخير آمن بين المسيرات لحماية الحساب من الحظر
-            elif result_code == "QUEUE_FULL":
-                self.log.info("🛑 تم إشغال جميع الفيالق المتاحة للقلعة بنجاح (طوابير المسيرات مكتملة 100%).")
-                break
-            elif result_code == "NO_ARMY":
-                self.log.warning(f"⚠️ نفدت القوات المتاحة بالقلعة لإرسال مسيرات إضافية (تم إرسال {sent_count} مسيرات).")
-                break
-            elif result_code == "NO_HEROES":
-                self.log.warning(f"⚠️ نفد أبطال الجمع المتاحون بالقلعة (تم إرسال {sent_count} مسيرات).")
-                break
-            elif result_code in ("TARGET_OCCUPIED", "HERO_BUSY"):
-                failed_attempts += 1
-                if result_code == "TARGET_OCCUPIED":
-                    self._exclude.add(target_mine['id'])
-                continue
+            if center_x is None or center_y is None:
+                if not self.flags:
+                    self.log.warning(f"⚠️ التحالف رقم {idx_alliance} [{alliance_tag}] لم تُحدَّد إحداثياته ولا توجد رايات محملة له! تخطي...")
+                    continue
+                else:
+                    cx, cy = int(self.flags[0][0]), int(self.flags[0][1])
+                    self.log.info(f"ℹ️ لم يتم تحديد قلعة القيادة لتحالف [{alliance_tag}]، سيتم الاعتماد على أول راية كمركز ارتكاز ({cx}, {cy})")
             else:
-                failed_attempts += 1
-                self.log.warning(f"⚠️ تعذر إرسال المسيرة (كود: {result_code}) — الانتقال للحقل التالي")
+                cx, cy = int(center_x), int(center_y)
+
+            self.log.info(
+                f"\n🔎 [فحص التحالف {idx_alliance}/{len(target_alliances)}] تحالف=[{alliance_tag}] | مركز=({cx}, {cy}) | "
+                f"نطاق={search_range} | لفل={min_lv}-{max_lv}"
+            )
+
+            # 1. فحص مبنى قيادة التحالف (إن وُجد)
+            if center_x is not None and center_y is not None:
+                await self._verify_alliance_center(cx, cy, alliance_tag)
+
+            # 2. البحث الذكي عن حقول الذهب المتاحة في أراضي التحالف (المنطق المعتمد دون تغيير)
+            current_range = search_range
+            max_search_range = 100
+
+            mines, active_subtype = await self._find_target_mines(
+                cx, cy, alliance_tag, subtype_mode, min_lv, max_lv, current_range, min_dist=min_dist
+            )
+
+            # إذا لم يُعثر على حقول كافية في النطاق الأولي، نوسع النطاق تلقائياً حتى 100
+            while not mines and current_range < max_search_range:
+                current_range = min(max_search_range, current_range + 20)
+                self.log.info(f"🔄 لم يتم العثور على حقول في النطاق السابق، جاري توسيع النطاق إلى {current_range} مربعات...")
+                mines, active_subtype = await self._find_target_mines(
+                    cx, cy, alliance_tag, subtype_mode, min_lv, max_lv, current_range, min_dist=min_dist
+                )
+
+            # إذا لم يُعثر على أي حقول ذهب في هذا التحالف، ننتقل تلقائياً للتحالف التالي
+            if not mines:
+                self.log.warning(f"⚠️ لم يُعثر على أي حقول ذهب متاحة وغير مشغولة تابعة لـ [{alliance_tag}] حول ({cx}, {cy}) حتى نطاق {current_range}!")
+                if idx_alliance < len(target_alliances):
+                    self.log.info(f"⏭️ جاري الانتقال التلقائي للتحالف التالي في القائمة ({idx_alliance + 1}/{len(target_alliances)})...")
                 continue
+
+            res_title = "🪙 ذهب التحالف (Gold)" if active_subtype == SUBTYPE_GOLD else "🔮 ميثريل/ذهب السماء (Sky Gold)"
+            self.log.info(f"🎯 تم العثور على {len(mines)} حقل مؤكد وتابع لـ [{alliance_tag}] من نوع {res_title}:")
+            for idx, m in enumerate(mines[:8], 1):
+                tot_str = f"/{m['total']:,}" if m.get('total') else ""
+                self.log.info(
+                    f"   {idx}. حقل ({m['x']}, {m['y']}) لفل={m['lv']} | مسافة={m['dist']} مربعات | "
+                    f"متبقي={m['remain']:,}{tot_str} | ID={m['id']} [{','.join(m['tags'])}]"
+                )
+
+            # في حال طلب الفحص فقط (--check-only)
+            if check_only:
+                sample_check_mines.extend(mines[:5])
+                if idx_alliance < len(target_alliances):
+                    continue
+                return TaskResult.ok(
+                    f"✅ تم اكتشاف {len(sample_check_mines)} حقل ذهب متاح عبر التحالفات المحددة",
+                    total_found=len(sample_check_mines),
+                    sample_mines=sample_check_mines
+                )
+
+            # إرسال المسيرات نحو الحقول المكتشفة في هذا التحالف
+            while mines and (all_marches_mode or sent_count < max_marches):
+                if failed_attempts >= max_failed_attempts:
+                    self.log.warning(f"⚠️ تم الوصول للحد الأقصى من المحاولات المتتالية غير الناجحة ({max_failed_attempts}).")
+                    break
+
+                target_mine = mines.pop(0)
+                march_label = f"({sent_count + 1})" if all_marches_mode else f"({sent_count + 1}/{max_marches})"
+                self.log.info(f"🚀 محاولة إرسال مسيرة الجمع رقم {march_label} نحو ({target_mine['x']}, {target_mine['y']}) [تحالف: {alliance_tag}]...")
+
+                result_code = await self._send_one_march(target_mine, active_subtype, troops_cfg)
+
+                if result_code == "SUCCESS":
+                    sent_count += 1
+                    if alliance_tag and alliance_tag not in successful_alliances:
+                        successful_alliances.append(alliance_tag)
+                    self._exclude.add(target_mine['id'])
+                    # تسجيل الحقل في سجل الحماية المشترك بين الحسابات لمنع أي حساب آخر من استهدافه
+                    record_shared_target(
+                        target_id=target_mine['id'],
+                        x=target_mine['x'],
+                        y=target_mine['y'],
+                        email=getattr(self.conn.creds, 'email', str(self.uid)),
+                        uid=self.uid,
+                        tag=alliance_tag
+                    )
+                    failed_attempts = 0
+                    await asyncio.sleep(5.0)  # تأخير آمن بين المسيرات لحماية الحساب من الحظر
+                elif result_code == "QUEUE_FULL":
+                    self.log.info("🛑 تم إشغال جميع الفيالق المتاحة للقلعة بنجاح (طوابير المسيرات مكتملة 100%).")
+                    stop_reason = "QUEUE_FULL"
+                    break
+                elif result_code == "NO_ARMY":
+                    self.log.warning(f"⚠️ نفدت القوات المتاحة بالقلعة لإرسال مسيرات إضافية (تم إرسال {sent_count} مسيرات).")
+                    stop_reason = "NO_ARMY"
+                    break
+                elif result_code == "NO_HEROES":
+                    self.log.warning(f"⚠️ نفد أبطال الجمع المتاحون بالقلعة (تم إرسال {sent_count} مسيرات).")
+                    stop_reason = "NO_HEROES"
+                    break
+                elif result_code in ("TARGET_OCCUPIED", "HERO_BUSY"):
+                    failed_attempts += 1
+                    if result_code == "TARGET_OCCUPIED":
+                        self._exclude.add(target_mine['id'])
+                    continue
+                else:
+                    failed_attempts += 1
+                    self.log.warning(f"⚠️ تعذر إرسال المسيرة (كود: {result_code}) — الانتقال للحقل التالي")
+                    continue
+
+            # إذا امتلأت الطوابير أو نفد الجيش/الأبطال ننهي المهمة تماماً
+            if stop_reason in ("QUEUE_FULL", "NO_ARMY", "NO_HEROES"):
+                break
+
+            # إذا استُنفدت حقول هذا التحالف وما زالت هناك طوابير شاغرة، ننتقل للتحالف التالي
+            if (all_marches_mode or sent_count < max_marches) and idx_alliance < len(target_alliances):
+                self.log.info(f"ℹ️ استُنفدت حقول التحالف [{alliance_tag}] وما زالت هناك فيالق شاغرة بالقلعة. الانتقال للتحالف التالي...")
 
         self.log.info(f"🏁 إجمالي مسيرات جمع الذهب المُرسَلة بنجاح: {sent_count}")
         if sent_count > 0:
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة جمع ذهب لتحالف [{alliance_tag}]", sent=sent_count)
-        return TaskResult.fail("لم يتم إرسال أي مسيرة جمع ذهب", retry_after=120)
+            tags_desc = ", ".join(f"[{tag}]" for tag in successful_alliances) if successful_alliances else f"[{self.alliance_tag}]"
+            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة جمع ذهب لتحالف {tags_desc}", sent=sent_count, alliances=successful_alliances)
+
+        return TaskResult.fail("لم يتم العثور على حقول ذهب شاغرة في أي من التحالفات المحددة", retry_after=120)
 
     # ── فحص إشغال وحجز المورد قبل الهجوم (حماية ضد صدام المسيرات) ───
 
@@ -1260,8 +1329,10 @@ if __name__ == "__main__":
         description="Empire Alliance Gold Gathering — مهمة جمع الذهب في أراضي التحالف"
     )
     parser.add_argument("--email", "-e", help="البريد الإلكتروني للحساب")
-    parser.add_argument("--tag", "-t", required=True,
+    parser.add_argument("--tag", "-t", default="",
                         help="اختصار التحالف المستهدف (مثال: POL, SKY, KRT)")
+    parser.add_argument("--alliances", type=str, default="",
+                        help="قائمة تحالفات متعددة بصيغة TAG1:X1,Y1;TAG2:X2,Y2")
     parser.add_argument("--center-x", "-x", type=int, default=None,
                         help="إحداثي X لقيادة التحالف المستهدف")
     parser.add_argument("--center-y", "-y", type=int, default=None,
@@ -1338,7 +1409,24 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
+        locations = []
+        if args.alliances:
+            for item in args.alliances.split(';'):
+                item = item.strip()
+                if not item:
+                    continue
+                if ':' in item:
+                    t_part, c_part = item.split(':', 1)
+                    t_tag = t_part.strip()
+                    if ',' in c_part:
+                        xy = c_part.split(',')
+                        try:
+                            locations.append({"alliance_tag": t_tag, "x": int(xy[0].strip()), "y": int(xy[1].strip())})
+                        except Exception:
+                            pass
+
         task_cfg = {
+            "locations":    locations if locations else None,
             "alliance_tag": args.tag,
             "center_x":     cx,
             "center_y":     cy,

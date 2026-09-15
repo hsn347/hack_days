@@ -44,7 +44,6 @@ from game_client import GameConnection
 # ════════════════════════════════════════════════════════════════════
 
 SAVINGS_PLANS: Dict[int, Dict[str, Any]] = {
-    1:  {"name": "خطة يوم واحد (يومية)",   "max_deposit": 2000, "days": 1},
     7:  {"name": "خطة 7 أيام (أسبوعية)",  "max_deposit": 2000, "days": 7},
     15: {"name": "خطة 15 يوماً (نصف شهرية)", "max_deposit": 2000, "days": 15},
     30: {"name": "خطة 30 يوماً (شهرية)",  "max_deposit": 2000, "days": 30},

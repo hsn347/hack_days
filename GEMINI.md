@@ -10,3 +10,7 @@
 - **Fast & Responsive (No Sluggish Animations)**: Avoid slow layout sliding, bouncy layout shifts (`layout` prop on broad lists), or sluggish CSS dimension transitions. Actions (like opening/closing menus or batch settings) must feel instant, snappy, and solid.
 - **Mobile-Friendly Single Rows**: Maintain single-row layouts for titles and toggles on mobile without awkward wrapping.
 - **Direct Card Surface Toggling**: In card lists (like combat or prestige tasks), ensure clicking anywhere on the outer card component toggles the task cleanly without conflicting with child inputs.
+
+## 3. Post-Task Interactive Verification (Mandatory Permanent Behavior)
+- **Always Ask Verification Question After Finishing**: Whenever you complete the user's requested changes, ALWAYS ask an interactive question using `ask_question` to verify whether the changes appeared exactly as desired.
+- **Continuous Follow-up**: If the user indicates that something is not right, promptly ask what went wrong and resolve it immediately.

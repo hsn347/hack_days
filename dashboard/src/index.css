@@ -1048,6 +1048,10 @@ html.light .castle-action-btn-expand.bg-primary-500\/15 {
   background-color: #dcfce7 !important;
   color: #15803d !important;
 }
+html.light .castle-action-btn-template:hover {
+  background-color: #dcfce7 !important;
+  color: #15803d !important;
+}
 
 /* ── 9. Resources Row & Chips ──────────────────────────────── */
 html.light .castle-resources-row {

@@ -162,7 +162,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # 🔬 2. مهمة أبحاث الأكاديمية والعلوم (Academy Research)
     "research": {
         "enabled": True,
-        "schedule": {"times_per_day": 2}
+        "schedule": {"times_per_day": 4}
     },
 
     # 🤝 3. مهمة التحالف ومساعدة الأعضاء وتبرعات العلوم (Alliance Task)
@@ -204,12 +204,14 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,             # تفعيل/تعطيل درع السلام التلقائي لحماية القلعة
         "duration": "8h",            # مدة الدرع: "8h" (8 ساعات) أو "24h" (24 ساعة) أو "3d" (3 أيام)
         "allow_gold": False,         # السماح بالشراء بالذهب عند نفاد دروع الحقيبة المجانية (False افتراضياً لحماية الذهب)
+        "schedule": {"times_per_day": 4}
     },
 
     # ⚡ 9. مهمة استخدام جرعات وشراء الطاقة (Stamina Task)
     "stamina": {
         "enabled": True,             # تفعيل/تعطيل مهمة استخدام وشراء الطاقة
-        "gold_buys": 0,              # عدد مرات شراء الطاقة بالذهب المحدد من المستخدم (0 = مجاني فقط بدون شراء بالذهب)
+        "gold_buys": 1,              # عدد مرات شراء الطاقة بالذهب المحدد من المستخدم (0 = مجاني فقط بدون شراء بالذهب)
+        "schedule": {"times_per_day": 4}
     },
 
     # 🎯 10. مهمة تفعيل المهارات التلقائية (Skills Task)
@@ -293,7 +295,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "upgrade_castle": True,            # ترقية القلعة ومتطلباتها (الخيار الأول)
         "speedup_castle": False,           # استخدام التسريع لترقية القلعة من الحقيبة والمجاني (الخيار الثاني)
         "upgrade_support_buildings": True, # ترقية المعسكرات والمراكز الطبية والمزارع وخيم العسكرية (الخيار الثالث)
-        "schedule": {"times_per_day": 1}
+        "schedule": {"times_per_day": 3}
     },
 
     # 🎖️ 22. مهمة مهام الهيبة اليومية (Daily Prestige Quests)
@@ -324,7 +326,8 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "ruins",                       # 2. استكشاف الأطلال (مسيرة واحدة حصراً)
             "combat",                      # 3. القتال (عفريت / غزاة / متمردين)
             "stronghold",                  # 4. الهجوم على الملاجئ
-            "gather",                      # 5. جمع الموارد بالفيالق الشاغرة
+            "gold_gather",                 # 5. جمع الذهب في أراضي التحالفات (قبل الأخير)
+            "gather",                      # 6. جمع الموارد بالفيالق الشاغرة
         ],
         # [1] إعدادات مساعدة الموارد (Transport)
         "transport": {
@@ -371,13 +374,25 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "count": 2,                    # عدد الملاجئ المستهدفة
             "formation_id": 1,             # رقم التشكيلة
         },
-        # [5] إعدادات جمع الموارد الخارجية (Gathering) — تستهلك كافة الفيالق الشاغرة
+        # [5] إعدادات جمع الذهب في أراضي التحالفات (Gold Gather)
+        "gold_gather": {
+            "enabled": False,              # تفعيل جمع الذهب في أراضي التحالفات
+            "locations": [],               # قائمة التحالفات المستهدفة: [{"alliance_tag": "POL", "x": 241, "y": 260}]
+            "max_marches": 0,              # 0 = استغلال الفيالق المتاحة
+        },
+        # [6] إعدادات جمع الموارد الخارجية (Gathering) — تستهلك كافة الفيالق الشاغرة
         "gather": {
             "enabled": True,               # تفعيل جمع الموارد بالفيالق المتبقية حتى الامتلاء
             "res_type": 1,                 # نوع المورد: 1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس
             "level": 5,                    # مستوى حقل المورد بالضبط (1 إلى 7)
             "search_range": 100,           # نطاق البحث الأقصى حول القلعة
         },
+    },
+
+    # 🪙 24. إعدادات جمع الذهب المتوافقة مع واجهة المستخدم (Firebase Root Fallback)
+    "gold_gather": {
+        "enabled": False,
+        "locations": [],
     }
 }
 
@@ -908,9 +923,25 @@ class BotManager:
         _sched_file = os.path.join(_ROOT_DIR, f".sched_{_safe_email}.json")
         self.scheduler = BotScheduler(self.config, state_file=_sched_file)
 
-    def _update_bot_conn_state(self, conn_state: str, message: str = "") -> None:
+    def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وFirebase بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
-        print(f"[FIREBASE_EVENT] conn_state={conn_state} message={message}", flush=True)
+        nr_arg = f" next_run_time={next_run_time}" if next_run_time else ""
+        print(f"[FIREBASE_EVENT] conn_state={conn_state} message={message}{nr_arg}", flush=True)
+
+        # 1. تحديث كاش قاعدة البيانات المحلية SQLite فوراً
+        try:
+            from core.database import upsert_castle_conn_state
+            upsert_castle_conn_state(
+                email=getattr(self, "email", ""),
+                conn_state=conn_state,
+                message=message,
+                next_run_time=next_run_time,
+                user_id=getattr(self, "user_id", None),
+                castle_id=getattr(self, "castle_id", None)
+            )
+        except Exception:
+            pass
+
         if not getattr(self, "user_id", None) or not getattr(self, "castle_id", None):
             return
         def _bg_update():
@@ -934,6 +965,8 @@ class BotManager:
                         doc_data["bot_status.state"] = "running"
                         if conn_state == "connected":
                             doc_data["bot_status.last_run_time"] = now_iso
+                        elif conn_state == "waiting" and next_run_time:
+                            doc_data["bot_status.next_run_time"] = next_run_time
                     elif conn_state == "idle":
                         doc_data["bot_status.state"] = "idle"
                         if message:
@@ -962,17 +995,26 @@ class BotManager:
                 if user_snap.exists:
                     user_doc = user_snap.to_dict() or {}
             else:
-                # استعلام سريع مباشر عبر collection_group بدلاً من المسح المتكرر
-                castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
-                for c in castles:
-                    self.castle_id = c.id
-                    u_ref = c.reference.parent.parent
-                    if u_ref:
-                        self.user_id = u_ref.id
-                        u_snap = u_ref.get()
-                        if u_snap.exists:
-                            user_doc = u_snap.to_dict() or {}
-                    break
+                try:
+                    castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
+                    for c in castles:
+                        self.castle_id = c.id
+                        u_ref = c.reference.parent.parent
+                        if u_ref:
+                            self.user_id = u_ref.id
+                            u_snap = u_ref.get()
+                            if u_snap.exists:
+                                user_doc = u_snap.to_dict() or {}
+                        break
+                except Exception:
+                    for u in db.collection("users").stream():
+                        for c in u.reference.collection("castles").where("email", "==", self.email.strip().lower()).limit(1).stream():
+                            self.castle_id = c.id
+                            self.user_id = u.id
+                            user_doc = u.to_dict() or {}
+                            break
+                        if user_doc:
+                            break
 
             if not user_doc:
                 return True, "لم يتم العثور على مستند المستخدم"
@@ -994,13 +1036,14 @@ class BotManager:
             fc_info   = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
             city_ctrl = self.conn.init_data.get("cityCtrl", {})
             reslist   = city_ctrl.get("reslist", {}) if isinstance(city_ctrl, dict) else {}
+            saferes   = city_ctrl.get("saferes", {}) if isinstance(city_ctrl, dict) else {}
 
-            food    = int(float(reslist.get("1002", 0)))
-            wood    = int(float(reslist.get("1003", 0)))
-            iron    = int(float(reslist.get("1004", 0)))
-            diamond = int(float(reslist.get("1005", 0)))
-            gold    = int(base_info.get("gold", 0))
-            stamina = int(base_info.get("health", 100))
+            food    = int(float(reslist.get("1002", saferes.get("1002", 0))))
+            wood    = int(float(reslist.get("1003", saferes.get("1003", 0))))
+            iron    = int(float(reslist.get("1004", saferes.get("1004", 0))))
+            diamond = int(float(reslist.get("1005", saferes.get("1005", 0))))
+            gold    = int(float(base_info.get("gold", reslist.get("1006", saferes.get("1006", 0)))))
+            stamina = int(float(base_info.get("health", 100)))
             pos     = base_info.get("sourcePos", {}) if isinstance(base_info, dict) else {}
             coords  = {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
 
@@ -1018,7 +1061,7 @@ class BotManager:
 
             cinfo_data = {
                 "lord_name":    str(base_info.get("nickName", self.email.split("@")[0])),
-                "lord_power":   int(fc_info.get("totalFc", 0)),
+                "lord_power":   int(fc_info.get("totalFc", getattr(self.context, "total_power", 0))),
                 "castle_level": max(1, getattr(self.context, "castle_level", 1)),
                 "walls_level":  getattr(self.context, "walls_level", 0),
                 "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition", "")).isdigit() else 1,
@@ -1029,30 +1072,47 @@ class BotManager:
             # طباعة السطر للـ api_server و stdout
             print(f"[RESOURCE_SYNC] food={food} wood={wood} iron={iron} diamond={diamond} gold={gold} stamina={stamina} power={cinfo_data['lord_power']}", flush=True)
 
-            log.info(f"🌾 [تحديث موارد الدورة] قمح={food:,} خشب={wood:,} حديد={iron:,} زمرد={diamond:,} ذهب={gold:,} طاقة={stamina}")
+            log.info(f"🌾 [تحديث موارد الدورة] قمح={food:,} خشب={wood:,} حديد={iron:,} زمرد={diamond:,} ذهب={gold:,} طاقة={stamina} | اللورد: {cinfo_data['lord_name']} (Lv {cinfo_data['castle_level']})")
+
+            # تحديث كاش قاعدة البيانات المحلية SQLite فوراً
+            try:
+                from core.database import upsert_castle_resources
+                upsert_castle_resources(
+                    email=getattr(self, "email", ""),
+                    resources=res_data,
+                    castle_info=cinfo_data,
+                    user_id=getattr(self, "user_id", None),
+                    castle_id=getattr(self, "castle_id", None)
+                )
+            except Exception:
+                pass
 
             # تحديث Firebase في الخلفية
             def _bg_sync():
                 try:
                     import firebase_admin
                     from firebase_admin import credentials, firestore as fb_fs
-                    sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
-                    if not firebase_admin._apps and os.path.exists(sak):
-                        firebase_admin.initialize_app(credentials.Certificate(sak))
+                    try:
+                        firebase_admin.get_app()
+                    except ValueError:
+                        sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
+                        if os.path.exists(sak):
+                            firebase_admin.initialize_app(credentials.Certificate(sak))
+
                     if firebase_admin._apps:
                         db = fb_fs.client()
                         target_ref = None
                         if getattr(self, "user_id", None) and getattr(self, "castle_id", None):
                             target_ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
                         else:
-                            castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
-                            for c in castles:
-                                target_ref = c.reference
-                                u_ref = c.reference.parent.parent
-                                if u_ref:
-                                    self.user_id = u_ref.id
+                            for u in db.collection("users").stream():
+                                for c in u.reference.collection("castles").where("email", "==", self.email.strip().lower()).limit(1).stream():
+                                    target_ref = c.reference
+                                    self.user_id = u.id
                                     self.castle_id = c.id
-                                break
+                                    break
+                                if target_ref:
+                                    break
                         if target_ref:
                             update_dict = {}
                             for k, v in res_data.items():
@@ -1212,10 +1272,26 @@ class BotManager:
 
         ctx = self.context
 
-        # 1. بيانات اللورد من init_data
+        # 1. بيانات اللورد من init_data أو عبر 1002/7 إذا لم تكن متوفرة
         lord_ctrl = self.conn.init_data.get("lordInfoCtrl", {})
         base_info = lord_ctrl.get("base", {}) if isinstance(lord_ctrl, dict) else {}
         fc_info = lord_ctrl.get("fcInfo", {}) if isinstance(lord_ctrl, dict) else {}
+
+        if not base_info or not fc_info:
+            uid_val = getattr(self.conn, "uid", None) or getattr(self.account, "user_id", None)
+            if uid_val:
+                try:
+                    uid_int = int(uid_val) if str(uid_val).isdigit() else uid_val
+                    r_lord = await self.conn.query("1002", "7", {"uid": uid_int}, timeout=6)
+                    if r_lord and isinstance(r_lord.get("data"), dict):
+                        base_info = r_lord["data"].get("base", {}) or base_info
+                        fc_info = r_lord["data"].get("fcInfo", {}) or fc_info
+                        if "lordInfoCtrl" not in self.conn.init_data:
+                            self.conn.init_data["lordInfoCtrl"] = {}
+                        self.conn.init_data["lordInfoCtrl"]["base"] = base_info
+                        self.conn.init_data["lordInfoCtrl"]["fcInfo"] = fc_info
+                except Exception as e:
+                    log.warning(f"⚠️ تعذر جلب بيانات اللورد عبر 1002/7: {e}")
 
         ctx.lord_name = str(base_info.get("nickName", self.email.split('@')[0]))
         ctx.lord_level = int(base_info.get("level", 0))
@@ -1224,11 +1300,17 @@ class BotManager:
         ctx.total_power = int(fc_info.get("totalFc", 0))
         ctx.uid = str(base_info.get("uid", getattr(self.account, "user_id", "")))
 
-        # 2. استعلام مباني المدينة 1001/1
+        # 2. استعلام مباني المدينة 1001/1 وتحديث كاش الموارد والمباني
         r_city = await self.conn.query("1001", "1", {}, timeout=8)
-        blist = r_city.get("data", {}).get("blist", []) if r_city else []
+        city_data = r_city.get("data", {}) if r_city and isinstance(r_city, dict) else {}
+        blist = city_data.get("blist", [])
         if not blist and "cityCtrl" in self.conn.init_data:
             blist = self.conn.init_data["cityCtrl"].get("blist", [])
+
+        if "cityCtrl" not in self.conn.init_data:
+            self.conn.init_data["cityCtrl"] = {}
+        if city_data:
+            self.conn.init_data["cityCtrl"].update(city_data)
 
         ctx.raw_city = blist
 
@@ -2534,16 +2616,25 @@ class BotManager:
           - استكشاف الأطلال (Ruins) بمسيرة واحدة فقط حصراً.
           - قتال: العفريت (مع استعلام استباقي لتأكيد الحدث) أو الغزاة أو المتمردين (خيار حصري).
           - الهجوم على المعاقل والملاجئ (Stronghold).
+          - جمع الذهب في أراضي التحالفات (Gold Gather) بأولوية تسبق جمع الموارد العامة.
           - جمع الموارد بالفيالق الشاغرة المتبقية بحسابات حمولة رياضية دقيقة مطابقة للعبة.
         """
-        mm_cfg = self.config.get("march_manager", {})
+        mm_cfg = copy.deepcopy(self.config.get("march_manager", {}))
         if not bool(mm_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي مهمة منسق الفيالق بناءً على رغبة المستخدم (march_manager.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
+        # دمج إعدادات gold_gather المحفوظة من واجهة المستخدم (في جذر config أو داخل march_manager)
+        if "gold_gather" in self.config and isinstance(self.config["gold_gather"], dict):
+            root_gg = self.config["gold_gather"]
+            if "gold_gather" not in mm_cfg or not isinstance(mm_cfg["gold_gather"], dict):
+                mm_cfg["gold_gather"] = copy.deepcopy(root_gg)
+            else:
+                mm_cfg["gold_gather"].update(copy.deepcopy(root_gg))
+
         log.info("🎖️ بدء مهمة منسق الفيالق والمسيرات الذكي (March Orchestrator)...")
-        task_cfg = copy.deepcopy(mm_cfg)
+        task_cfg = mm_cfg
         task = MarchManagerTask(self.conn, task_cfg)
         await task.on_start()
         res = await task.run()
@@ -2688,12 +2779,21 @@ class BotManager:
             elapsed   = (datetime.now() - start_time).total_seconds()
             remaining = max(0.0, interval_secs - elapsed)
 
-            next_run = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
-            log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run}")
+            from datetime import timezone
+            next_run_dt = datetime.now(timezone.utc) + timedelta(seconds=remaining)
+            next_run_iso = next_run_dt.isoformat()
+            next_run_str = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
+            rem_mins = max(1, round(remaining / 60))
+
+            log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run_str} (متبقي {rem_mins} دقيقة)")
 
             if remaining > 0:
-                self._update_bot_conn_state("waiting", f"بانتظار الدورة القادمة الساعة {next_run}")
-                log.info(f"💤 انتظار {remaining/60:.1f} دقيقة...")
+                self._update_bot_conn_state(
+                    "waiting",
+                    f"بانتظار الدورة القادمة الساعة {next_run_str} (متبقي {rem_mins} دقيقة)",
+                    next_run_time=next_run_iso
+                )
+                log.info(f"💤 انتظار {rem_mins} دقيقة...")
                 # نوم خفيف وغير مستهلك للموارد حتى حلول موعد الدورة القادمة
                 await asyncio.sleep(remaining)
             else:

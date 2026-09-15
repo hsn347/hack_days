@@ -26,3 +26,8 @@ session_cache.json
 .bot_config_*.json
 .sched_*.json
 _frida_session.js
+
+# SQLite local databases
+castles.db*
+*.db
+*.sqlite3

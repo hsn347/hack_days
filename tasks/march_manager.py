@@ -49,6 +49,7 @@ from tasks.ruins import RuinsTask
 from tasks.monster import MonsterTask
 from tasks.elf_boss import ElfBossTask
 from tasks.stronghold import StrongholdTask
+from tasks.gold_gather import GoldGatherTask
 from tasks.gather import GatherTask
 
 
@@ -82,6 +83,7 @@ DEFAULT_PRIORITIES: List[str] = [
     "ruins",
     "combat",
     "stronghold",
+    "gold_gather",
     "gather",
 ]
 
@@ -97,7 +99,8 @@ DEFAULT_ENABLE_INVADERS    = False   # 3-ب. الغزاة (Invaders)
 DEFAULT_ENABLE_REBELS      = False   # 3-ج. المتمردين (Rebels)
 
 DEFAULT_ENABLE_STRONGHOLD  = False   # 4. الهجوم على الملاجئ
-DEFAULT_ENABLE_GATHER      = False   # 5. جمع الموارد بالفيالق المتبقية
+DEFAULT_ENABLE_GOLD_GATHER = False   # 5. جمع الذهب في أراضي التحالفات
+DEFAULT_ENABLE_GATHER      = False   # 6. جمع الموارد بالفيالق المتبقية
 
 # مفتاح توافق عام (إذا فُعّل يُستخدم الخيار المحدد في DEFAULT_COMBAT_CONFIG):
 DEFAULT_ENABLE_COMBAT      = False
@@ -152,7 +155,14 @@ DEFAULT_STRONGHOLD_CONFIG: Dict[str, Any] = {
     "formation_id": 1,    # رقم التشكيلة (1 إلى 5)
 }
 
-# [5] إعدادات جمع الموارد (Gathering) — يستهلك كافة الفيالق الشاغرة
+# [5] إعدادات جمع الذهب في أراضي التحالفات (Gold Gather)
+DEFAULT_GOLD_GATHER_CONFIG: Dict[str, Any] = {
+    "enabled": False,
+    "locations": [],      # قائمة التحالفات: [{"alliance_tag": "POL", "x": 241, "y": 260}]
+    "max_marches": 0,     # 0 = استغلال الفيالق المتاحة
+}
+
+# [6] إعدادات جمع الموارد (Gathering) — يستهلك كافة الفيالق الشاغرة
 DEFAULT_GATHER_CONFIG: Dict[str, Any] = {
     "res_type": 1,        # 1=ذهب (gold), 2=قمح (food), 3=خشب (wood), 4=حديد (iron), 5=ألماس (diamond)
     "level": 5,           # مستوى حقل المورد بالضبط
@@ -206,6 +216,12 @@ TASK_NAME_ALIASES = {
     "ملجأ": "stronghold",
     "ملاجئ": "stronghold",
     "الملاجئ": "stronghold",
+
+    "gold_gather": "gold_gather",
+    "gold": "gold_gather",
+    "ذهب": "gold_gather",
+    "جمع_ذهب": "gold_gather",
+    "جمع_الذهب": "gold_gather",
 
     "gather": "gather",
     "جمع": "gather",
@@ -385,18 +401,19 @@ class MarchManagerTask(BaseTask):
 
             return is_enabled, task_cfg
 
-        # 2. بقية المهام (Transport / Ruins / Stronghold / Gather)
+        # 2. بقية المهام (Transport / Ruins / Stronghold / GoldGather / Gather)
         default_templates = {
             "transport": (DEFAULT_ENABLE_TRANSPORT, DEFAULT_TRANSPORT_CONFIG),
             "ruins": (DEFAULT_ENABLE_RUINS, DEFAULT_RUINS_CONFIG),
             "stronghold": (DEFAULT_ENABLE_STRONGHOLD, DEFAULT_STRONGHOLD_CONFIG),
+            "gold_gather": (DEFAULT_ENABLE_GOLD_GATHER, DEFAULT_GOLD_GATHER_CONFIG),
             "gather": (DEFAULT_ENABLE_GATHER, DEFAULT_GATHER_CONFIG),
         }
 
         default_enabled, default_settings = default_templates.get(task_type, (False, {}))
         task_cfg = copy.deepcopy(default_settings)
 
-        user_task_cfg = cfg.get(task_type, {})
+        user_task_cfg = cfg.get(task_type) or (cfg.get("gold") if task_type == "gold_gather" else {}) or {}
         task_cfg.update(user_task_cfg)
 
         is_enabled = False
@@ -404,8 +421,8 @@ class MarchManagerTask(BaseTask):
             is_enabled = bool(user_task_cfg.get("enabled", False))
         elif user_task_cfg.get("enabled") is not None:
             is_enabled = bool(user_task_cfg["enabled"])
-        elif any(k in cfg for k in ("transport", "ruins", "combat", "monster", "stronghold", "gather", "elf", "invaders", "rebels")):
-            is_enabled = task_type in cfg
+        elif any(k in cfg for k in ("transport", "ruins", "combat", "monster", "stronghold", "gold_gather", "gold", "gather", "elf", "invaders", "rebels")):
+            is_enabled = task_type in cfg or (task_type == "gold_gather" and "gold" in cfg)
         else:
             is_enabled = default_enabled
 
@@ -500,6 +517,14 @@ class MarchManagerTask(BaseTask):
         res = await task.run()
         return res.success
 
+    async def _execute_gold_gather(self, cfg: Dict[str, Any]) -> bool:
+        """تنفيذ أولوية: جمع الذهب في أراضي التحالفات."""
+        self.log.info("\n🪙 [مهمة جمع الذهب في أراضي التحالفات] (Gold Gathering)...")
+        task = GoldGatherTask(self.conn, cfg)
+        await task.on_start()
+        res = await task.run()
+        return res.success
+
     async def _execute_gather(self, cfg: Dict[str, Any]) -> bool:
         """تنفيذ أولوية: جمع الموارد بكافة الفيالق المتبقية حتى الامتلاء."""
         g_res_input = cfg.get("res_type", cfg.get("res", 1))
@@ -544,7 +569,17 @@ class MarchManagerTask(BaseTask):
         else:
             priority_list = list(raw_priorities)
 
-        # هل قام المستخدم بتحديد قائمة مخصصة (أقل من الـ 5 القياسية مثل ["elf"] أو ["transport", "ruins"])؟
+        # ضمان وجود gold_gather في الترتيب المعتمد (قبل gather وبعد stronghold) حتى للحسابات المخزنة مسبقاً في Firebase
+        normalized_existing = [normalize_priority_item(p)[0] for p in priority_list]
+        if "gold_gather" not in normalized_existing and not cfg.get("_explicit_cli"):
+            if "gather" in normalized_existing:
+                g_pos = normalized_existing.index("gather")
+                priority_list.insert(g_pos, "gold_gather")
+            elif "stronghold" in normalized_existing:
+                sh_pos = normalized_existing.index("stronghold")
+                priority_list.insert(sh_pos + 1, "gold_gather")
+
+        # هل قام المستخدم بتحديد قائمة مخصصة (أقل من القياسية مثل ["elf"] أو ["transport", "ruins"])؟
         is_custom_subset = (priority_list != DEFAULT_PRIORITIES)
 
         cycle_summary: Dict[str, Any] = {}
@@ -555,6 +590,7 @@ class MarchManagerTask(BaseTask):
             "ruins": self._execute_ruins,
             "combat": self._execute_combat,
             "stronghold": self._execute_stronghold,
+            "gold_gather": self._execute_gold_gather,
             "gather": self._execute_gather,
         }
 
@@ -563,6 +599,7 @@ class MarchManagerTask(BaseTask):
             "ruins": "استكشاف الأطلال (Ruins)",
             "combat": "القتال (Combat)",
             "stronghold": "الهجوم على الملاجئ (Stronghold)",
+            "gold_gather": "جمع الذهب (Gold Gathering)",
             "gather": "جمع الموارد (Gathering)",
         }
 
@@ -705,7 +742,13 @@ if __name__ == "__main__":
     parser.add_argument("--stronghold-count", type=int, default=None, help="عدد الملاجئ المستهدفة في الدورة")
     parser.add_argument("--stronghold-formation", type=int, default=None, help="رقم تشكيلة الملجأ (1..5)")
 
-    # [5] جمع الموارد
+    # [5] جمع الذهب في أراضي التحالفات
+    parser.add_argument("--gold-gather", "--gold", dest="gold_gather", action="store_true", help="تفعيل أولوية: جمع الذهب في أراضي التحالفات")
+    parser.add_argument("--gold-tag", type=str, default=None, help="اختصار التحالف لجمع الذهب (مثال: POL)")
+    parser.add_argument("--gold-coords", type=str, default=None, help="إحداثيات مركز التحالف لجمع الذهب X,Y")
+    parser.add_argument("--gold-alliances", type=str, default=None, help="تحالفات متعددة لجمع الذهب بصيغة TAG1:X1,Y1;TAG2:X2,Y2")
+
+    # [6] جمع الموارد
     parser.add_argument("--gather", action="store_true", help="تفعيل أولوية: جمع الموارد بالفيالق المتبقية حتى الامتلاء")
     parser.add_argument("--gather-res", default=None, help="نوع المورد للجمع: 1/gold=ذهب, 2/food=قمح, 3/wood=خشب, 4/iron=حديد, 5/diamond=ألماس")
     parser.add_argument("--gather-level", type=int, default=None, help="مستوى حقل المورد المستهدف بالضبط")
@@ -753,6 +796,9 @@ if __name__ == "__main__":
             args.invaders,
             args.rebels,
             args.stronghold,
+            args.gold_gather,
+            (args.gold_tag is not None),
+            (args.gold_alliances is not None),
             args.gather,
             (args.priority is not None)
         ])
@@ -815,7 +861,36 @@ if __name__ == "__main__":
             else:
                 final_config["stronghold"] = {"enabled": False}
 
-            # 5. Gather
+            # 5. Gold Gather
+            if args.gold_gather or (args.gold_tag is not None) or (args.gold_alliances is not None):
+                gg_cfg = copy.deepcopy(DEFAULT_GOLD_GATHER_CONFIG)
+                gg_cfg["enabled"] = True
+                locations = []
+                if args.gold_alliances:
+                    for item in args.gold_alliances.split(';'):
+                        item = item.strip()
+                        if not item:
+                            continue
+                        if ':' in item:
+                            t_part, c_part = item.split(':', 1)
+                            t_tag = t_part.strip()
+                            if ',' in c_part:
+                                xy = c_part.split(',')
+                                locations.append({"alliance_tag": t_tag, "x": int(xy[0].strip()), "y": int(xy[1].strip())})
+                elif args.gold_tag:
+                    gx, gy = None, None
+                    if args.gold_coords and ',' in args.gold_coords:
+                        parts = args.gold_coords.split(',')
+                        gx, gy = int(parts[0].strip()), int(parts[1].strip())
+                    locations.append({"alliance_tag": args.gold_tag, "x": gx, "y": gy})
+
+                if locations:
+                    gg_cfg["locations"] = locations
+                final_config["gold_gather"] = gg_cfg
+            else:
+                final_config["gold_gather"] = {"enabled": False}
+
+            # 6. Gather
             if args.gather or (args.gather_res is not None) or (args.gather_level is not None):
                 g_cfg = copy.deepcopy(DEFAULT_GATHER_CONFIG)
                 g_cfg["enabled"] = True

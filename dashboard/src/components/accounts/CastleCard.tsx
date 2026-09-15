@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronDown, ChevronUp, Play, Square, Trash2, Edit2, Clock,
-  Zap, Globe, MapPin, Crown, Activity, Lock, ShieldAlert, AlertTriangle
+  Zap, Globe, MapPin, Crown, Activity, Lock, ShieldAlert, AlertTriangle,
+  Copy
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { doc, onSnapshot } from 'firebase/firestore'
 import toast from 'react-hot-toast'
@@ -22,12 +23,23 @@ export interface CastleCardProps {
   index?: number
   onDelete?: (id: string, wasActive?: boolean) => void
   onEdit?: (castle: Castle) => void
+  onSetBatchTemplate?: (castleId: string) => void
   isPending?: boolean
 }
 
-export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending }: CastleCardProps) {
+export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatchTemplate, isPending }: CastleCardProps) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
+  const [hasBeenExpanded, setHasBeenExpanded] = useState(false)
+
+  const handleToggleExpand = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setExpanded(prev => {
+      const next = !prev
+      if (next) setHasBeenExpanded(true)
+      return next
+    })
+  }
   const [liveCastle, setLiveCastle] = useState<Castle>(castle)
   const [liveState, setLiveState] = useState<string>(castle.bot_status.state)
   const [connState, setConnState] = useState<string>(castle.bot_status?.conn_state ?? '')
@@ -86,7 +98,57 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
   const isError        = liveState === 'error'        || connState === 'error'
   const isBotActive    = isRunningNow || isWaitingCycle || isDisconnected || isReconnecting || liveState === 'running'
 
-  const waitingTimeMatch = isWaitingCycle ? (bot?.conn_message || '').match(/(\d{1,2}:\d{2})/) : null
+  // مؤقت لتحديث العد التنازلي للدورة تلقائياً كل 30 ثانية
+  const [nowTick, setNowTick] = useState(Date.now())
+  useEffect(() => {
+    if (!isWaitingCycle) return
+    const timer = setInterval(() => setNowTick(Date.now()), 30000)
+    return () => clearInterval(timer)
+  }, [isWaitingCycle])
+
+  // حساب الدقائق المتبقية للدورة القادمة بدقة
+  const waitingMinutes = useMemo(() => {
+    if (!isWaitingCycle) return null
+
+    // 1. حساب عبر next_run_time إن وُجد في Firestore
+    if (bot?.next_run_time) {
+      const nextMs = new Date(bot.next_run_time).getTime()
+      if (!isNaN(nextMs)) {
+        const diffMs = nextMs - nowTick
+        if (diffMs > 0) {
+          return Math.max(1, Math.round(diffMs / 60000))
+        }
+      }
+    }
+
+    const msg = bot?.conn_message || ''
+
+    // 2. البحث عن عدد الدقائق الصريح (متبقي X دقيقة أو انتظار X دقيقة)
+    const explicitMins = msg.match(/(?:متبقي|انتظار)\s*(\d+(?:\.\d+)?)\s*دقيقة/i)
+    if (explicitMins) {
+      const parsed = Math.round(parseFloat(explicitMins[1]))
+      if (parsed > 0) return parsed
+    }
+
+    // 3. البحث عن وقت الساعة المستهدفة (مثال: الساعة 15:30)
+    const timeMatch = msg.match(/الساعة\s*(\d{1,2}):(\d{2})(?::\d{2})?/)
+    if (timeMatch) {
+      const targetHour = parseInt(timeMatch[1], 10)
+      const targetMin = parseInt(timeMatch[2], 10)
+      const now = new Date(nowTick)
+      const target = new Date(nowTick)
+      target.setHours(targetHour, targetMin, 0, 0)
+      const diffMs = target.getTime() - now.getTime()
+      if (diffMs < -60000) {
+        target.setDate(target.getDate() + 1)
+      }
+      const diffMins = Math.round((target.getTime() - now.getTime()) / 60000)
+      if (diffMins > 0) return diffMins
+      return 1
+    }
+
+    return null
+  }, [isWaitingCycle, bot?.next_run_time, bot?.conn_message, nowTick])
 
   const handleToggleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -157,7 +219,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
 
       {/* ── Header Row ─────────────────────────────────────── */}
       <div
-        onClick={() => setExpanded(e => !e)}
+        onClick={handleToggleExpand}
         className="castle-card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-3.5 sm:p-5 cursor-pointer select-none"
       >
         {/* Left / Castle Info */}
@@ -266,7 +328,11 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
                     <span className="inline-flex absolute bg-sky-400 opacity-50 rounded-full w-full h-full animate-ping"></span>
                     <span className="inline-flex relative bg-sky-400 rounded-full w-1.5 h-1.5"></span>
                   </span>
-                  <span>{waitingTimeMatch ? `${t('status.waitingCycle')} (${waitingTimeMatch[1]})` : t('status.waitingCycle')}</span>
+                  <span>
+                    {waitingMinutes != null
+                      ? t('status.waitingCountdown', { count: waitingMinutes })
+                      : t('status.waitingCycle')}
+                  </span>
                 </span>
               ) : isRunningNow ? (
                 <span
@@ -380,6 +446,18 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
             onClick={e => e.stopPropagation()}
             className="castle-icon-group flex items-center gap-0.5 bg-white/[0.04] p-1 sm:p-0.5 border border-white/8 rounded-xl sm:rounded-lg shrink-0"
           >
+            {/* Set as batch template */}
+            {onSetBatchTemplate && !isPending && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onSetBatchTemplate(castle.id) }}
+                className="castle-action-btn castle-action-btn-template hover:bg-primary-500/20 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-primary-300 transition-colors cursor-pointer"
+                title={t('accounts.useAsBatchTemplate')}
+              >
+                <Copy size={15} />
+              </button>
+            )}
+
             {/* Edit credentials */}
             {onEdit && (
               <button
@@ -404,7 +482,8 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
 
             {/* Expand / Accordion toggle */}
             <button
-              onClick={(e) => { e.stopPropagation(); setExpanded(v => !v) }}
+              type="button"
+              onClick={handleToggleExpand}
               className={clsx(
                 'castle-action-btn castle-action-btn-expand p-2 sm:p-1.5 rounded-lg sm:rounded-md transition-colors cursor-pointer',
                 expanded
@@ -421,7 +500,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
 
       {/* ── Resources Row ─────────────────────────────────── */}
       <div
-        onClick={() => setExpanded(e => !e)}
+        onClick={handleToggleExpand}
         className="castle-resources-row bg-white/[0.01] px-4 sm:px-5 pt-3 pb-3.5 border-white/8 border-t cursor-pointer select-none"
       >
         <ResourceBar resources={resources} />
@@ -434,28 +513,25 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, isPending 
         )}
       </div>
 
-      {/* ── Expanded Task Settings Accordion ───────────────── */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="castle-expanded-section border-white/8 border-t w-full"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="space-y-5 p-4 md:p-6 w-full">
-              <div className="w-full">
-                <TaskTabContent
-                  castle={castle}
-                  userId={userId}
-                />
-              </div>
+      {/* ── Expanded Task Settings Accordion (Instant & Fast) ── */}
+      {hasBeenExpanded && (
+        <div
+          className={clsx(
+            'castle-expanded-section border-white/8 border-t w-full',
+            expanded ? 'block' : 'hidden'
+          )}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="space-y-5 p-4 md:p-6 w-full">
+            <div className="w-full">
+              <TaskTabContent
+                castle={castle}
+                userId={userId}
+              />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       {/* ── Confirm Stop Modal ─────────────────────────────── */}
       <ConfirmStopModal

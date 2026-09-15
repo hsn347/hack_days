@@ -27,8 +27,20 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
     invaders:    { ...def.march_manager.invaders,    ...((fmm?.invaders    as Record<string, unknown>) || {}) },
     rebels:      { ...def.march_manager.rebels,      ...((fmm?.rebels      as Record<string, unknown>) || {}) },
     stronghold:  { ...def.march_manager.stronghold,  ...((fmm?.stronghold  as Record<string, unknown>) || {}) },
+    gold_gather: { ...def.march_manager.gold_gather, ...((fmm?.gold_gather as Record<string, unknown>) || {}) },
     gather:      { ...def.march_manager.gather,      ...((fmm?.gather      as Record<string, unknown>) || {}) },
-    priority_order: (fmm?.priority_order as string[]) || def.march_manager.priority_order,
+    priority_order: (() => {
+      const p = (fmm?.priority_order as string[]) || def.march_manager.priority_order
+      if (Array.isArray(p) && !p.includes('gold_gather')) {
+        const gIdx = p.indexOf('gather')
+        if (gIdx !== -1) {
+          const cp = [...p]
+          cp.splice(gIdx, 0, 'gold_gather')
+          return cp
+        }
+      }
+      return p
+    })(),
   })
 
   const mergeTrain = (ft: Record<string, unknown>) => ({
@@ -37,11 +49,19 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
     levels: { ...def.train.levels, ...((ft?.levels as Record<string, unknown>) || {}) },
   })
 
-  const mergePrestige = (fp: Record<string, unknown>) => ({
-    ...def.prestige,
-    ...(fp || {}),
-    subtasks: { ...def.prestige.subtasks, ...((fp?.subtasks as Record<string, unknown>) || {}) },
-  })
+  const mergePrestige = (fp: Record<string, unknown>) => {
+    const rawSub = (fp?.subtasks as Record<string, unknown>) || {}
+    const trainVal = typeof rawSub.train === 'boolean' ? rawSub.train : def.prestige.subtasks.train
+    return {
+      ...def.prestige,
+      ...(fp || {}),
+      subtasks: {
+        ...def.prestige.subtasks,
+        ...rawSub,
+        fortress: trainVal,
+      },
+    }
+  }
 
   return {
     city_harvest:       { ...def.city_harvest,       ...((fc.city_harvest       as Record<string, unknown>) || {}) },
@@ -61,7 +81,7 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
     material_workshop:  { ...def.material_workshop,  ...((fc.material_workshop  as Record<string, unknown>) || {}), materials: (fc.material_workshop as Record<string, unknown>)?.materials as string[] || def.material_workshop.materials },
     caravan:            { ...def.caravan,            ...((fc.caravan            as Record<string, unknown>) || {}) },
     port_delegate:      { ...def.port_delegate,      ...((fc.port_delegate      as Record<string, unknown>) || {}) },
-    savings_bank:       { ...def.savings_bank,       ...((fc.savings_bank       as Record<string, unknown>) || {}) },
+    savings_bank:       { ...def.savings_bank,       ...((fc.savings_bank       as Record<string, unknown>) || {}), days: (fc.savings_bank as { days?: number })?.days === 1 ? 7 : (((fc.savings_bank as { days?: number })?.days) ?? 7) },
     building:           { ...def.building,           ...((fc.building           as Record<string, unknown>) || {}) },
     prestige:           mergePrestige((fc.prestige    as Record<string, unknown>) || {}),
     march_manager:      mergeMM((fc.march_manager     as Record<string, unknown>) || {}),

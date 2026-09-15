@@ -1261,11 +1261,11 @@ class PrestigeTask(BaseTask):
             self.log.info("⏭️ [تخطي] مهمة تدريب الجنود معطلة بناءً على اختيار المستخدم.")
             train_res = {"success": True, "skipped": True, "user_disabled": True, "trained_count": 0}
 
-        # 7. حصن الحرب — تدريب الفخاخ تلقائياً
-        if self.is_subtask_enabled("fortress"):
+        # 7. حصن الحرب — تدريب الفخاخ تلقائياً (تُفعّل تلقائياً عند تفعيل تدريب الجنود في مهام الهيبة)
+        if self.is_subtask_enabled("train"):
             fortress_res = await self.run_fortress_step()
         else:
-            self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة بناءً على اختيار المستخدم.")
+            self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة (تعتمد حصراً على تفعيل تدريب الجنود في مهام الهيبة).")
             fortress_res = {"success": True, "skipped": True, "user_disabled": True}
 
         # 8. عرض تقرير حالة الهيبة

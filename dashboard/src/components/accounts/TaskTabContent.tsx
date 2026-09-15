@@ -1445,17 +1445,25 @@ export function TaskTabContent({
       { key: 'train',      img: '/images/prestige/asker_egit.png',      labelKey: 'tasks.train' },
       { key: 'invaders',   img: '/images/prestige/yagmaci (1).png',     labelKey: 'tasks.invaders' },
       { key: 'stronghold', img: '/images/prestige/siginak (1).png',     labelKey: 'tasks.stronghold' },
-      { key: 'fortress',   img: '/images/daily/bos_hisar.png',         labelKey: 'tasks.fortress' },
     ] as const
 
     const activeCount = subtaskDefs.filter(st => pr.subtasks[st.key]).length
 
     const setAllSubtasks = (val: boolean) => {
-      const updated: Record<string, boolean> = {}
+      const updated: Record<string, boolean> = { fortress: val }
       for (const st of subtaskDefs) {
         updated[st.key] = val
       }
       update('prestige', { subtasks: { ...pr.subtasks, ...updated } } as Partial<typeof pr>)
+    }
+
+    const handleToggleSubtask = (stKey: string, nextVal: boolean) => {
+      const updated = { ...pr.subtasks, [stKey]: nextVal }
+      // تفعيل وتعطيل حصن الحرب تلقائياً مع تدريب الجنود
+      if (stKey === 'train') {
+        updated.fortress = nextVal
+      }
+      update('prestige', { subtasks: updated as typeof pr.subtasks } as Partial<typeof pr>)
     }
 
     return (
@@ -1487,17 +1495,14 @@ export function TaskTabContent({
                   src="/images/daily/goldenchest.png"
                   alt="Prestige"
                   style={{ width: '22px', height: '22px', objectFit: 'contain' }}
-                  onError={e => {
-                    const el = e.target as HTMLImageElement
-                    el.style.display = 'none'
-                    if (el.parentElement) el.parentElement.textContent = '👑'
-                  }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
               </div>
               <div style={{ minWidth: 0 }}>
                 <div className="task-row-label" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
                   {t('tasks.prestigeTasks')}
-                </div>
+                
+              </div>
               </div>
             </div>
 
@@ -1507,7 +1512,7 @@ export function TaskTabContent({
           </div>
         </div>
 
-        {/* ─── Sub-tasks Section (المهام التابعة لنظام الهيبة) ─── */}
+        {/* ─── Subtasks Section (المهام الفرعية) ─── */}
         {pr.enabled && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Sub-header with quick actions */}
@@ -1553,7 +1558,7 @@ export function TaskTabContent({
               return (
                 <div
                   key={st.key}
-                  onClick={() => update('prestige', { subtasks: { ...pr.subtasks, [st.key]: !isSubEnabled } } as Partial<typeof pr>)}
+                  onClick={() => handleToggleSubtask(st.key, !isSubEnabled)}
                   className={clsx('task-subtask-row', isSubEnabled ? 'enabled' : 'disabled')}
                   style={{
                     background: isSubEnabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.025)',
@@ -1584,7 +1589,7 @@ export function TaskTabContent({
 
                     <Toggle
                       value={isSubEnabled}
-                      onChange={v => update('prestige', { subtasks: { ...pr.subtasks, [st.key]: v } } as Partial<typeof pr>)}
+                      onChange={v => handleToggleSubtask(st.key, v)}
                       size="sm"
                     />
                   </div>
@@ -1793,12 +1798,12 @@ export function TaskTabContent({
         >
           <div style={{ display: 'flex', gap: '8px' }}>
             {[
-              { d: 1,  labelKey: 'tasks.day1',  img: 'goldenchest.png' },
               { d: 7,  labelKey: 'tasks.days7',  img: 'silverchest.png' },
               { d: 15, labelKey: 'tasks.days15', img: 'silverchest.png' },
               { d: 30, labelKey: 'tasks.days30', img: 'silverchest.png' },
             ].map(opt => {
-              const isSelected = (cfg.savings_bank.days ?? 7) === opt.d
+              const currentDays = (cfg.savings_bank.days === 1 || !cfg.savings_bank.days) ? 7 : cfg.savings_bank.days
+              const isSelected = currentDays === opt.d
               return (
                 <button
                   key={opt.d}
