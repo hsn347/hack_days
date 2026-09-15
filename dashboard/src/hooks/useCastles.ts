@@ -258,6 +258,7 @@ export function useBotControl(userId: string) {
             config:       castle.config as unknown as Record<string, unknown>,
             loop_interval: 55,
           })
+          return
         } else {
           // ⚠️ API غير متاح — حدّث Firebase فقط (Fallback)
           console.warn('⚠️ api_server.py غير متاح — تحديث Firebase فقط')
@@ -280,14 +281,14 @@ export function useBotControl(userId: string) {
         }
       }
 
-      // تحديث Firebase دائماً (لمزامنة الحالة في لوحة التحكم)
+      // تحديث Firebase عند الإيقاف (لمزامنة الحالة في لوحة التحكم)
       await updateDoc(
         doc(db, 'users', userId, 'castles', castle.id),
         {
-          'bot_status.state':            state,
-          'bot_status.conn_state':       state === 'running' ? 'connected' : 'idle',
-          'bot_status.conn_message':     state === 'running' ? 'البوت متصل ويعمل الآن...' : 'تم إيقاف البوت بواسطة المستخدم',
-          'bot_status.last_run_message': state === 'running' ? 'البوت يعمل الآن...' : 'تم الإيقاف',
+          'bot_status.state':            'idle',
+          'bot_status.conn_state':       'idle',
+          'bot_status.conn_message':     'تم إيقاف البوت بواسطة المستخدم',
+          'bot_status.last_run_message': 'تم الإيقاف',
           'bot_status.conn_updated':     new Date().toISOString(),
         }
       )

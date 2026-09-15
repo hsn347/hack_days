@@ -37,10 +37,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import uvicorn
 
-# ── Logging: صمت تام — بدون terminal بدون ملف ────────────────────
-# كل المعلومات تمر عبر Firebase (log_callback → FIREBASE_EVENT)
-logging.disable(logging.CRITICAL)  # تعطيل كامل لكل رسائل الـ logging
+# ── Logging ───────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s][%(levelname)s][%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 log = logging.getLogger("api_server")
+log.setLevel(logging.INFO)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -350,18 +354,42 @@ def _bot_thread(req: StartBotRequest):
     _update_firebase_status(user_id, castle_id, "running", "البوت يعمل الآن...")
 
     # 2. تسجيل الدخول إذا لم تكن الجلسة موجودة
-    if req.password:
+    password = req.password
+    if not password:
         try:
-            from core.session_manager import SessionManager
-            sm = SessionManager()
-            sessions = sm.load()
-            if email not in sessions:
-                log.info(f"🔑 [{email}] تسجيل دخول جديد...")
-                sm.login_and_save(email, req.password)
-                log_q.put(f"[{datetime.now():%H:%M:%S}] 🔑 تسجيل دخول بنجاح")
-        except Exception as e:
-            log.warning(f"⚠️ [{email}] جلسة: {e}")
-            log_q.put(f"[{datetime.now():%H:%M:%S}] ⚠️ تحذير: {e}")
+            _ensure_firebase()
+            import firebase_admin
+            from firebase_admin import firestore as fb_fs
+            if firebase_admin._apps:
+                db = fb_fs.client()
+                c_snap = db.collection("users").document(user_id).collection("castles").document(castle_id).get()
+                if c_snap.exists:
+                    password = (c_snap.to_dict() or {}).get("password")
+        except Exception as ex:
+            log.warning(f"⚠️ فشل جلب كلمة المرور من Firestore: {ex}")
+
+    try:
+        from core.session_manager import SessionManager
+        sm = SessionManager()
+        sessions = sm.load()
+        if email not in sessions:
+            if password:
+                log.info(f"🔑 [{email}] تسجيل دخول جديد وحفظ الجلسة...")
+                log_q.put(f"[{datetime.now():%H:%M:%S}] 🔑 جاري تسجيل الدخول وحفظ الجلسة...")
+                sm.login_and_save(email, password)
+                log_q.put(f"[{datetime.now():%H:%M:%S}] ✅ تم تسجيل الدخول بنجاح")
+            else:
+                err_msg = f"كلمة المرور غير مسجلة لحساب {email}. يرجى تعديل القلعة وحفظ كلمة المرور."
+                log.error(f"❌ {err_msg}")
+                log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ {err_msg}")
+                _update_firebase_status(user_id, castle_id, "error", err_msg, conn_state="error")
+                return
+    except Exception as e:
+        err_str = str(e)
+        log.warning(f"⚠️ [{email}] خطأ في تسجيل الدخول: {err_str}")
+        log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ خطأ تسجيل الدخول: {err_str}")
+        _update_firebase_status(user_id, castle_id, "error", f"خطأ تسجيل الدخول: {err_str}", conn_state="error")
+        return
 
     # 3. ملف log البوت مع التدوير التلقائي
     bot_log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
