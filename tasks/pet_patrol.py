@@ -39,29 +39,66 @@ from game_client import GameConnection
 
 
 # ════════════════════════════════════════════════════════════════════
-#  قاموس الحيوانات الأليفة المعروفة ووجهات الدورية
+#  الحيوان القائم بالدورية (ثابت دائماً: الغزال 1261) والحيوانات المستهدفة
 # ════════════════════════════════════════════════════════════════════
 
-KNOWN_PETS: Dict[int, Dict[str, Any]] = {
-    1261: {"name": "🦌 الغزال (Gazelle)"},
-    1262: {"name": "🦁 أسد (Lion)"},
-    1263: {"name": "🦅 الصقر (Falcon)"},
-    1264: {"name": "🐺 ذئب (Wolf)"},
-    1265: {"name": "🐆 نمر / فهد (Leopard)"},
-    1266: {"name": "🐻 الدب (Bear)"},
-    1267: {"name": "🐘 الفيل (Elephant)"},
-    1268: {"name": "🦏 وحيد القرن (Rhino)"},
-    1269: {"name": "🐂 الثور البري (Wild Bull)"},
-    1270: {"name": "🐕 كلب كانغال (Kangal Dog)"},
-    1271: {"name": "🐅 النمر الناري (Fire Tiger)"},
-    1272: {"name": "🐍 الثعبان الملكي (Royal Snake)"},
-    1273: {"name": "🦅 الجريفين (Griffin)"},
-    1274: {"name": "🐉 التنين (Dragon)"},
-    1275: {"name": "🔥 طائر الفينيق (Phoenix)"},
+PET_RUNNER_ID   = 1261    # الغزال دائماً بدون الرجوع للمستخدم
+DEFAULT_PET_ID  = 1261
+
+PET_DESTINATIONS: Dict[int, str] = {
+    1262: "🦁 الأسد",
+    1263: "🦅 الصقر",
+    1264: "🐺 الذئب",
+    1265: "🐆 الفهد",
+    1266: "🐻 الدب",
+    1267: "🐘 الفيل",
+    1268: "🐂 الثور البري",
+    1269: "🐕 كلب الكنغال",
+    1270: "🐅 النمر السيفي",
+    1377: "🦏 وحيد القرن",
+    1380: "🔥 عنقاء العاصفة الرملية",
+    1383: "🐯 النمر الثائر",
+    1386: "🦎 سحلية الموت",
+    1389: "🐉 الهيدرا",
 }
 
-DEFAULT_PET_ID      = 1261    # الافتراضي: الغزال (جاهز للربط مع Firebase)
-DEFAULT_DESTINATION = 1389    # الوجهة القياسية الأولى
+# للتوافقية الكاملة
+KNOWN_PETS = {
+    1261: {"name": "🦌 الغزال (Gazelle)"},
+    **{pid: {"name": pname} for pid, pname in PET_DESTINATIONS.items()}
+}
+
+DEFAULT_DESTINATION = 1262  # الأسد افتراضياً
+
+DESTINATION_ALIASES: Dict[str, int] = {
+    "1262": 1262, "اسد": 1262, "أسد": 1262, "الاسد": 1262, "الأسد": 1262, "lion": 1262,
+    "1263": 1263, "صقر": 1263, "الصقر": 1263, "falcon": 1263,
+    "1264": 1264, "ذئب": 1264, "الذئب": 1264, "wolf": 1264,
+    "1265": 1265, "فهد": 1265, "الفهد": 1265, "leopard": 1265, "cheetah": 1265,
+    "1266": 1266, "دب": 1266, "الدب": 1266, "bear": 1266,
+    "1267": 1267, "فيل": 1267, "الفيل": 1267, "elephant": 1267,
+    "1268": 1268, "ثور": 1268, "الثور": 1268, "ثور بري": 1268, "الثور البري": 1268, "bull": 1268,
+    "1269": 1269, "كلب": 1269, "الكلب": 1269, "كنغال": 1269, "الكنغال": 1269, "كلب الكنغال": 1269, "kangal": 1269, "dog": 1269,
+    "1270": 1270, "نمر سيفي": 1270, "النمر السيفي": 1270, "سيفي": 1270, "sabertooth": 1270,
+    "1377": 1377, "وحيد القرن": 1377, "وحيد قرن": 1377, "rhino": 1377,
+    "1380": 1380, "عنقاء": 1380, "العنقاء": 1380, "عنقاء العاصفة": 1380, "عنقاء العاصفة الرملية": 1380, "phoenix": 1380,
+    "1383": 1383, "نمر ثائر": 1383, "النمر الثائر": 1383, "ثائر": 1383, "raging tiger": 1383,
+    "1386": 1386, "سحلية": 1386, "السحلية": 1386, "سحلية الموت": 1386, "lizard": 1386, "death lizard": 1386,
+    "1389": 1389, "هيدرا": 1389, "الهيدرا": 1389, "hydra": 1389,
+}
+
+def resolve_pet_destination(dest_input: Any) -> int:
+    """تحويل اسم الحيوان المستهدف أو معرفه إلى ID صحيح من قائمة الـ 14 حيواناً."""
+    if dest_input is None:
+        return DEFAULT_DESTINATION
+    if isinstance(dest_input, int) and dest_input in PET_DESTINATIONS:
+        return dest_input
+    key = str(dest_input).strip().lower()
+    if key.isdigit():
+        val = int(key)
+        if val in PET_DESTINATIONS:
+            return val
+    return DESTINATION_ALIASES.get(key, DEFAULT_DESTINATION)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -71,6 +108,8 @@ DEFAULT_DESTINATION = 1389    # الوجهة القياسية الأولى
 class PetPatrolTask(BaseTask):
     """
     مهمة دورية الحيوان الأليف (Pet Patrol).
+    الحيوان القائم بالدورية: 1261 (الغزال) دائماً وأبداً.
+    الوجهة (destination): الحيوان المستهدف المختار من قائمة الـ 14 حيواناً.
     """
     name = "pet_patrol"
 
@@ -78,23 +117,25 @@ class PetPatrolTask(BaseTask):
         super().__init__(conn, config)
 
     async def run(self) -> TaskResult:
-        cfg = self.config
+        cfg = self.config or {}
         now_ts = int(time.time())
 
-        # 1. تحديد الحيوان الأليف المستهدف
-        # يمكن تمريره من Firebase أو من باراميتر المهمة أو الاعتماد على الافتراضي
-        target_pet_id = int(cfg.get('pet_id', DEFAULT_PET_ID))
-        target_dest   = int(cfg.get('destination', DEFAULT_DESTINATION))
+        # 1. الحيوان القائم بالدورية ثابت دائماً (الغزال 1261) بدون الرجوع للمستخدم
+        target_pet_id = 1261
 
-        pet_name = KNOWN_PETS.get(target_pet_id, {}).get('name', f"حيوان #{target_pet_id}")
-        self.log.info(f"🐾 بدء مهمة دورية الحيوان الأليف [{pet_name}] إلى الوجهة #{target_dest}")
+        # 2. الحيوان المستهدف (destination)
+        dest_val = cfg.get('destination', cfg.get('dest', cfg.get('pet', DEFAULT_DESTINATION)))
+        target_dest = resolve_pet_destination(dest_val)
+        dest_name = PET_DESTINATIONS.get(target_dest, f"وجهة #{target_dest}")
 
-        # 2. محاولة استلام مكافآت أي دورية منتهية سابقة (3081/5)
+        self.log.info(f"🐾 بدء مهمة دورية الحيوان الأليف [الغزال #1261] إلى الحيوان المستهدف [{dest_name}] (#{target_dest})")
+
+        # 3. محاولة استلام مكافآت أي دورية منتهية سابقة (3081/5)
         r_rwd = await self.conn.query('3081', '5', {}, timeout=8)
         if r_rwd and str(r_rwd.get('err', '0')) == '0':
             self.log.info("🎁 تم استلام مكافآت دورية الحيوان المكتملة بنجاح! ✅")
 
-        # 3. فحص حالة الدورية الحالية من init_data
+        # 4. فحص حالة الدورية الحالية من init_data
         pet_ctrl = self.conn.init_data.get('petCtrl', {})
         if isinstance(pet_ctrl, dict):
             patrol_info = pet_ctrl.get('petPatrolInfo', {})
@@ -107,8 +148,7 @@ class PetPatrolTask(BaseTask):
                     remaining_sec = end_time - now_ts
                     rem_min = remaining_sec // 60
                     rem_sec = remaining_sec % 60
-                    active_pet_name = KNOWN_PETS.get(active_pet_id, {}).get('name', f"حيوان #{active_pet_id}")
-                    self.log.info(f"🐾 {active_pet_name} في دورية حالياً | متبقي للانتهاء: {rem_min} دقيقة و {rem_sec} ثانية")
+                    self.log.info(f"🐾 الحيوان في دورية حالياً | متبقي للانتهاء: {rem_min} دقيقة و {rem_sec} ثانية")
                     return TaskResult.ok(
                         f"الحيوان في دورية حالياً (متبقي {rem_min} دقيقة)",
                         status="patrolling",
@@ -118,19 +158,9 @@ class PetPatrolTask(BaseTask):
                         retry_after=remaining_sec + 30
                     )
 
-        # 4. التحقق من توفر الحيوان في حساب اللاعب
-        pets_in_account = pet_ctrl.get('pets', {}) if isinstance(pet_ctrl, dict) else {}
-        if isinstance(pets_in_account, dict) and pets_in_account:
-            if str(target_pet_id) not in pets_in_account and target_pet_id not in pets_in_account:
-                # إذا لم يكن الحيوان المطلوب مفتوحاً، نختار أول حيوان متوفر في الحساب
-                first_available = next(iter(pets_in_account.keys()))
-                self.log.warning(f"⚠️ الحيوان #{target_pet_id} غير مفتوح، سيتم استخدام المتوفر #{first_available}")
-                target_pet_id = int(first_available)
-                pet_name = KNOWN_PETS.get(target_pet_id, {}).get('name', f"حيوان #{target_pet_id}")
-
-        # 5. إرسال أمر بدء الدورية (3081/4)
+        # 5. إرسال أمر بدء الدورية (3081/4) بـ petid: 1261 دائماً
         payload = {
-            "petid": target_pet_id,
+            "petid": 1261,
             "destination": target_dest
         }
 
@@ -145,11 +175,11 @@ class PetPatrolTask(BaseTask):
         duration_sec = max(0, patrol_finish_time - now_ts)
         duration_min = duration_sec // 60
 
-        self.log.info(f"🎉 تم إرسال {pet_name} في دورية بنجاح! 🚀 | مدة الدورية: {duration_min} دقيقة")
+        self.log.info(f"🎉 تم إرسال الغزال في دورية إلى [{dest_name}] بنجاح! 🚀 | مدة الدورية: {duration_min} دقيقة")
         return TaskResult.ok(
-            f"✅ تم إرسال {pet_name} في دورية بنجاح (المدة {duration_min} دقيقة)",
+            f"✅ تم إرسال الغزال في دورية إلى {dest_name} بنجاح (المدة {duration_min} دقيقة)",
             status="patrol_started",
-            pet_id=target_pet_id,
+            pet_id=1261,
             destination=target_dest,
             duration_minutes=duration_min,
             patrol_finish_time=patrol_finish_time,

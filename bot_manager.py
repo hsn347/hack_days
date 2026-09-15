@@ -66,6 +66,7 @@ import asyncio
 import copy
 import json
 import logging
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -74,7 +75,10 @@ from game_client import GameConnection, AccountSession
 from core.session_manager import SessionManager
 from tasks.port import PortTask
 from tasks.train import TrainTask, BUILDING_TROOP_MAP, TYPE_ALIASES
-from tasks.pet_patrol import PetPatrolTask, KNOWN_PETS, DEFAULT_PET_ID, DEFAULT_DESTINATION
+from tasks.pet_patrol import (
+    PetPatrolTask, KNOWN_PETS, DEFAULT_PET_ID, DEFAULT_DESTINATION,
+    PET_DESTINATIONS, resolve_pet_destination
+)
 from tasks.city_harvest import CityHarvestTask
 from tasks.research import ResearchTask, load_tech_names
 from tasks.alliance import AllianceTask
@@ -107,12 +111,17 @@ from tasks.march_manager import (
 )
 
 # ── إعداد نظام التسجيل (Logging) ───────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s][%(levelname)s][%(name)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
+# مستوى CRITICAL فقط (صمت تام) لتقليل الضجيج عند تشغيل 500+ قلعة
+# (لا نُغيّر root logger حتى لا نؤثر على api_server)
+_log_handler = logging.StreamHandler()
+_log_handler.setFormatter(logging.Formatter(
+    "[%(asctime)s][%(levelname)s][%(name)s] %(message)s", datefmt="%H:%M:%S"
+))
 log = logging.getLogger("bot_manager")
+log.setLevel(logging.CRITICAL)  # صمت تام — المعلومات تمر عبر log_callback
+if not log.handlers:
+    log.addHandler(_log_handler)
+log.propagate = False  # لا نُكرر الرسائل في root logger
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════
@@ -191,7 +200,8 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # 🐾 6. مهمة دورية وتدريب الحيوانات الأليفة (Pet Patrol)
     "pet_patrol": {
         "enabled": True,             # تفعيل/تعطيل دورية الحيوان الأليف واستلام جوائزها
-        "pet": "غزال",               # اسم أو معرف الحيوان المطلوب تدريبه/إرساله (مثال: "غزال", "صقر", "اسد", "ذئب")
+        "pet": "غزال",               # الحيوان القائم بالدورية: الغزال 1261 دائماً
+        "destination": 1262,         # الحيوان المستهدف: الأسد 1262 افتراضياً
     },
 
     # 🚩 7. مهمة جمع جوائز التوسع الإقليمي (Territory Expansion)
@@ -320,6 +330,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # يدير كافة مسيرات الخريطة الخارجية للقلعة وفق الأولويات وسعة الفيالق المتاحة (تأتي من فايربيس)
     "march_manager": {
         "enabled": True,                   # تفعيل/تعطيل منسق الفيالق كلياً
+        "duration_minutes": 20,            # مدة تشغيل المهمة الإجمالية بالدقائق (ثلث ساعة = 20 دقيقة ككل)
         "max_queues": 6,                   # سعة طوابير الفيالق القصوى للقلعة (5 أو 6)
         "priority_order": [                # قائمة الأولويات المعتمدة بالترتيب
             "transport",                   # 1. مساعدة الموارد
@@ -773,6 +784,15 @@ class BotScheduler:
 
         now = now or datetime.now()
 
+        # استثناء ذكي لمهام الهيبة: إذا لم تكتمل كافة مهامها اليوم، تستمر في العمل في كل دورة حتى تكتمل بنسبة 100%
+        if task_key == "prestige":
+            last_ts = self._last_run.get(task_key, 0.0)
+            if last_ts > 0.0:
+                last_dt = datetime.fromtimestamp(last_ts)
+                if last_dt.date() == now.date():
+                    return False  # اكتملت كافة مهام الهيبة اليوم بنجاح → تخطّي
+            return True  # لم تكتمل بعد لليوم → تشغيل في هذه الدورة
+
         # ① فحص النافذة الزمنية (active_window) — يمنع التشغيل خارجها
         active_window = sched.get("active_window")
         if active_window and isinstance(active_window, dict):
@@ -889,6 +909,8 @@ class BotManager:
         ignore_schedule: bool = False,
         user_id: Optional[str] = None,
         castle_id: Optional[str] = None,
+        stop_event: Optional[threading.Event] = None,   # ← للـ Thread Pool: إشارة إيقاف خارجية
+        log_callback: Optional[Callable[[str], None]] = None,  # ← للـ Thread Pool: بدل print()
     ):
         if isinstance(account_or_email, str):
             sm = SessionManager()
@@ -908,6 +930,10 @@ class BotManager:
         self.castle_id = castle_id
         self.is_loop = False
 
+        # Thread Pool support: stop signal + log routing
+        self._stop_event: threading.Event = stop_event or threading.Event()
+        self._log_callback: Optional[Callable[[str], None]] = log_callback
+
         # دمج الإعدادات الافتراضية مع إعدادات المستخدم القادمة من Firebase
         self.config = self._build_default_config(config or {})
 
@@ -926,7 +952,12 @@ class BotManager:
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وFirebase بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
         nr_arg = f" next_run_time={next_run_time}" if next_run_time else ""
-        print(f"[FIREBASE_EVENT] conn_state={conn_state} message={message}{nr_arg}", flush=True)
+        event_line = f"[FIREBASE_EVENT] conn_state={conn_state} message={message}{nr_arg}"
+        # Thread Pool: توجيه عبر log_callback / CLI: print() مباشرة
+        if self._log_callback:
+            self._log_callback(event_line)
+        else:
+            print(event_line, flush=True)
 
         # 1. تحديث كاش قاعدة البيانات المحلية SQLite فوراً
         try:
@@ -1069,8 +1100,12 @@ class BotManager:
                 "uid":          str(base_info.get("uid", getattr(self.account, "user_id", ""))),
             }
 
-            # طباعة السطر للـ api_server و stdout
-            print(f"[RESOURCE_SYNC] food={food} wood={wood} iron={iron} diamond={diamond} gold={gold} stamina={stamina} power={cinfo_data['lord_power']}", flush=True)
+            # إرسال السطر للـ api_server (Thread Pool: log_callback / CLI: print)
+            _sync_line = f"[RESOURCE_SYNC] food={food} wood={wood} iron={iron} diamond={diamond} gold={gold} stamina={stamina} power={cinfo_data['lord_power']}"
+            if self._log_callback:
+                self._log_callback(_sync_line)
+            else:
+                print(_sync_line, flush=True)
 
             log.info(f"🌾 [تحديث موارد الدورة] قمح={food:,} خشب={wood:,} حديد={iron:,} زمرد={diamond:,} ذهب={gold:,} طاقة={stamina} | اللورد: {cinfo_data['lord_name']} (Lv {cinfo_data['castle_level']})")
 
@@ -1178,10 +1213,12 @@ class BotManager:
         ثم إعادة تسجيل الدخول وتحديث بيانات الحساب لاستئناف المهام التي توقفت.
         """
         display_reason = reason or self.get_disconnect_reason()
-        print("\n" + "!" * 70)
+        if not self._log_callback:
+            print("\n" + "!" * 70)
         log.warning(f"⚠️ [انقطاع الاتصال] تم رصد انقطاع الاتصال بالحساب (السبب: {display_reason})!")
-        log.warning(f"⏳ سيتوقف البوت مؤقتاً وينتظر {self.reconnect_wait_seconds} ثانية (دقيقة واحدة) لإفساح المجال ثم إعادة الدخول...")
-        print("!" * 70 + "\n")
+        log.warning(f"⏳ سيتوقف البوت مؤقتاً وينتظر {self.reconnect_wait_seconds} ثانية...")
+        if not self._log_callback:
+            print("!" * 70 + "\n")
 
         self._update_bot_conn_state("disconnected", f"تم تسجيل الدخول من جهاز آخر: {display_reason}")
 
@@ -1715,6 +1752,9 @@ class BotManager:
 
     def _print_account_dashboard(self):
         """طباعة تقرير شامل وواضح لحالة الحساب قبل بدء تنفيذ المهام."""
+        # في Thread Pool mode: لا طباعة — تكلفة I/O عالية بدون فائدة
+        if self._log_callback:
+            return
         ctx = self.context
         print("\n" + "═" * 72)
         print(f"🏰 لوحة معلومات الحساب: {ctx.lord_name} ({self.email})")
@@ -1932,30 +1972,37 @@ class BotManager:
             clean_step_name = step_name.split('(')[0].strip()
             self._update_bot_conn_state("connected", f"جاري تنفيذ: {clean_step_name}")
 
-            print("\n" + "─" * 65)
-            print(f"▶️ بدء تنفيذ: {step_name}")
-            print("─" * 65)
+            if not self._log_callback:
+                print("\n" + "─" * 65)
+                print(f"▶️ بدء تنفيذ: {step_name}")
+                print("─" * 65)
 
             step_interrupted = False
             step_task = asyncio.create_task(step_func())
             disconnect_waiter = asyncio.create_task(self._disconnected_event.wait())
 
+            # تحديد مهلة الأمان للمهمة: المهام العادية 300ث (5د)، ومهمة منسق الفيالق تستمر حسب مدتها (افتراضياً 20د)
+            task_timeout = 300
+            if task_key == "march_manager":
+                mm_dur = float(self.config.get("march_manager", {}).get("duration_minutes", 20))
+                task_timeout = max(300, int((mm_dur * 60) + 180))
+
             done, pending = await asyncio.wait(
                 [step_task, disconnect_waiter],
-                timeout=300,
+                timeout=task_timeout,
                 return_when=asyncio.FIRST_COMPLETED
             )
 
             if not done:
-                # انتهت مهلة الأمان (5 دقائق) والمهمة لم تنتهِ
-                log.error(f"⏰ [مهلة أمان] تجاوزت المهمة [{step_name}] الحد الأقصى للوقت (300ث) بدون استجابة — إلغاء المهمة والمتابعة.")
+                # انتهت مهلة الأمان والمهمة لم تنتهِ
+                log.error(f"⏰ [مهلة أمان] تجاوزت المهمة [{step_name}] الحد الأقصى للوقت ({task_timeout}ث) بدون استجابة — إلغاء المهمة والمتابعة.")
                 for p_task in pending:
                     p_task.cancel()
                     try:
                         await p_task
                     except (asyncio.CancelledError, Exception):
                         pass
-                res = {"success": False, "error": "تجاوز الحد الأقصى لوقت المهمة (timeout 300s)"}
+                res = {"success": False, "error": f"تجاوز الحد الأقصى لوقت المهمة (timeout {task_timeout}s)"}
             elif disconnect_waiter in done:
                 # رُصد انقطاع الاتصال فوراً أثناء عمل المهمة (مثلاً دخول شخص آخر إلى الحساب)
                 kick_reason = self.get_disconnect_reason()
@@ -1993,7 +2040,14 @@ class BotManager:
 
             # إذا اكتملت الخطوة بنجاح دون انقطاع اتصال، ننتقل للمهمة التالية
             results[step_name] = res
-            self.scheduler.mark_ran(task_key, now)  # تسجيل وقت التشغيل في الجدول
+            if task_key == "prestige":
+                t_data = res.get("data", {}) if isinstance(res, dict) else (getattr(res, "data", {}) or {})
+                if t_data.get("all_completed") is False:
+                    log.info("⏳ [مهام الهيبة] لا تزال بعض المهام غير مكتملة — ستُستأنف في الدورة القادمة تلقائياً فور توفر الفيالق.")
+                else:
+                    self.scheduler.mark_ran(task_key, now)  # تسجيل وقت الاكتمال النهائي في الجدول
+            else:
+                self.scheduler.mark_ran(task_key, now)  # تسجيل وقت التشغيل في الجدول
             step_idx += 1
             await asyncio.sleep(1.5)  # مهلة أمان قصيرة بين المهام
 
@@ -2161,32 +2215,25 @@ class BotManager:
 
     # [6] مهمة دورية الحيوان الأليف
     async def step_6_pet_patrol_task(self) -> Dict[str, Any]:
-        """فحص وتنفيذ دورية الحيوان الأليف المحدد من قبل المستخدم واستلام الجوائز."""
+        """فحص وتنفيذ دورية الحيوان الأليف (الغزال 1261 دائماً) إلى الحيوان المستهدف المحدد."""
         pet_cfg = self.config.get("pet_patrol", {})
         if not bool(pet_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي دورية الحيوان الأليف بناءً على رغبة المستخدم (pet_patrol.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
-        # تحديد الحيوان الأليف المطلوب بناءً على مدخل المستخدم
-        user_pet_choice = pet_cfg.get("pet", DEFAULT_PET_ID)
-        target_pet_id = resolve_pet_id(user_pet_choice)
-        target_dest = int(pet_cfg.get("destination", DEFAULT_DESTINATION))
+        # الحيوان القائم بالدورية: الغزال (1261) دائماً بدون الرجوع للمستخدم
+        target_pet_id = 1261
 
-        # التحقق هل الحيوان مفتوح بالحساب (إذا توافرت بيانات init_data)
-        if self.context.unlocked_pets:
-            if target_pet_id not in self.context.unlocked_pets:
-                first_unlocked = next(iter(self.context.unlocked_pets.keys()))
-                req_name = KNOWN_PETS.get(target_pet_id, {}).get("name", f"#{target_pet_id}")
-                alt_name = self.context.unlocked_pets[first_unlocked]["name"]
-                log.warning(f"⚠️ الحيوان المطلوب [{req_name}] غير مفتوح في الحساب! سيتم تدريب وإرسال المتوفر [{alt_name}] بدلاً منه.")
-                target_pet_id = first_unlocked
+        # تحديد الحيوان المستهدف (الوجهة)
+        dest_val = pet_cfg.get("destination", pet_cfg.get("dest", pet_cfg.get("pet", DEFAULT_DESTINATION)))
+        target_dest = resolve_pet_destination(dest_val)
+        dest_name = PET_DESTINATIONS.get(target_dest, f"وجهة #{target_dest}")
 
-        pet_name = KNOWN_PETS.get(target_pet_id, {}).get("name", f"حيوان #{target_pet_id}")
-        log.info(f"🐾 جاري تنفيذ الدورية للحيوان المحدد: [{pet_name}] (معرف: {target_pet_id})...")
+        log.info(f"🐾 جاري إرسال الغزال (1261) في دورية إلى الحيوان المستهدف: [{dest_name}] (معرف: {target_dest})...")
 
         task_pet_cfg = {
-            "pet_id": target_pet_id,
+            "pet_id": 1261,
             "destination": target_dest
         }
 
@@ -2633,6 +2680,15 @@ class BotManager:
             else:
                 mm_cfg["gold_gather"].update(copy.deepcopy(root_gg))
 
+        # تمرير إعدادات مهام الهيبة للربط والتنسيق التكتيكي الذكي
+        mm_cfg["_prestige_config"] = copy.deepcopy(self.config.get("prestige", {}))
+
+        # تمرير إشارة الإيقاف الخارجية والمدة المحددة ومسار الـ logs (افتراضياً 20 دقيقة ككل)
+        mm_cfg["_external_stop_event"] = self._stop_event
+        mm_cfg["_log_callback"] = self._log_callback
+        if "duration_minutes" not in mm_cfg:
+            mm_cfg["duration_minutes"] = 20
+
         log.info("🎖️ بدء مهمة منسق الفيالق والمسيرات الذكي (March Orchestrator)...")
         task_cfg = mm_cfg
         task = MarchManagerTask(self.conn, task_cfg)
@@ -2699,9 +2755,10 @@ class BotManager:
             except Exception:
                 pass
 
-            print("\n" + "═" * 72)
-            print("🏁 اكتمال تنفيذ الدورة بنجاح من قبل مدير البوت!")
-            print("═" * 72 + "\n")
+            if not self._log_callback:
+                print("\n" + "═" * 72)
+                print("🏁 اكتمال تنفيذ الدورة بنجاح من قبل مدير البوت!")
+                print("═" * 72 + "\n")
 
             return {
                 "success": True,
@@ -2751,13 +2808,19 @@ class BotManager:
         log.info(f"🔁 وضع التشغيل المستمر نشط — دورة كل {loop_interval_minutes} دقيقة")
         log.info(self.scheduler.summary())
 
-        while True:
+        while not self._stop_event.is_set():
             iteration += 1
             start_time = datetime.now()
 
-            print("\n" + "═" * 72)
-            log.info(f"🔄 دورة رقم #{iteration} — بدأت {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            print("═" * 72)
+            sep_line = "\n" + "═" * 72
+            cycle_line = f"🔄 دورة رقم #{iteration} — بدأت {start_time.strftime('%Y-%m-%d %H:%M:%S')}"
+            if self._log_callback:
+                self._log_callback(sep_line.strip())
+                self._log_callback(cycle_line)
+            else:
+                print(sep_line)
+                log.info(cycle_line)
+                print("═" * 72)
             self._update_bot_conn_state("connected", f"بدء دورة رقم #{iteration}")
 
             try:
@@ -2768,10 +2831,14 @@ class BotManager:
                 # حفظ حالة الجدول بعد كل دورة (ملف صغير < 1KB)
                 self.scheduler.save_state()
 
-            # التحقق من صلاحية الاشتراك وحالة الحظر بعد انتهاء الدورة الحالية بأمان
+            # إذا طُلب الإيقاف خلال الدورة — اخرج فوراً
+            if self._stop_event.is_set():
+                break
+
+            # التحقق من صلاحية الاشتراك وحالة الحظر بعد انتهاء الدورة الحالية
             valid, reason = self.check_subscription_validity()
             if not valid:
-                log.warning(f"🛑 [إيقاف الدورة المستمرة] {reason} — إيقاف البوت بعد اكتمال الدورة الحالية.")
+                log.warning(f"🛑 [إيقاف الدورة المستمرة] {reason}")
                 self._update_bot_conn_state("idle", f"متوقف: {reason}")
                 break
 
@@ -2794,8 +2861,12 @@ class BotManager:
                     next_run_time=next_run_iso
                 )
                 log.info(f"💤 انتظار {rem_mins} دقيقة...")
-                # نوم خفيف وغير مستهلك للموارد حتى حلول موعد الدورة القادمة
-                await asyncio.sleep(remaining)
+                # نوم مجزأ ليفحص stop_event كل ثانية بدلاً من asyncio.sleep الكامل
+                sleep_step = 1.0
+                slept = 0.0
+                while slept < remaining and not self._stop_event.is_set():
+                    await asyncio.sleep(min(sleep_step, remaining - slept))
+                    slept += sleep_step
             else:
                 self._update_bot_conn_state("connected", f"بدء الدورة التالية فوراً (#{iteration + 1})")
 
@@ -2909,8 +2980,8 @@ if __name__ == "__main__":
         "--dest", "--destination",
         dest="destination",
         type=int,
-        default=1389,
-        help="وجهة الدورية [افتراضي: 1389]"
+        default=DEFAULT_DESTINATION,
+        help="معرف الحيوان المستهدف (وجهة الدورية) [افتراضي: 1262 الأسد]"
     )
 
     # خيارات مهمة جمع جوائز التوسع الإقليمي
@@ -3105,6 +3176,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-march-manager", "--no-march", dest="march_manager", action="store_false", help="تعطيل مهمة منسق الفيالق والمسيرات")
     parser.add_argument("--march-priorities", dest="march_priorities", default=None, help="قائمة الأولويات مفصولة بفاصلة (مثال: 'transport,ruins,combat,stronghold,gather' أو 'elf' فقط)")
     parser.add_argument("--march-max-queues", dest="march_max_queues", type=int, default=6, help="الحد الأقصى لطوابير فيالق القلعة (5 أو 6) [افتراضي: 6]")
+    parser.add_argument("--march-duration", dest="march_duration", type=int, default=20, help="المدة الإجمالية لتشغيل منسق الفيالق بالدقائق (ثلث ساعة = 20 دقيقة) [افتراضي: 20]")
 
     # مساعدة الموارد
     parser.add_argument("--march-transport", dest="march_transport", action="store_true", default=None, help="تفعيل مساعدة الموارد في منسق الفيالق")
@@ -3314,6 +3386,7 @@ if __name__ == "__main__":
         "march_manager": {
             "enabled": args.march_manager,
             "schedule": {"times_per_day": 4},
+            "duration_minutes": args.march_duration,
             "max_queues": args.march_max_queues,
             "priority_order": (
                 [p.strip() for p in args.march_priorities.replace("،", ",").split(",") if p.strip()]

@@ -73,7 +73,7 @@ PRESTIGE_INVADERS_CONFIG: Dict[str, Any] = {
     "search_range": 80,         # نطاق البحث (كم) حول القلعة / المنطقة
     "formation_id": 0,          # 0 = اختيار ديناميكي تلقائي للأبطال والجيش بدون تشكيلة ثابتة
     "troops_count": 30000,      # عدد جنود القتال المناسب
-    "wait_for_queue": True,     # الانتظار الذكي عند امتلاء الفيالق حتى عودتها
+    "wait_for_queue": False,    # الخروج الفوري عند امتلاء الفيالق دون انتظار عقيم وإكمال الباقي في الدورات القادمة
     "wait_interval": 15.0,      # ثواني الانتظار بين دورات فحص الفيالق العائدة
     "center_x": None,           # إحداثي X للمنطقة (None = موقع القلعة تلقائياً)
     "center_y": None,           # إحداثي Y للمنطقة (None = موقع القلعة تلقائياً)
@@ -87,7 +87,7 @@ PRESTIGE_STRONGHOLD_CONFIG: Dict[str, Any] = {
     "search_range": 80,         # نطاق البحث (كم) حول القلعة
     "formation_id": 0,          # 0 = اختيار ديناميكي تلقائي للأبطال والجيش بدون تشكيلة ثابتة
     "troops_count": 30000,      # عدد جنود القتال المناسب
-    "wait_for_queue": True,     # الانتظار الذكي عند امتلاء الفيالق حتى عودتها
+    "wait_for_queue": False,    # الخروج الفوري عند امتلاء الفيالق دون انتظار عقيم وإكمال الباقي في الدورات القادمة
     "wait_interval": 15.0,      # ثواني الانتظار بين دورات فحص الفيالق العائدة
     "center_x": None,           # إحداثي X للمنطقة (None = موقع القلعة تلقائياً)
     "center_y": None,           # إحداثي Y للمنطقة (None = موقع القلعة تلقائياً)
@@ -349,6 +349,9 @@ class PrestigeTask(BaseTask):
 
         # ── إعدادات التحكم في كل مهمة فرعية على حدة ───────────────
         self.subtasks_config = self.config.get("subtasks", {})
+
+        # تفويض مهام الهجوم والجمع خارج القلعة لمنسق الفيالق الذكي (march_manager) كأولويات عليا
+        self.delegate_outside_to_march_manager = bool(self.config.get("delegate_outside_to_march_manager", True))
 
         self._heroes: List[Dict[str, Any]] = []
         self._busy_heroes: Set[int] = set()
@@ -1222,7 +1225,10 @@ class PrestigeTask(BaseTask):
             smuggler_res = {"success": True, "skipped": True, "user_disabled": True, "purchased_count": 0}
 
         # 2. الهجوم على الغزاة (Invaders)
-        if self.is_subtask_enabled("invaders"):
+        if self.delegate_outside_to_march_manager:
+            self.log.info("ℹ️ [مهام الهيبة] هجوم الغزاة مُدار مركزياً عبر منسق الفيالق (March Manager) كأولوية ثانية.")
+            invaders_res = {"success": True, "skipped": True, "delegated": True, "attacks": 0}
+        elif self.is_subtask_enabled("invaders"):
             invaders_res = await self.run_invaders_step()
             await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
         else:
@@ -1230,7 +1236,10 @@ class PrestigeTask(BaseTask):
             invaders_res = {"success": True, "skipped": True, "user_disabled": True, "attacks": 0}
 
         # 3. الهجوم على المعاقل / الملاجئ (Strongholds)
-        if self.is_subtask_enabled("stronghold"):
+        if self.delegate_outside_to_march_manager:
+            self.log.info("ℹ️ [مهام الهيبة] هجوم الملاجئ مُدار مركزياً عبر منسق الفيالق (March Manager) كأولوية أولى.")
+            stronghold_res = {"success": True, "skipped": True, "delegated": True, "attacks": 0}
+        elif self.is_subtask_enabled("stronghold"):
             stronghold_res = await self.run_stronghold_step()
             await asyncio.sleep(round(random.uniform(2.5, 4.0), 2))
         else:
@@ -1238,7 +1247,10 @@ class PrestigeTask(BaseTask):
             stronghold_res = {"success": True, "skipped": True, "user_disabled": True, "attacks": 0}
 
         # 4. جمع الموارد الأربعة خارج القلعة
-        if self.is_subtask_enabled("gather"):
+        if self.delegate_outside_to_march_manager:
+            self.log.info("ℹ️ [مهام الهيبة] جمع موارد الهيبة مُدار مركزياً عبر منسق الفيالق (March Manager) كأولوية ثالثة.")
+            gather_res = {"success": True, "skipped": True, "delegated": True, "dispatched": 0}
+        elif self.is_subtask_enabled("gather"):
             gather_res = await self.run_gather_prestige()
             await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
         else:
@@ -1293,21 +1305,27 @@ class PrestigeTask(BaseTask):
         else:
             executed_parts.append(f"متجر المهربين ({total_bought}/{self.target_smuggler_buys})")
 
-        if invaders_res.get("user_disabled"):
+        if invaders_res.get("delegated"):
+            skipped_parts.append("الغزاة (مُدارة في منسق الفيالق)")
+        elif invaders_res.get("user_disabled"):
             skipped_parts.append("الغزاة (معطل)")
         elif invaders_skipped:
             skipped_parts.append("الغزاة ✨")
         else:
             executed_parts.append(f"الغزاة ({total_invaders}/{self.invaders_count})")
 
-        if stronghold_res.get("user_disabled"):
+        if stronghold_res.get("delegated"):
+            skipped_parts.append("المعاقل (مُدارة في منسق الفيالق)")
+        elif stronghold_res.get("user_disabled"):
             skipped_parts.append("المعاقل (معطل)")
         elif stronghold_skipped:
             skipped_parts.append("المعاقل ✨")
         else:
             executed_parts.append(f"المعاقل ({total_strongholds}/{self.stronghold_count})")
 
-        if gather_res.get("user_disabled"):
+        if gather_res.get("delegated"):
+            skipped_parts.append("جمع الموارد (مُدارة في منسق الفيالق)")
+        elif gather_res.get("user_disabled"):
             skipped_parts.append("جمع الموارد (معطل)")
         elif gather_skipped:
             skipped_parts.append("جمع الموارد ✨")
@@ -1338,10 +1356,40 @@ class PrestigeTask(BaseTask):
             summary_txt += f"المتخطي: [{', '.join(skipped_parts)}]"
 
 
+        # فحص نهائي دقيق: هل جميع المهام الفرعية المفعلة مكتملة بالكامل اليوم في السيرفر؟
+        merit_now = self.conn.init_data.get("meritoriousTaskCtrl", {})
+        all_completed = True
+        pending_reasons = []
+
+        if merit_now:
+            final_quests = self.query_prestige_summary()
+            for st_key in ("smuggler", "invaders", "stronghold"):
+                if self.is_subtask_enabled(st_key):
+                    q = final_quests.get(st_key, {})
+                    if q.get("found", False) and not q.get("is_done", False):
+                        all_completed = False
+                        st_name = PRESTIGE_QUEST_NAMES.get(st_key, st_key)
+                        pending_reasons.append(f"{st_name} ({q['c_num']}/{q['l_num']})")
+
+            if self.is_subtask_enabled("gather"):
+                for res_meta in PRESTIGE_RESOURCES:
+                    qid = res_meta.get("quest_id")
+                    q = self.get_quest_info(qid)
+                    if q.get("found", False) and not q.get("is_done", False):
+                        all_completed = False
+                        pending_reasons.append(f"جمع {res_meta['name']} ({q['c_num']}/{q['l_num']})")
+        else:
+            all_completed = True
+
+        if not all_completed:
+            self.log.info(f"⏳ [تنبيه مهام الهيبة] لا تزال بعض المهام غير مكتملة اليوم: [{', '.join(pending_reasons)}] — ستُستأنف في الدورة القادمة تلقائياً فور توفر الفيالق.")
+
         msg = f"✅ اكتملت دورة مهام الهيبة! {summary_txt}"
         self.log.info(msg)
         return TaskResult.ok(
             msg,
+            all_completed=all_completed,
+            pending_reasons=pending_reasons,
             smuggler_buys=total_bought,
             smuggler_skipped=smuggler_skipped,
             invaders_attacks=total_invaders,
@@ -1442,6 +1490,7 @@ if __name__ == "__main__":
             "stronghold_max_lv": args.sh_maxlv,
             "stronghold_range": args.sh_range,
             "subtasks": args.subtasks,
+            "delegate_outside_to_march_manager": False,
         }
 
         task = PrestigeTask(conn, prestige_cfg)

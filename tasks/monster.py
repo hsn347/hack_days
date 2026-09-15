@@ -603,9 +603,16 @@ class MonsterTask(BaseTask):
                         if hero_data and hero_data.get('status', {}).get('state', 0) == 0:
                             available_form_heroes.append(hid)
 
-            if available_form_heroes:
+            if len(available_form_heroes) >= 2:
                 chosen_heroes = available_form_heroes[:2]
-                self.log.info(f"🎖️ تم اختيار أبطال التشكيلة المحفوظة ({formation_id}): {chosen_heroes}")
+                self.log.info(f"🎖️ تم اختيار بطلي التشكيلة المحفوظة ({formation_id}): {chosen_heroes}")
+            elif len(available_form_heroes) == 1:
+                hero1 = available_form_heroes[0]
+                self.log.info(f"ℹ️ أحد أبطال التشكيلة متاح ({hero1}) والآخر مشغول — جاري إكمال البطل الثاني بأفضل بطل حرب متاح...")
+                extra_busy = set(self._busy) | {hero1}
+                filler = _pick_combat_heroes(self._heroes, max_count=1, busy=extra_busy)
+                chosen_heroes = [hero1] + filler
+                self.log.info(f"⚔️ تشكيلة الأبطال المكتملة: {chosen_heroes}")
 
         # إذا كانت أبطال التشكيلة مشغولة أو بدون تشكيلة ثابتة: اختيار أبطال الحرب تلقائياً
         if not chosen_heroes:
@@ -619,8 +626,10 @@ class MonsterTask(BaseTask):
                 return "NO_HEROES"
             self.log.info(f"⚔️ أبطال الحرب المختارون: {chosen_heroes}")
 
-        # 7. تكوين جيش المسيرة
+        # 7. تكوين جيش المسيرة الذكي (التشكيلة مع الإكمال التلقائي للنقص بالجنود المناسبين)
         army_list = []
+        needed_target = troops_cfg or DEFAULT_TROOPS_COUNT
+
         if form_army_dict:
             for k, v in form_army_dict.items():
                 if str(k).isdigit() and str(v).isdigit():
@@ -634,8 +643,26 @@ class MonsterTask(BaseTask):
                         army_list.append({"id": tid, "num": take})
                         available[tid] -= take
 
-        if not army_list:
-            army_list = select_combat_army(available, needed_count=troops_cfg)
+        form_troops_count = sum(item['num'] for item in army_list)
+
+        if form_troops_count == 0:
+            if formation_id > 0:
+                self.log.info(f"⚠️ التشكيلة المحفوظة ({formation_id}) فارغة أو لا تتوفر أي من قواتها بالقلعة — جاري اختيار جيش قتالي متوازن بالكامل ({needed_target:,} جندي)...")
+            army_list = select_combat_army(available, needed_count=needed_target)
+        elif form_troops_count < needed_target:
+            deficit = needed_target - form_troops_count
+            self.log.info(
+                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين ({form_troops_count:,}/{needed_target:,} جندي) — "
+                f"جاري إكمال النقص ({deficit:,} جندي) تلقائياً بأفضل قوات قتالية متوازنة..."
+            )
+            extra_army = select_combat_army(available, needed_count=deficit)
+            if extra_army:
+                army_dict_combined: Dict[int, int] = {}
+                for item in army_list:
+                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
+                for item in extra_army:
+                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
+                army_list = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
 
         if not army_list:
             self.log.warning("⚠️ لا توجد قوات قتالية متوفرة بالقلعة لإرسال المسيرة!")

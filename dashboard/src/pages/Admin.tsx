@@ -576,6 +576,7 @@ export function AdminPage() {
   const [manageCastlesUser, setManageCastlesUser] = useState<User | null>(null)
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [sortByLeastDays, setSortByLeastDays] = useState(false)
   const { data: users = [], isLoading } = useAllUsers()
   const { data: stats } = useAdminStats()
   const banUser = useBanUser()
@@ -595,12 +596,26 @@ export function AdminPage() {
   if (!firebaseUser) return <Navigate to="/login" replace />
   if (!isAdmin) return <Navigate to="/dashboard" replace />
 
+  const getDaysRemaining = (u: User) => {
+    const expDate = u.subscription?.expires_at ? new Date(u.subscription.expires_at) : null
+    const isLifetime = expDate ? expDate.getFullYear() >= 2090 : false
+    if (isLifetime) return 999999
+    if (!expDate || isNaN(expDate.getTime())) return -999999
+    return Math.ceil((expDate.getTime() - Date.now()) / 86400000)
+  }
+
   // فلترة قائمة المستخدمين لعرض العملاء والمشتركين فقط واستبعاد حساب المشرف الأعلى نهائياً
   const clientUsers = users.filter(u => !isSuperAdminUser(u))
   const filtered = (search
     ? clientUsers.filter(u => u.email.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()) || u.uid.includes(search))
     : clientUsers
-  ).slice().sort((a, b) => (b.subscription?.current_castles_count || 0) - (a.subscription?.current_castles_count || 0))
+  ).slice().sort((a, b) => {
+    if (sortByLeastDays) {
+      const diff = getDaysRemaining(a) - getDaysRemaining(b)
+      if (diff !== 0) return diff
+    }
+    return (b.subscription?.current_castles_count || 0) - (a.subscription?.current_castles_count || 0)
+  })
 
   const handleBan = (u: User) => {
     if (isSuperAdminUser(u)) {
@@ -719,17 +734,38 @@ export function AdminPage() {
                 {filtered.length}
               </span>
             </h2>
-            <div className="relative flex items-center w-full sm:w-auto">
-              <Search size={15} className="top-1/2 z-10 absolute text-slate-400 -translate-y-1/2 pointer-events-none start-3" />
-              <input
-                id="admin-search"
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={t('admin.searchUsers')}
-                className="bg-slate-100/80 focus:bg-white dark:bg-white/5 shadow-xs py-2 ps-9 pe-3 border border-slate-200 focus:border-emerald-500 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 w-full sm:w-64 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm transition-all"
-                style={{ paddingInlineStart: '2.4rem' }}
-              />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial">
+                <Search size={15} className="top-1/2 z-10 absolute text-slate-400 -translate-y-1/2 pointer-events-none start-3" />
+                <input
+                  id="admin-search"
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder={t('admin.searchUsers')}
+                  className="bg-slate-100/80 focus:bg-white dark:bg-white/5 shadow-xs py-2 ps-9 pe-3 border border-slate-200 focus:border-emerald-500 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 w-full sm:w-64 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm transition-all"
+                  style={{ paddingInlineStart: '2.4rem' }}
+                />
+              </div>
+              <button
+                type="button"
+                id="admin-sort-least-days"
+                onClick={() => setSortByLeastDays(!sortByLeastDays)}
+                title={sortByLeastDays ? 'إلغاء الترتيب (العودة للافتراضي)' : 'ترتيب: المستخدمون الأقل مدة اشتراك في الأعلى'}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all shrink-0 cursor-pointer ${
+                  sortByLeastDays
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 shadow-xs ring-1 ring-amber-500/30'
+                    : 'bg-slate-100/80 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-white/10'
+                }`}
+              >
+                <Clock size={15} className={sortByLeastDays ? 'text-amber-500' : 'text-slate-400'} />
+                <span>الأقرب انتهاءً</span>
+                {sortByLeastDays && (
+                  <span className="bg-amber-500/20 px-1.5 py-0.5 rounded text-[10px] font-mono leading-none">
+                    مفعّل
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -745,7 +781,18 @@ export function AdminPage() {
                       <th className="px-5 py-3 text-start">المستخدم</th>
                       <th className="px-3 py-3 text-start">{t('admin.role')}</th>
                       <th className="px-3 py-3 text-center">الحسابات</th>
-                      <th className="px-3 py-3 text-start">انتهاء الاشتراك</th>
+                      <th
+                        className="px-3 py-3 text-start cursor-pointer hover:text-emerald-500 transition-colors select-none"
+                        onClick={() => setSortByLeastDays(!sortByLeastDays)}
+                        title="تبديل الترتيب حسب الأقل مدة اشتراك"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>انتهاء الاشتراك</span>
+                          {sortByLeastDays && (
+                            <span className="text-[10px] text-amber-500 font-bold">▲ الأقل</span>
+                          )}
+                        </div>
+                      </th>
                       <th className="px-3 py-3 text-start">الحالة</th>
                       <th className="px-5 py-3 text-end">الإجراءات</th>
                     </tr>

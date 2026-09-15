@@ -153,17 +153,17 @@ def _pick_combat_heroes(heroes: list, max_count: int = 2, busy: Set[int] = None)
 
 def select_combat_army(available: Dict[int, int], needed_count: int = DEFAULT_TROOPS_COUNT) -> List[Dict[str, int]]:
     """
-    اختيار تشكيلة جيش قتالية متوازنة في حال كانت قوات التشكيلة غير كافية:
-      1. المشاة (401..414)
-      2. الفرسان (501..514)
-      3. الرماة (601..614)
-      4. القوات الخاصة (800+)
-      5. عربات الحصار (701..714)
+    اختيار تشكيلة جيش قتالية متوازنة بالعدد المناسب:
+    توزيع متوازن بين المشاة، الفرسان، والرماة بحسب المتاح في القلعة من الرتب الأعلى.
+    1. المشاة (401..414)
+    2. الفرسان (501..514)
+    3. الرماة (601..614)
+    4. عربات الحصار (701..714) كاحتياط
     """
-    infantry = []
-    cavalry  = []
-    archers  = []
-    carts    = []
+    infantry = []   # 401..414
+    cavalry  = []   # 501..514
+    archers  = []   # 601..614
+    carts    = []   # 701..714 كاحتياط
 
     for tid, count in available.items():
         if count <= 0:
@@ -180,31 +180,61 @@ def select_combat_army(available: Dict[int, int], needed_count: int = DEFAULT_TR
         elif 700 <= tid < 800:
             carts.append((tid, count))
 
+    # ترتيب كل صنف من الرتبة الأعلى إلى الأدنى
     infantry.sort(key=lambda x: x[0], reverse=True)
     cavalry.sort(key=lambda x: x[0], reverse=True)
     archers.sort(key=lambda x: x[0], reverse=True)
     carts.sort(key=lambda x: x[0], reverse=True)
 
-    priority_groups = [infantry, cavalry, archers, carts]
-    army_list = []
-    remaining = needed_count
+    combat_branches = [b for b in [infantry, cavalry, archers] if b]
+    if not combat_branches:
+        combat_branches = [carts] if carts else []
 
-    for group in priority_groups:
-        for tid, count in group:
+    if not combat_branches:
+        return []
+
+    army_map: Dict[int, int] = {}
+    remaining_needed = needed_count
+
+    # جولة 1: توزيع متوازن متساوٍ بين الأصناف القتالية المتوفرة
+    branch_quota = max(1, remaining_needed // len(combat_branches))
+    for branch in combat_branches:
+        quota = min(branch_quota, remaining_needed)
+        branch_taken = 0
+        for tid, count in branch:
             avail = available.get(tid, 0)
             if avail <= 0:
                 continue
-            take = min(avail, remaining)
+            take = min(avail, quota - branch_taken)
             if take > 0:
-                army_list.append({"id": tid, "num": take})
+                army_map[tid] = army_map.get(tid, 0) + take
                 available[tid] -= take
-                remaining -= take
-                if remaining <= 0:
+                branch_taken += take
+                remaining_needed -= take
+                if branch_taken >= quota or remaining_needed <= 0:
                     break
-        if remaining <= 0:
+        if remaining_needed <= 0:
             break
 
-    return army_list
+    # جولة 2: استكمال العدد المتبقي من أي قوات قتالية متاحة (بالترتيب من الأعلى للأدنى)
+    if remaining_needed > 0:
+        all_branches = combat_branches + ([carts] if carts and carts not in combat_branches else [])
+        for branch in all_branches:
+            for tid, count in branch:
+                avail = available.get(tid, 0)
+                if avail <= 0:
+                    continue
+                take = min(avail, remaining_needed)
+                if take > 0:
+                    army_map[tid] = army_map.get(tid, 0) + take
+                    available[tid] -= take
+                    remaining_needed -= take
+                    if remaining_needed <= 0:
+                        break
+            if remaining_needed <= 0:
+                break
+
+    return [{"id": tid, "num": num} for tid, num in army_map.items() if num > 0]
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -727,9 +757,26 @@ class ElfBossTask(BaseTask):
                     march_army.append({"id": tid, "num": take})
                     available[tid] -= take
 
-        if not march_army:
-            self.log.info("ℹ️ جنود التشكيلة المحددة غير متوفرين بالكامل، جاري اختيار أفضل قوات قتالية متاحة...")
-            march_army = select_combat_army(available, needed_count=DEFAULT_TROOPS_COUNT)
+        form_troops_count = sum(item['num'] for item in march_army)
+        needed_target = getattr(self, "troops_count", None) or DEFAULT_TROOPS_COUNT
+
+        if form_troops_count == 0:
+            self.log.info(f"⚠️ جنود التشكيلة المحددة غير متوفرين بالكامل بالقلعة — جاري اختيار أفضل قوات قتالية متوازنة بالكامل ({needed_target:,} جندي)...")
+            march_army = select_combat_army(available, needed_count=needed_target)
+        elif form_troops_count < needed_target:
+            deficit = needed_target - form_troops_count
+            self.log.info(
+                f"ℹ️ جنود تشكيلة العفريت غير كافيين ({form_troops_count:,}/{needed_target:,} جندي) — "
+                f"جاري إكمال النقص ({deficit:,} جندي) تلقائياً بأفضل قوات قتالية متوازنة..."
+            )
+            extra_army = select_combat_army(available, needed_count=deficit)
+            if extra_army:
+                army_dict_combined: Dict[int, int] = {}
+                for item in march_army:
+                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
+                for item in extra_army:
+                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
+                march_army = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
 
         return march_army
 

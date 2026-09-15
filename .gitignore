@@ -17,6 +17,7 @@ dumps/
 
 # Sensitive keys and credentials
 firebase_service_account*.json
+firebase_service_account.json.json
 session_cache.json
 .env
 .env.*
@@ -27,7 +28,32 @@ session_cache.json
 .sched_*.json
 _frida_session.js
 
-# SQLite local databases
+# SQLite local databases and runtime data
 castles.db*
 *.db
 *.sqlite3
+exclude_history.json
+shared_gather_history.json
+
+# Development / experimental tools
+auto_elf_boss.py
+bot_shell.py
+live_sniffer.py
+simple_cmd.js
+onemt_bot.py
+sniffer_log.txt
+الحيوان.txt
+tasks/show_quests.py
+
+# Reference docs (not needed in production)
+TASKS_INDEX.md
+firebase_schema.json
+castle_prereqs.json
+
+# Reference images (development only)
+الصور اللعبة/
+صور لوحة التحكم التي نريد مثلها/
+
+# AI / Antigravity local config
+.agents/
+GEMINI.md

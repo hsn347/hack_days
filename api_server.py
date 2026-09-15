@@ -14,11 +14,10 @@ api_server.py — خادم FastAPI لإدارة البوتات
 
 from __future__ import annotations
 
-import os, sys, json, time, logging, argparse, subprocess, threading, asyncio, queue, signal
+import os, sys, json, time, logging, argparse, threading, asyncio, queue, signal
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor
-from logging.handlers import RotatingFileHandler
 
 if sys.platform == "win32":
     try:
@@ -38,24 +37,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import uvicorn
 
-# ── Production Logging with RotatingFileHandler (10MB max, 3 backups) ────
-log_formatter = logging.Formatter("[%(asctime)s][%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(log_formatter)
-
-rotating_file_handler = RotatingFileHandler(
-    os.path.join(_ROOT, "api_server.log"),
-    maxBytes=10 * 1024 * 1024,  # 10 MB per file
-    backupCount=3,
-    encoding="utf-8"
-)
-rotating_file_handler.setFormatter(log_formatter)
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[console_handler, rotating_file_handler]
-)
+# ── Logging: صمت تام — بدون terminal بدون ملف ────────────────────
+# كل المعلومات تمر عبر Firebase (log_callback → FIREBASE_EVENT)
+logging.disable(logging.CRITICAL)  # تعطيل كامل لكل رسائل الـ logging
 log = logging.getLogger("api_server")
+
 
 # ══════════════════════════════════════════════════════════════════
 # FastAPI App & Secure CORS
@@ -76,57 +62,39 @@ app.add_middleware(
 )
 
 # ══════════════════════════════════════════════════════════════════
-# إدارة العمليات (Thread-safe)
+# إدارة الـ Threads (Thread Pool Architecture — بدل subprocess)
+# كل قلعة = thread خفيف (~2MB) بدل subprocess ثقيل (~60MB)
 # ══════════════════════════════════════════════════════════════════
 
-_lock       = threading.Lock()
-_procs:   Dict[str, subprocess.Popen]   = {}   # castle_id → subprocess
-_reserved: Set[str]                     = set() # castle_ids محجوزة (بدأت لكن لم تُسجَّل بعد)
-_log_qs:  Dict[str, "queue.Queue[str]"] = {}    # castle_id → queue للـ logs
-_conn_states: Dict[str, str]            = {}    # castle_id → 'connected' | 'disconnected' | 'reconnecting'
-_user_stopped: Set[str]                 = set() # castle_ids التي تم إيقافها يدوياً من المستخدم
-_castle_emails: Dict[str, str]          = {}    # castle_id → email
-_castle_users:  Dict[str, str]          = {}    # castle_id → user_id
+_lock         = threading.Lock()
+_threads:     Dict[str, threading.Thread] = {}   # castle_id → thread
+_stop_events: Dict[str, threading.Event]  = {}   # castle_id → stop signal
+_reserved:    Set[str]                    = set() # castle_ids محجوزة (بدأت لكن لم تُسجَّل بعد)
+_log_qs:      Dict[str, "queue.Queue[str]"] = {}  # castle_id → queue للـ logs
+_conn_states: Dict[str, str]              = {}    # castle_id → 'connected' | 'disconnected' | 'reconnecting' | 'waiting'
+_user_stopped: Set[str]                   = set() # castle_ids التي تم إيقافها يدوياً من المستخدم
+_castle_emails: Dict[str, str]            = {}    # castle_id → email
+_castle_users:  Dict[str, str]            = {}    # castle_id → user_id
 
 
 def _is_running(castle_id: str) -> bool:
     if castle_id in _reserved:
         return True
-    proc = _procs.get(castle_id)
-    return proc is not None and proc.poll() is None
-
-
-def _kill_process_tree(proc: subprocess.Popen):
-    """إنهاء العملية وشجرتها بالكامل فوراً بدون تعليق وبشكل آمن على Windows و Linux/VPS."""
-    if proc is None or proc.poll() is not None:
-        return
-    try:
-        if sys.platform == "win32":
-            subprocess.run(f"taskkill /F /T /PID {proc.pid}", shell=True, capture_output=True)
-        else:
-            try:
-                pgid = os.getpgid(proc.pid)
-                os.killpg(pgid, signal.SIGKILL)
-            except Exception:
-                proc.kill()
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+    t = _threads.get(castle_id)
+    return t is not None and t.is_alive()
 
 
 def _get_real_status(castle_id: str) -> str:
-    """الحالة الحقيقية: العملية + حالة اتصال اللعبة معاً."""
+    """الحالة الحقيقية: الـ thread + حالة اتصال اللعبة معاً."""
     with _lock:
         if castle_id in _reserved:
             return 'starting'
-        proc = _procs.get(castle_id)
-        if proc is None or proc.poll() is not None:
-            return 'idle'  # العملية متوقفة
-        # العملية شغالة — هل الاتصال بالجيم سيرفر نشط؟
+        t = _threads.get(castle_id)
+        if t is None or not t.is_alive():
+            return 'idle'  # الـ thread متوقف
+        # الـ thread شغال — هل الاتصال بالجيم سيرفر نشط؟
         conn = _conn_states.get(castle_id, 'connected')  # إذا لم يُبلَّغ بعد → نفترض متصل
-        if conn == 'disconnected': 
+        if conn == 'disconnected':
             return 'disconnected'  # شخص دخل من الجوال
         if conn == 'reconnecting':
             return 'reconnecting'
@@ -359,7 +327,8 @@ def _tail_file(filepath: str, n_lines: int = 100) -> List[str]:
 
 
 # ══════════════════════════════════════════════════════════════════
-# تشغيل البوت في thread منفصل
+# تشغيل البوت مباشرةً كـ Thread خفيف (Thread Pool Architecture)
+# لا subprocess — كل قلعة تشغّل BotManager داخل نفس الـ process
 # ══════════════════════════════════════════════════════════════════
 
 def _bot_thread(req: StartBotRequest):
@@ -367,14 +336,17 @@ def _bot_thread(req: StartBotRequest):
     user_id   = req.user_id
     email     = req.email
 
-    # 1. إعداد queue للـ logs
+    # 1. إعداد queue للـ logs وإنشاء stop_event فوراً
     log_q: "queue.Queue[str]" = queue.Queue(maxsize=500)
+    stop_event = threading.Event()
     with _lock:
-        _log_qs[castle_id] = log_q
+        _log_qs[castle_id]      = log_q
+        _stop_events[castle_id] = stop_event  # تسجيل فوري ليُمكن stop_bot() من الوصول
         _castle_emails[castle_id] = email
-        _castle_users[castle_id] = user_id
+        _castle_users[castle_id]  = user_id
+        _reserved.discard(castle_id)
 
-    log.info(f"🚀 [{email}] بدء تشغيل البوت...")
+    log.info(f"🚀 [{email}] بدء تشغيل البوت (Thread Pool)...")
     _update_firebase_status(user_id, castle_id, "running", "البوت يعمل الآن...")
 
     # 2. تسجيل الدخول إذا لم تكن الجلسة موجودة
@@ -391,37 +363,7 @@ def _bot_thread(req: StartBotRequest):
             log.warning(f"⚠️ [{email}] جلسة: {e}")
             log_q.put(f"[{datetime.now():%H:%M:%S}] ⚠️ تحذير: {e}")
 
-    # 3. كتابة ملف إعدادات Firebase
-    config_path = os.path.join(_ROOT, f".bot_cfg_{castle_id}.json")
-    try:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(req.config, f, ensure_ascii=False)
-    except Exception as e:
-        log.error(f"❌ [{email}] فشل كتابة config: {e}")
-        with _lock:
-            _reserved.discard(castle_id)
-        _update_firebase_status(user_id, castle_id, "error", str(e))
-        return
-
-    # 4. بناء الأمر
-    cmd = [
-        sys.executable,
-        os.path.join(_ROOT, "bot_manager.py"),
-        "--email",              email,
-        "--firebase-user-id",   user_id,
-        "--firebase-castle-id", castle_id,
-        "--firebase-config",    config_path,
-        "--loop",
-        "--loop-interval",      str(req.loop_interval),
-    ]
-    log.info(f"▶️  [{email}] cmd: bot_manager.py --firebase-config ... --loop")
-    log_q.put(f"[{datetime.now():%H:%M:%S}] ▶️  بدء البوت...")
-
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUNBUFFERED"] = "1"
-
-    # 5. ملف log البوت مع التدوير التلقائي (Auto Log Rotation لمنع امتلاء قرص السيرفر)
+    # 3. ملف log البوت مع التدوير التلقائي
     bot_log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
     try:
         if os.path.exists(bot_log_path) and os.path.getsize(bot_log_path) > 10 * 1024 * 1024:
@@ -434,191 +376,101 @@ def _bot_thread(req: StartBotRequest):
     except Exception:
         pass
 
+    # 4. إعداد log_callback — يُرسل كل سطر إلى queue اللوحة وملف الـ log معاً
+    import re as _re
+    _log_file_handle = None
     try:
-        with open(bot_log_path, "a", encoding="utf-8", errors="replace") as lf:
-            lf.write(f"\n{'='*60}\n[{datetime.now():%Y-%m-%d %H:%M:%S}] دورة جديدة\n{'='*60}\n")
-            lf.flush()
+        _log_file_handle = open(bot_log_path, "a", encoding="utf-8", errors="replace")
+        _log_file_handle.write(f"\n{'='*60}\n[{datetime.now():%Y-%m-%d %H:%M:%S}] دورة جديدة\n{'='*60}\n")
+        _log_file_handle.flush()
+    except Exception:
+        pass
 
-            popen_kwargs: Dict[str, Any] = {
-                "cwd": _ROOT,
-                "env": env,
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-                "encoding": "utf-8",
-                "errors": "replace",
-                "bufsize": 1,
-            }
-            if sys.platform != "win32":
-                popen_kwargs["start_new_session"] = True
-
-            proc = subprocess.Popen(cmd, **popen_kwargs)
-
-        with _lock:
-            _procs[castle_id] = proc
-            _reserved.discard(castle_id)
-
-        stop_event = threading.Event()
-
-        # 6. قراءة stdout في thread آخر — يحلل السطور لمعرفة حالة الاتصال ومزامنتها مع Firebase
-        def _reader():
-            """يقرأ stdout كل سطر ويُحدّث Firebase فوراً بمجرد ظهور إشارة الانقطاع أو الاتصال أو الانتظار."""
-            DISCONNECT_SIGNALS = (
-                "دخول من جهاز آخر",       # 📱 [تنبيه: دخول من جهاز آخر]
-                "انقطع اتصال الحساب",     # ⚠️ [تنبيه السيرفر] انقطع اتصال الحساب
-                "other_device",
-                "Other Device Login",
-            )
-            RECONNECTING_SIGNALS = (
-                "سيتوقف البوت مؤقتاً",    # ⏳ ينتظر 60 ثانية
-                "جاري إعادة الاتصال",     # 🔄 [انقطاع شبكي]
-                "متبقي على محاولة",       # ⏳ [متبقي] عداد تنازلي
-            )
-            CONNECTED_SIGNALS = (
-                "تم الاتصال والمصافحة بنجاح 100%",  # ✅ login_and_connect
-                "تم الاتصال بنجاح!",
-                "دورة رقم #",
-                "بدء دورة رقم",
-                "بدء مهمة",
-                "بدء تنفيذ:",
-                "تجهيز مسيرة",
-                "تم إطلاق مسيرة",
-                "Gate] ✓",
-                "جاري تنفيذ:",
-            )
-            WAITING_SIGNALS = (
-                "💤 انتظار ",                 # 💤 انتظار X دقيقة...
-                "بانتظار الدورة القادمة",     # بانتظار الدورة القادمة الساعة XX:XX
-                "الدورة القادمة الساعة:",     # ✅ انتهت الدورة #X — الدورة القادمة الساعة: ...
-            )
+    def _log_callback(line: str):
+        """يُعالج كل سطر من BotManager: يكتبه للـ log file ويُرسله للـ queue ويُحدّث conn_state."""
+        if _log_file_handle:
             try:
-                with open(bot_log_path, "a", encoding="utf-8", errors="replace") as lf:
-                    for line in proc.stdout:
-                        line = line.rstrip("\n")
-                        lf.write(line + "\n")
-                        lf.flush()
-                        stamped = f"[{datetime.now():%H:%M:%S}] {line}"
-                        try:
-                            log_q.put_nowait(stamped)
-                        except queue.Full:
-                            pass
-
-                        # إذا طُلب إيقاف العملية، نمنع فوراً أي تحديثات running/waiting إلى Firebase
-                        if stop_event.is_set():
-                            continue
-
-                        # ── 1. فحص وسوم الأحداث الصريحة القادمة من البوت ──
-                        if "[FIREBASE_EVENT]" in line:
-                            try:
-                                parts = line.split("[FIREBASE_EVENT]", 1)[1].strip()
-                                import re
-                                m_st = re.search(r'conn_state=(\w+)', parts)
-                                m_nr = re.search(r'next_run_time=(\S+)', parts)
-                                m_msg = re.search(r'message=(.+?)(?:\s+next_run_time=\S+)?$', parts)
-                                ev_state = m_st.group(1) if m_st else ""
-                                ev_msg = m_msg.group(1).strip() if m_msg else ""
-                                ev_nr = m_nr.group(1) if m_nr else None
-                                if ev_state and not stop_event.is_set():
-                                    with _lock:
-                                        prev_ev = _conn_states.get(castle_id)
-                                        _conn_states[castle_id] = ev_state
-                                    if prev_ev != ev_state:
-                                        bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
-                                        update_firebase_status_async(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
-                            except Exception as ex:
-                                log.debug(f"Firebase event parse error: {ex}")
-
-                        elif "[RESOURCE_SYNC]" in line:
-                            try:
-                                parts = line.split("[RESOURCE_SYNC]", 1)[1].strip()
-                                rmap = {}
-                                for token in parts.split():
-                                    if "=" in token:
-                                        k, v = token.split("=", 1)
-                                        if v.lstrip("-").isdigit():
-                                            rmap[k] = int(v)
-                                if rmap:
-                                    now_iso = datetime.now(timezone.utc).isoformat()
-                                    r_data = {
-                                        "food":         rmap.get("food", 0),
-                                        "wood":         rmap.get("wood", 0),
-                                        "iron":         rmap.get("iron", 0),
-                                        "diamond":      rmap.get("diamond", 0),
-                                        "gold":         rmap.get("gold", 0),
-                                        "stamina":      rmap.get("stamina", 100),
-                                        "last_updated": now_iso,
-                                    }
-                                    c_data = {}
-                                    if "power" in rmap:
-                                        c_data["lord_power"] = rmap["power"]
-                                    _sync_castle_to_firebase(
-                                        email,
-                                        {"resources": r_data, "castle_info": c_data} if c_data else {"resources": r_data},
-                                        user_id=user_id,
-                                        castle_id=castle_id,
-                                    )
-                            except Exception as ex:
-                                log.debug(f"Resource sync parse error: {ex}")
-
-                        # ── 2. فحص السطر بالكلمات المفتاحية لتحديث Firebase فقط عند تغير الحالة ──
-                        elif any(s in line for s in DISCONNECT_SIGNALS):
-                            with _lock:
-                                prev_st = _conn_states.get(castle_id)
-                                _conn_states[castle_id] = 'disconnected'
-                            if prev_st != 'disconnected':
-                                log.info(f"📶 [{castle_id[:12]}] انقطاع الاتصال (دخول من جهاز آخر) → disconnected")
-                                update_firebase_status_async(user_id, castle_id, 'running', 'تم تسجيل الدخول من جهاز آخر — البوت متوقف مؤقتاً', 'disconnected')
-
-                        elif any(s in line for s in RECONNECTING_SIGNALS):
-                            with _lock:
-                                prev_st = _conn_states.get(castle_id)
-                                _conn_states[castle_id] = 'reconnecting'
-                            if prev_st != 'reconnecting':
-                                log.info(f"🔄 [{castle_id[:12]}] جاري إعادة الاتصال بالقلعة...")
-                                update_firebase_status_async(user_id, castle_id, 'running', 'جاري إعادة الاتصال بالقلعة...', 'reconnecting')
-
-                        elif any(s in line for s in CONNECTED_SIGNALS):
-                            with _lock:
-                                prev_st = _conn_states.get(castle_id)
-                                _conn_states[castle_id] = 'connected'
-                            if prev_st != 'connected':
-                                log.info(f"✅ [{castle_id[:12]}] اتصال نشط → connected")
-                                msg = line if ("تنفيذ" in line or "مهمة" in line) else 'البوت متصل بالقلعة ويعمل الآن'
-                                update_firebase_status_async(user_id, castle_id, 'running', msg, 'connected')
-
-                        elif any(s in line for s in WAITING_SIGNALS):
-                            with _lock:
-                                prev_st = _conn_states.get(castle_id)
-                                _conn_states[castle_id] = 'waiting'
-                            if prev_st != 'waiting':
-                                log.info(f"💤 [{castle_id[:12]}] بانتظار الدورة القادمة → waiting")
-                                msg = line if "الساعة" in line else 'بانتظار موعد الدورة القادمة...'
-                                update_firebase_status_async(user_id, castle_id, 'running', msg, 'waiting')
+                _log_file_handle.write(line + "\n")
+                _log_file_handle.flush()
             except Exception:
                 pass
+        stamped = f"[{datetime.now():%H:%M:%S}] {line}"
+        try:
+            log_q.put_nowait(stamped)
+        except queue.Full:
+            pass
 
-        reader_t = threading.Thread(target=_reader, daemon=True)
-        reader_t.start()
+        if stop_event.is_set():
+            return
 
+        # ── تحليل [FIREBASE_EVENT] ──
+        if "[FIREBASE_EVENT]" in line:
+            try:
+                parts = line.split("[FIREBASE_EVENT]", 1)[1].strip()
+                m_st  = _re.search(r'conn_state=(\w+)', parts)
+                m_nr  = _re.search(r'next_run_time=(\S+)', parts)
+                m_msg = _re.search(r'message=(.+?)(?:\s+next_run_time=\S+)?$', parts)
+                ev_state = m_st.group(1) if m_st else ""
+                ev_msg   = m_msg.group(1).strip() if m_msg else ""
+                ev_nr    = m_nr.group(1) if m_nr else None
+                if ev_state:
+                    with _lock:
+                        prev_ev = _conn_states.get(castle_id)
+                        _conn_states[castle_id] = ev_state
+                    if prev_ev != ev_state:
+                        bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
+                        update_firebase_status_async(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
+            except Exception as ex:
+                log.debug(f"Firebase event parse error: {ex}")
 
-        # 7. فحص دوري مستمر لإيقاف العملية فوراً عند الحظر أو انتهاء الاشتراك أو الإيقاف من لوحة التحكم
+        # ── تحليل [RESOURCE_SYNC] ──
+        elif "[RESOURCE_SYNC]" in line:
+            try:
+                parts = line.split("[RESOURCE_SYNC]", 1)[1].strip()
+                rmap = {}
+                for token in parts.split():
+                    if "=" in token:
+                        k, v = token.split("=", 1)
+                        if v.lstrip("-").isdigit():
+                            rmap[k] = int(v)
+                if rmap:
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    r_data = {
+                        "food":         rmap.get("food", 0),
+                        "wood":         rmap.get("wood", 0),
+                        "iron":         rmap.get("iron", 0),
+                        "diamond":      rmap.get("diamond", 0),
+                        "gold":         rmap.get("gold", 0),
+                        "stamina":      rmap.get("stamina", 100),
+                        "last_updated": now_iso,
+                    }
+                    c_data = {}
+                    if "power" in rmap:
+                        c_data["lord_power"] = rmap["power"]
+                    _sync_castle_to_firebase(
+                        email,
+                        {"resources": r_data, "castle_info": c_data} if c_data else {"resources": r_data},
+                        user_id=user_id,
+                        castle_id=castle_id,
+                    )
+            except Exception as ex:
+                log.debug(f"Resource sync parse error: {ex}")
+
+    # 5. فحص الاشتراك دورياً في thread خفيف
+    forced_stop_reason = ""
+
+    def _subscription_guard():
+        nonlocal forced_stop_reason
         check_counter = 0
-        forced_stop_reason = ""
-        while proc.poll() is None:
-            time.sleep(5)
+        while not stop_event.wait(timeout=5):
             check_counter += 1
-
-            # فحص حالة المستخدم واشتراكه كل 30 ثانية باستخدام الكاش (60s TTL)
             if check_counter % 6 == 0:
                 valid, reason = _check_user_sub_cached(user_id)
                 if not valid:
                     forced_stop_reason = reason
+                    log.warning(f"🛑 [{email}] انتهاء اشتراك أو حظر: {reason}")
                     stop_event.set()
-                    log.warning(f"🛑 [{email}] كشف حظر أو انتهاء اشتراك — إنهاء فوري للعملية (PID={proc.pid}): {reason}")
-                    _kill_process_tree(proc)
                     break
-
-            # فحص حالة مستند القلعة في Firestore كل 60 ثانية (لأي تعديل يدوي خارجي)
             if check_counter % 12 == 0:
                 try:
                     import firebase_admin
@@ -629,96 +481,68 @@ def _bot_thread(req: StartBotRequest):
                         if c_snap.exists:
                             c_state = (c_snap.to_dict() or {}).get("bot_status", {}).get("state", "idle")
                             if c_state in ("idle", "banned"):
+                                log.info(f"⏹️ [{email}] طلب إيقاف من Firestore (state={c_state})")
                                 stop_event.set()
-                                log.info(f"⏹️ [{email}] تم طلب إيقاف القلعة من Firestore (state={c_state})")
-                                _kill_process_tree(proc)
                                 break
                 except Exception as ex:
                     log.debug(f"Castle guard exception: {ex}")
 
-        # ضمان إيقاف تدفق reader_t وانتظار تفريغ مخرجات العملية قبل التحديث النهائي
-        stop_event.set()
-        try:
-            reader_t.join(timeout=2.0)
-        except Exception:
-            pass
+    guard_t = threading.Thread(target=_subscription_guard, daemon=True, name=f"guard-{castle_id[:10]}")
+    guard_t.start()
 
-        ret = proc.poll()
-        if ret is None:
-            _kill_process_tree(proc)
-            ret = proc.poll() or 0
+    # 6. تشغيل BotManager مباشرةً داخل نفس الـ process
+    try:
+        # إعادة تحميل الوحدات لضمان تطبيق أي تعديلات برمجية جديدة تلقائياً
+        import sys, importlib
+        for mod_name in ("tasks.march_manager", "bot_manager"):
+            if mod_name in sys.modules:
+                try:
+                    importlib.reload(sys.modules[mod_name])
+                except Exception:
+                    pass
+        from bot_manager import BotManager
+        manager = BotManager(
+            email,
+            req.config,
+            reconnect_wait_seconds=60,
+            user_id=user_id,
+            castle_id=castle_id,
+            stop_event=stop_event,
+            log_callback=_log_callback,
+        )
+        asyncio.run(manager.run_loop(loop_interval_minutes=req.loop_interval))
 
     except Exception as e:
-        log.error(f"💥 [{email}] خطأ: {e}")
+        log.error(f"💥 [{email}] خطأ في البوت: {e}", exc_info=True)
         log_q.put(f"[{datetime.now():%H:%M:%S}] 💥 خطأ: {e}")
         _update_firebase_status(user_id, castle_id, "error", str(e), conn_state="error")
-        if 'proc' in locals() and proc and proc.poll() is None:
-            _kill_process_tree(proc)
-        with _lock:
-            _procs.pop(castle_id, None)
-            _reserved.discard(castle_id)
-            _castle_users.pop(castle_id, None)
-        return
     finally:
-        try:
-            if os.path.exists(config_path):
-                os.remove(config_path)
-        except Exception:
-            pass
+        stop_event.set()
+        if _log_file_handle:
+            try: _log_file_handle.close()
+            except Exception: pass
 
-    # 8. تنظيف وتحديث الحالة
-    was_user_stopped = False
-    with _lock:
-        _procs.pop(castle_id, None)
-        _log_qs.pop(castle_id, None)
-        _conn_states.pop(castle_id, None)  # تنظيف حالة الاتصال
-        _castle_users.pop(castle_id, None)
-        if castle_id in _user_stopped:
+        was_user_stopped = castle_id in _user_stopped
+        with _lock:
+            _threads.pop(castle_id, None)
+            _stop_events.pop(castle_id, None)
+            _log_qs.pop(castle_id, None)
+            _conn_states.pop(castle_id, None)
+            _castle_users.pop(castle_id, None)
             _user_stopped.discard(castle_id)
-            was_user_stopped = True
 
+    # 7. تحديث الحالة النهائية
     if forced_stop_reason:
-        end_msg = f"[{datetime.now():%H:%M:%S}] 🛑 تم إيقاف البوت إجبارياً من السيرفر: {forced_stop_reason}"
-        log_q.put(end_msg)
-        log.info(f"🛑 [{email}] تم إيقاف العملية وإلغاء حجز موارد النظام: {forced_stop_reason}")
-        _update_firebase_status(
-            user_id, castle_id,
-            "idle",
-            f"متوقف إجبارياً: {forced_stop_reason}",
-            conn_state="idle"
-        )
+        log_q.put(f"[{datetime.now():%H:%M:%S}] 🛑 إيقاف إجباري: {forced_stop_reason}")
+        log.info(f"🛑 [{email}] إيقاف إجباري: {forced_stop_reason}")
+        _update_firebase_status(user_id, castle_id, "idle", f"متوقف إجبارياً: {forced_stop_reason}", conn_state="idle")
     elif was_user_stopped:
-        end_msg = f"[{datetime.now():%H:%M:%S}] ⏹️ تم إيقاف البوت بواسطة المستخدم"
-        log_q.put(end_msg)
-        log.info(f"⏹️ [{email}] تم الإيقاف يدوياً بواسطة المستخدم")
-        _update_firebase_status(
-            user_id, castle_id,
-            "idle",
-            "تم إيقاف البوت بواسطة المستخدم",
-            conn_state="idle"
-        )
-    elif ret != 0:
-        end_msg = f"[{datetime.now():%H:%M:%S}] 💥 توقف بسبب مشكلة فادحة (كود={ret})"
-        log_q.put(end_msg)
-        log.error(f"💥 [{email}] توقف بسبب خطأ فادح (exit={ret})")
-        _update_firebase_status(
-            user_id, castle_id,
-            "error",
-            f"توقف بسبب مشكلة فادحة في التشغيل (كود={ret})",
-            conn_state="error"
-        )
+        log_q.put(f"[{datetime.now():%H:%M:%S}] ⏹️ تم إيقاف البوت بواسطة المستخدم")
+        log.info(f"⏹️ [{email}] إيقاف يدوي")
+        _update_firebase_status(user_id, castle_id, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
     else:
-        # انتهت العملية بدون إيقاف يدوي — في وضع التكرار أو انتهاء دورة عادية
-        end_msg = f"[{datetime.now():%H:%M:%S}] 💤 بانتظار موعد الدورة القادمة"
-        log_q.put(end_msg)
-        log.info(f"💤 [{email}] اكتمال دورة — البوت لا يزال مفعلاً وبانتظار الدورة التالية")
-        _update_firebase_status(
-            user_id, castle_id,
-            "running",
-            "بانتظار موعد الدورة القادمة",
-            conn_state="waiting"
-        )
-
+        log.info(f"💤 [{email}] اكتمل البوت بشكل طبيعي")
+        _update_firebase_status(user_id, castle_id, "idle", "اكتمل البوت", conn_state="idle")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -831,6 +655,8 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
         _reserved.add(req.castle_id)  # حجز فوري لمنع التكرار
 
     t = threading.Thread(target=_bot_thread, args=(req,), daemon=True, name=f"bot-{req.castle_id[:10]}")
+    with _lock:
+        _threads[req.castle_id] = t  # تسجيل فوري قبل الإطلاق
     t.start()
     log.info(f"▶️  [{req.email}] طلب تشغيل قُبل من {caller_uid}")
     return {"status": "starting", "castle_id": req.castle_id, "email": req.email}
@@ -849,11 +675,13 @@ def stop_bot(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_
         raise HTTPException(status_code=403, detail="غير مصرح بإيقاف قلاع مستخدم آخر")
 
     with _lock:
-        proc = _procs.get(castle_id)
+        ev = _stop_events.get(castle_id)
+        is_active = _is_running(castle_id)
         _user_stopped.add(castle_id)
 
-    if proc and proc.poll() is None:
-        _kill_process_tree(proc)
+    if is_active:
+        if ev:
+            ev.set()  # إشارة للـ BotManager يوقف نفسه بنظافة
         log.info(f"⏹️  إيقاف القلعة {castle_id[:16]} بواسطة {caller_uid}...")
         return {"status": "stopping", "castle_id": castle_id}
 
@@ -868,9 +696,11 @@ def stop_user_bots(user_id: str, admin: Dict[str, Any] = Depends(require_admin))
         targets = [cid for cid, uid in _castle_users.items() if uid == user_id]
         for cid in targets:
             _user_stopped.add(cid)
-            proc = _procs.get(cid)
-            if proc and proc.poll() is None:
-                _kill_process_tree(proc)
+            ev = _stop_events.get(cid)
+            t  = _threads.get(cid)
+            if t and t.is_alive():
+                if ev:
+                    ev.set()  # إيقاف نظيف عبر event
                 stopped.append(cid)
     log.info(f"🛑 [Force Stop] تم إيقاف {len(stopped)} بوت جاري للمستخدم {user_id} بالقوة من المشرف {admin.get('uid')}")
     return {"status": "ok", "stopped_count": len(stopped), "stopped_castles": stopped}
@@ -881,8 +711,8 @@ def get_all_status(current_user: Dict[str, Any] = Depends(get_current_user)):
     """حالة جميع البوتات النشطة."""
     with _lock:
         result = {}
-        for cid, proc in _procs.items():
-            result[cid] = "running" if proc.poll() is None else "idle"
+        for cid, t in _threads.items():
+            result[cid] = "running" if t.is_alive() else "idle"
         for cid in _reserved:
             result[cid] = "starting"
     return {"bots": result, "count": len(result)}
@@ -1221,12 +1051,12 @@ def _watchdog_loop():
                 try:
                     valid, reason = _check_user_sub_cached(uid)
                     if not valid:
-                        log.warning(f"🛡️ [Watchdog] كشف عملية غير مصرح بها للقلعة {cid[:10]} (المستخدم: {uid}): {reason}")
+                        log.warning(f"🛡️ [Watchdog] كشف قلعة غير مصرح بها {cid[:10]} (المستخدم: {uid}): {reason}")
                         with _lock:
                             _user_stopped.add(cid)
-                            proc = _procs.get(cid)
-                            if proc and proc.poll() is None:
-                                _kill_process_tree(proc)
+                            ev = _stop_events.get(cid)
+                            if ev:
+                                ev.set()
                         _update_firebase_status(uid, cid, "idle", f"متوقف إجبارياً: {reason}", conn_state="idle")
                 except Exception:
                     pass

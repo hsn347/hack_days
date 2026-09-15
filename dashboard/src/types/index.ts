@@ -112,7 +112,7 @@ export interface CastleConfig {
   alliance: BaseTaskConfig & { auto_help: boolean; gold_donations: number }
   port: BaseTaskConfig
   train: BaseTaskConfig & { levels: TrainLevels }
-  pet_patrol: BaseTaskConfig & { pet: string }
+  pet_patrol: BaseTaskConfig & { pet?: string; destination?: number }
   territory_expansion: BaseTaskConfig
   shield: BaseTaskConfig & { duration: '8h' | '24h' | '3d'; allow_gold: boolean }
   stamina: BaseTaskConfig & { gold_buys: number }
@@ -151,7 +151,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   alliance: { enabled: false, auto_help: true, gold_donations: 0 },
   port: { enabled: false },
   train: { enabled: false, levels: { infantry: 0, cavalry: 0, archers: 0, chariots: 0 } },
-  pet_patrol: { enabled: false, pet: 'غزال' },
+  pet_patrol: { enabled: false, pet: 'الأسد', destination: 1262 },
   territory_expansion: { enabled: false },
   shield: { enabled: false, duration: '8h', allow_gold: false },
   stamina: { enabled: false, gold_buys: 0 },

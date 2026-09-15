@@ -256,7 +256,7 @@ export function useBotControl(userId: string) {
             email:        castle.email,
             password:     (castle as Castle & { password?: string }).password,
             config:       castle.config as unknown as Record<string, unknown>,
-            loop_interval: 90,
+            loop_interval: 55,
           })
         } else {
           // ⚠️ API غير متاح — حدّث Firebase فقط (Fallback)

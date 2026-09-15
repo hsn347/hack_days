@@ -66,8 +66,18 @@ export function AccountsPage() {
     [filtered]
   )
 
-  const runningCount = activeCastles.filter(c => c.bot_status.state === 'running').length
-  const idleCount = activeCastles.length - runningCount
+  // فحص هل الحساب يعمل بالفعل (سواء في جولة نشطة أو بانتظار الدورة التالية أو إعادة الاتصال)
+  const isCastleRunning = (c: Castle): boolean => {
+    const s = c.bot_status?.state
+    const cs = c.bot_status?.conn_state
+    return s === 'running' || s === 'waiting' || cs === 'connected' || cs === 'waiting' || cs === 'reconnecting'
+  }
+
+  const runningCastles = useMemo(() => activeCastles.filter(isCastleRunning), [activeCastles])
+  const idleCastles = useMemo(() => activeCastles.filter(c => !isCastleRunning(c)), [activeCastles])
+
+  const runningCount = runningCastles.length
+  const idleCount = idleCastles.length
   const maxAllowed = user?.subscription?.max_castles_allowed ?? 1
   const currentCount = user?.subscription?.current_castles_count ?? activeCastles.length
 
@@ -88,10 +98,15 @@ export function AccountsPage() {
       toast.error(t('accounts.expiredToast'))
       return
     }
-    activeCastles.forEach(c =>
+    if (idleCastles.length === 0) {
+      toast(t('accounts.allAlreadyRunning'), { icon: 'ℹ️' })
+      return
+    }
+    // تشغيل الحسابات المتوقفة فقط دون المساس بالحسابات التي تعمل بالفعل
+    idleCastles.forEach(c =>
       botControl.mutate({ castle: c, state: 'running' })
     )
-    toast.success(t('accounts.commandSentRun', { count: activeCastles.length }))
+    toast.success(t('accounts.commandSentRun', { count: idleCastles.length }))
   }
 
   const handleStopAll = () => {
@@ -99,7 +114,7 @@ export function AccountsPage() {
   }
 
   const handleConfirmStopAll = () => {
-    activeCastles.forEach(c =>
+    runningCastles.forEach(c =>
       botControl.mutate({ castle: c, state: 'idle' })
     )
     setShowStopAllModal(false)
@@ -218,14 +233,22 @@ export function AccountsPage() {
             </button>
             <button
               onClick={handleRunAll}
-              disabled={activeCastles.length === 0}
+              disabled={activeCastles.length === 0 || (!isRunBlocked && idleCastles.length === 0)}
               className={clsx(
                 'flex items-center justify-center gap-1.5 py-2 px-3 text-xs sm:text-sm font-semibold rounded-xl active:scale-[0.98] transition-all',
                 isRunBlocked
                   ? 'btn-run-all-locked bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 cursor-pointer'
                   : 'btn-primary disabled:opacity-50'
               )}
-              title={isBanned ? t('accounts.bannedTooltip') : isExpired ? t('accounts.expiredTooltip') : undefined}
+              title={
+                isBanned
+                  ? t('accounts.bannedTooltip')
+                  : isExpired
+                  ? t('accounts.expiredTooltip')
+                  : idleCastles.length === 0
+                  ? t('accounts.allAlreadyRunning')
+                  : undefined
+              }
             >
               {isRunBlocked ? (
                 <>

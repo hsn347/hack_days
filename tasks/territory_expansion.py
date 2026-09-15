@@ -287,29 +287,8 @@ class TerritoryExpansionTask(BaseTask):
     # ──────────────────────────────────────────────────────────────────
 
     def _print_status_report(self, info: Dict[str, Any], other_ready: List[Dict[str, Any]]):
-        print("\n" + "═" * 82)
-        print("  🚩 تقرير مهام التوسع الإقليمي في الأحداث (Territorial Expansion - Activity 9001373)")
-        print("═" * 82)
-
-        if not info["exists"]:
-            print("  ⚠️ لم يتم العثور على بيانات حدث التوسع الإقليمي في الحساب حالياً!")
-            print("═" * 82 + "\n")
-            return
-
-        for cat in info["categories"]:
-            print(f"\n  {cat['icon']} {cat['name']} (جاهزة: {cat['ready_count']} | مستلمة: {cat['claimed_count']} | الإجمالي: {cat['total_count']}):")
-            print("  " + "─" * 78)
-            print(f"  {'رقم المهمة':<12} {'وصف المهمة':<38} {'التقدم':<16} {'الحالة':<15}")
-            print("  " + "─" * 78)
-            for q in cat["quests"]:
-                print(f"  {q['id']:<12} {q['desc']:<38} {q['progress_str']:<16} {q['status_desc']:<15}")
-
-        print("\n" + "═" * 82)
-        ready_total = len(info["ready_quests"])
-        print(f"  🎁 إجمالي المكافآت الجاهزة للاستلام في التوسع الإقليمي: {ready_total} مكافأة")
-        if other_ready:
-            print(f"  ✨ مكافآت جاهزة في أحداث عامة أخرى: {len(other_ready)} مكافأة")
-        print("═" * 82 + "\n")
+        """تقرير الطرفية — معطّل في Thread Pool mode (المعلومات تمر عبر Firebase)."""
+        pass
 
     # ──────────────────────────────────────────────────────────────────
     #  تنفيذ المهمة (Main Execution Flow)
@@ -356,33 +335,25 @@ class TerritoryExpansionTask(BaseTask):
             self.log.info("ℹ️ لا توجد أي مكافآت جاهزة للاستلام حالياً في التوسع الإقليمي.")
             return TaskResult.ok("ℹ️ لا توجد مكافآت جاهزة للاستلام حالياً في التوسع الإقليمي.", claimed=0)
 
-        print("\n" + "═" * 82)
-        print(f"  🎁 بدء جمع {len(targets)} مكافأة جاهزة للاستلام...")
-        print("═" * 82)
-
         claimed_count = 0
         failed_count = 0
 
         for i, q in enumerate(targets):
             if i > 0:
                 jitter = round(random.uniform(1.6, 2.8), 2)
-                self.log.info(f"🛡️ انتظار أمان بشري: {jitter} ثانية...")
                 await asyncio.sleep(jitter)
 
             did = q["dynamic_id"]
             aid = q["activity_id"]
             tid = q["task_id"]
-            self.log.info(f"👉 استلام [{q['category_name']} - {q['desc']}] (dynamicId: {did})...")
 
             ok, msg = await self._claim_task_reward(did, activity_id=aid, task_id=tid)
             if ok:
                 claimed_count += 1
-                print(f"  ✅ [{q['category_name']}]: {q['desc']} -> تم استلام المكافأة بنجاح! 🎁")
+                self.log.debug(f"  ✅ [{q['category_name']}]: {q['desc']} -> تم استلام المكافأة بنجاح!")
             else:
                 failed_count += 1
-                print(f"  ❌ [{q['category_name']}]: {q['desc']} -> {msg}")
-
-        print("═" * 82 + "\n")
+                self.log.debug(f"  ❌ [{q['category_name']}]: {q['desc']} -> {msg}")
 
         summary = f"🎯 اكتملت العملية: تم استلام {claimed_count} مكافأة بنجاح"
         if failed_count > 0:

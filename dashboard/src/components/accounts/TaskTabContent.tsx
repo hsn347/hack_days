@@ -449,16 +449,22 @@ const BARRACKS_TYPES = [
   { key: 'chariots', labelKey: 'tasks.chariots' },
 ]
 
-const PETS = [
-  { name: 'غزال', labelKey: 'tasks.petDeer' },
-  { name: 'أسد',  labelKey: 'tasks.petLion' },
-  { name: 'صقر',  labelKey: 'tasks.petFalcon' },
-  { name: 'ذئب',  labelKey: 'tasks.petWolf' },
-  { name: 'نمر',  labelKey: 'tasks.petTiger' },
-  { name: 'دب',   labelKey: 'tasks.petBear' },
-  { name: 'فيل',  labelKey: 'tasks.petElephant' },
-  { name: 'تنين', labelKey: 'tasks.petDragon' },
-]
+export const PET_TARGETS = [
+  { id: 1262, name: 'الأسد',                labelKey: 'tasks.petLion',              emoji: '🦁' },
+  { id: 1263, name: 'الصقر',                labelKey: 'tasks.petFalcon',            emoji: '🦅' },
+  { id: 1264, name: 'الذئب',                labelKey: 'tasks.petWolf',              emoji: '🐺' },
+  { id: 1265, name: 'الفهد',                labelKey: 'tasks.petLeopard',           emoji: '🐆' },
+  { id: 1266, name: 'الدب',                 labelKey: 'tasks.petBear',              emoji: '🐻' },
+  { id: 1267, name: 'الفيل',                labelKey: 'tasks.petElephant',          emoji: '🐘' },
+  { id: 1268, name: 'الثور البري',          labelKey: 'tasks.petWildBull',          emoji: '🐂' },
+  { id: 1269, name: 'كلب الكنغال',          labelKey: 'tasks.petKangal',            emoji: '🐕' },
+  { id: 1270, name: 'النمر السيفي',         labelKey: 'tasks.petSabertooth',        emoji: '🐅' },
+  { id: 1377, name: 'وحيد القرن',           labelKey: 'tasks.petRhino',             emoji: '🦏' },
+  { id: 1380, name: 'عنقاء العاصفة الرملية', labelKey: 'tasks.petSandstormPhoenix', emoji: '🔥' },
+  { id: 1383, name: 'النمر الثائر',         labelKey: 'tasks.petRagingTiger',       emoji: '🐯' },
+  { id: 1386, name: 'سحلية الموت',          labelKey: 'tasks.petDeathLizard',       emoji: '🦎' },
+  { id: 1389, name: 'الهيدرا',              labelKey: 'tasks.petHydra',             emoji: '🐉' },
+] as const
 
 interface StrategyItem {
   id: number
@@ -586,6 +592,7 @@ export function TaskTabContent({
   const { t, i18n } = useTranslation()
   const [internalTab, setInternalTab] = useState<TaskTab>(externalTab || initialTab)
   const [coordsError, setCoordsError] = useState(false)
+  const [goldError, setGoldError] = useState(false)
   const [tacticsCategory, setTacticsCategory] = useState<'battle' | 'development' | 'help'>('battle')
   const [isSavingBatch, setIsSavingBatch] = useState(false)
 
@@ -630,6 +637,7 @@ export function TaskTabContent({
       setSavedConfig(fresh)
       setDraftConfig(fresh)
       setCoordsError(false)
+      setGoldError(false)
       return
     }
     if (JSON.stringify(lastSavedConfigRef.current) !== JSON.stringify(castle.config)) {
@@ -645,6 +653,24 @@ export function TaskTabContent({
   const changesCount = useMemo(() => {
     return countConfigChanges(savedConfig, draftConfig)
   }, [savedConfig, draftConfig])
+
+  const draftGg = (draftConfig as unknown as { gold_gather?: { enabled: boolean; locations?: GoldLocation[] } }).gold_gather
+  const goldHasIncompleteLocations = Boolean(
+    draftGg?.enabled &&
+    Array.isArray(draftGg.locations) &&
+    draftGg.locations.some(loc => {
+      const missingX = !loc.x || loc.x <= 0
+      const missingY = !loc.y || loc.y <= 0
+      const missingTag = !loc.alliance_tag || !loc.alliance_tag.trim()
+      return missingX || missingY || missingTag
+    })
+  )
+
+  useEffect(() => {
+    if (!goldHasIncompleteLocations && goldError) {
+      setGoldError(false)
+    }
+  }, [goldHasIncompleteLocations, goldError])
 
   function update<K extends keyof CastleConfig>(key: K, patch: Partial<CastleConfig[K]>) {
     setDraftConfig(prev => {
@@ -684,7 +710,22 @@ export function TaskTabContent({
       }
     }
 
+    // التحقق من حقول تحالفات جمع الذهب إذا كانت مفعّلة
+    if (goldHasIncompleteLocations) {
+      toast.error(t('tasks.goldMissingCoordsNavToast'), {
+        id: 'gold-missing-coords',
+        duration: 4500,
+      })
+      setGoldError(true)
+      if (currentTab !== 'gold') {
+        setInternalTab('gold')
+        onTabChange?.('gold')
+      }
+      return
+    }
+
     setCoordsError(false)
+    setGoldError(false)
     setInternalTab(newTab)
     onTabChange?.(newTab)
   }
@@ -711,6 +752,18 @@ export function TaskTabContent({
       }
     }
 
+    // التحقق من حقول تحالفات جمع الذهب عند الحفظ
+    if (goldHasIncompleteLocations) {
+      toast.error(t('tasks.goldMissingCoordsToast'), {
+        id: 'gold-missing-coords',
+        duration: 4500,
+      })
+      setGoldError(true)
+      setInternalTab('gold')
+      onTabChange?.('gold')
+      return
+    }
+
     const changedSections: Partial<CastleConfig> = {}
     for (const key of Object.keys(draftConfig) as (keyof CastleConfig)[]) {
       if (JSON.stringify(draftConfig[key]) !== JSON.stringify(savedConfig[key])) {
@@ -730,7 +783,8 @@ export function TaskTabContent({
         await onBatchSave(changedSections)
         const updated = JSON.parse(JSON.stringify(draftConfig))
         lastSavedConfigRef.current = updated
-        setSavedConfig(updated)
+        setCoordsError(false)
+        setGoldError(false)
         toast.success(t('common.success'))
       } catch (err) {
         toast.error(t('common.error') + ': ' + (err instanceof Error ? err.message : ''))
@@ -745,6 +799,8 @@ export function TaskTabContent({
         const updated = JSON.parse(JSON.stringify(draftConfig))
         lastSavedConfigRef.current = updated
         setSavedConfig(updated)
+        setCoordsError(false)
+        setGoldError(false)
         toast.success(t('common.success'))
       },
       onError: (err) => {
@@ -756,6 +812,8 @@ export function TaskTabContent({
   const handleCancel = () => {
     if (changesCount === 0) return
     setDraftConfig(JSON.parse(JSON.stringify(savedConfig)))
+    setCoordsError(false)
+    setGoldError(false)
     toast.success(t('common.success'))
   }
 
@@ -1704,25 +1762,51 @@ export function TaskTabContent({
 
         {/* دورية الحيوانات */}
         <TaskRow
-          emoji="🦅" label={t('tasks.petPatrol')}
+          emoji="🦌" label={t('tasks.petPatrol')}
           enabled={cfg.pet_patrol.enabled} onToggle={toggle('pet_patrol')}
         >
-          <div>
-            <SectionLabel text={t('tasks.pet')} />
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {PETS.map(p => (
-                <button key={p.name} type="button"
-                  className={clsx('task-pet-btn', cfg.pet_patrol.pet === p.name ? 'selected' : 'unselected')}
-                  onClick={() => update('pet_patrol', { pet: p.name })}
-                  style={{
-                    padding: '4px 8px', borderRadius: '6px', fontFamily: 'inherit',
-                    border: cfg.pet_patrol.pet === p.name ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
-                    background: cfg.pet_patrol.pet === p.name ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-                    color: cfg.pet_patrol.pet === p.name ? '#6ee7b7' : '#9ca3af',
-                    fontSize: '11px', cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >{p.labelKey ? t(p.labelKey) : p.name}</button>
-              ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* الحيوان القائم بالدورية (ثابت دائماً: الغزال 1261) */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 12px', borderRadius: '10px',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)'
+            }}>
+              <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('tasks.petRunner')}:</span>
+              <span style={{ fontSize: '12px', color: '#6ee7b7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>🦌</span>
+                <span>{t('tasks.petDeer')}</span>
+                <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 400 }}>(1261)</span>
+              </span>
+            </div>
+
+            {/* الحيوان المستهدف (وجهة الدورية) */}
+            <div>
+              <SectionLabel text={t('tasks.targetAnimal')} />
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {PET_TARGETS.map(p => {
+                  const isSelected = (cfg.pet_patrol.destination === p.id) ||
+                                     (!cfg.pet_patrol.destination && (cfg.pet_patrol.pet === p.name || p.id === 1262))
+                  return (
+                    <button key={p.id} type="button"
+                      className={clsx('task-pet-btn', isSelected ? 'selected' : 'unselected')}
+                      onClick={() => update('pet_patrol', { destination: p.id, pet: p.name })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        padding: '5px 10px', borderRadius: '8px', fontFamily: 'inherit',
+                        border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
+                        background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                        color: isSelected ? '#6ee7b7' : '#9ca3af',
+                        fontSize: '12px', fontWeight: isSelected ? 600 : 400,
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <span>{p.emoji}</span>
+                      <span>{t(p.labelKey, p.name)}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </TaskRow>
@@ -2969,17 +3053,32 @@ export function TaskTabContent({
     }
 
     const addLocation = () => updateGg({ locations: [...gg.locations, { x: 0, y: 0, alliance_tag: '' }] })
-    const removeLocation = (i: number) => updateGg({ locations: gg.locations.filter((_, idx) => idx !== i) })
+    const removeLocation = (i: number) => {
+      const nextLocs = gg.locations.filter((_, idx) => idx !== i)
+      updateGg({ locations: nextLocs })
+      const stillIncomplete = nextLocs.some(loc => !loc.x || loc.x <= 0 || !loc.y || loc.y <= 0 || !loc.alliance_tag || !loc.alliance_tag.trim())
+      if (!stillIncomplete) {
+        setGoldError(false)
+      }
+    }
     const setLocation = (i: number, patch: Partial<GoldLocation>) => {
       const locs = gg.locations.map((loc, idx) => idx === i ? { ...loc, ...patch } : loc)
       updateGg({ locations: locs })
+      const stillIncomplete = locs.some(loc => !loc.x || loc.x <= 0 || !loc.y || loc.y <= 0 || !loc.alliance_tag || !loc.alliance_tag.trim())
+      if (!stillIncomplete) {
+        setGoldError(false)
+      }
     }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Header */}
         <div
-          onClick={() => updateGg({ enabled: !gg.enabled })}
+          onClick={() => {
+            const nextEnabled = !gg.enabled
+            updateGg({ enabled: nextEnabled })
+            if (!nextEnabled) setGoldError(false)
+          }}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: gg.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
@@ -2995,72 +3094,168 @@ export function TaskTabContent({
               <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.goldSearch')}</div>
             </div>
           </div>
-          <Toggle value={gg.enabled} onChange={v => updateGg({ enabled: v })} />
+          <Toggle value={gg.enabled} onChange={v => {
+            updateGg({ enabled: v })
+            if (!v) setGoldError(false)
+          }} />
         </div>
 
         {gg.enabled && (
           <>
             {/* Locations */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {gg.locations.map((loc, i) => (
-                <div key={i} className="task-gold-location-card" style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  borderRadius: '14px', padding: '14px',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#eab308', display: 'inline-block' }} />
-                      <span style={{ color: '#9ca3af', fontSize: '13px', fontWeight: 600 }}>{t('tasks.locationNumber', { index: i + 1 })}</span>
+              {gg.locations.map((loc, i) => {
+                const isXInvalid = !loc.x || loc.x <= 0
+                const isYInvalid = !loc.y || loc.y <= 0
+                const isTagInvalid = !loc.alliance_tag || !loc.alliance_tag.trim()
+                const isCardInvalid = isXInvalid || isYInvalid || isTagInvalid
+                const showCardError = goldError && isCardInvalid
+
+                return (
+                  <div key={i} className="task-gold-location-card" style={{
+                    background: showCardError ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.04)',
+                    border: showCardError ? '1.5px solid rgba(239,68,68,0.45)' : '1px solid rgba(255,255,255,0.10)',
+                    borderRadius: '14px', padding: '14px',
+                    transition: 'all 0.15s ease',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: showCardError ? '#ef4444' : '#eab308',
+                          boxShadow: showCardError ? '0 0 6px #ef4444' : 'none',
+                          display: 'inline-block',
+                        }} />
+                        <span style={{
+                          color: showCardError ? '#fca5a5' : '#9ca3af',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                        }}>
+                          {t('tasks.locationNumber', { index: i + 1 })}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeLocation(i)}
+                        title={t('common.delete', 'حذف')}
+                        style={{
+                          background: 'none', border: 'none',
+                          color: showCardError ? '#f87171' : '#6b7280',
+                          cursor: 'pointer', padding: '2px', display: 'flex',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
-                    <button type="button" onClick={() => removeLocation(i)}
-                      style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '2px', display: 'flex' }}>
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                      <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>X</div>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="task-coord-label" style={{
+                          color: goldError && isXInvalid ? '#f87171' : '#9ca3af',
+                          fontSize: '11px',
+                          marginBottom: '6px',
+                          fontWeight: goldError && isXInvalid ? 600 : 400,
+                        }}>
+                          X {goldError && isXInvalid ? '*' : ''}
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={loc.x === 0 ? '' : (loc.x ?? '')}
+                          onChange={e => {
+                            const val = e.target.value.replace(/[^0-9]/g, '')
+                            setLocation(i, { x: val === '' ? 0 : Number(val) })
+                          }}
+                          style={{
+                            ...inputStyle,
+                            border: goldError && isXInvalid
+                              ? '1.5px solid #ef4444'
+                              : inputStyle.border,
+                            boxShadow: goldError && isXInvalid
+                              ? '0 0 10px rgba(239, 68, 68, 0.35)'
+                              : undefined,
+                          }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="task-coord-label" style={{
+                          color: goldError && isYInvalid ? '#f87171' : '#9ca3af',
+                          fontSize: '11px',
+                          marginBottom: '6px',
+                          fontWeight: goldError && isYInvalid ? 600 : 400,
+                        }}>
+                          Y {goldError && isYInvalid ? '*' : ''}
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={loc.y === 0 ? '' : (loc.y ?? '')}
+                          onChange={e => {
+                            const val = e.target.value.replace(/[^0-9]/g, '')
+                            setLocation(i, { y: val === '' ? 0 : Number(val) })
+                          }}
+                          style={{
+                            ...inputStyle,
+                            border: goldError && isYInvalid
+                              ? '1.5px solid #ef4444'
+                              : inputStyle.border,
+                            boxShadow: goldError && isYInvalid
+                              ? '0 0 10px rgba(239, 68, 68, 0.35)'
+                              : undefined,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{
+                        color: goldError && isTagInvalid ? '#f87171' : '#9ca3af',
+                        fontSize: '11px',
+                        marginBottom: '6px',
+                        fontWeight: goldError && isTagInvalid ? 600 : 400,
+                      }}>
+                        {t('tasks.allianceTag')} {goldError && isTagInvalid ? '*' : ''}
+                      </div>
                       <input
                         type="text"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={loc.x ?? ''}
-                        onChange={e => {
-                          const val = e.target.value.replace(/[^0-9]/g, '')
-                          setLocation(i, { x: val === '' ? 0 : Number(val) })
+                        value={loc.alliance_tag ?? ''}
+                        maxLength={5}
+                        placeholder="ABC"
+                        onChange={e => setLocation(i, { alliance_tag: e.target.value.toUpperCase() })}
+                        style={{
+                          ...inputStyle,
+                          textTransform: 'uppercase',
+                          border: goldError && isTagInvalid
+                            ? '1.5px solid #ef4444'
+                            : inputStyle.border,
+                          boxShadow: goldError && isTagInvalid
+                            ? '0 0 10px rgba(239, 68, 68, 0.35)'
+                            : undefined,
                         }}
-                        style={inputStyle}
                       />
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>Y</div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={loc.y ?? ''}
-                        onChange={e => {
-                          const val = e.target.value.replace(/[^0-9]/g, '')
-                          setLocation(i, { y: val === '' ? 0 : Number(val) })
-                        }}
-                        style={inputStyle}
-                      />
-                    </div>
+
+                    {showCardError && (
+                      <div style={{
+                        marginTop: '10px',
+                        padding: '7px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        color: '#fca5a5',
+                        fontSize: '11px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}>
+                        <span>⚠️</span>
+                        <span>{t('tasks.goldLocationIncomplete')}</span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px' }}>{t('tasks.allianceTag')}</div>
-                    <input
-                      type="text"
-                      value={loc.alliance_tag ?? ''}
-                      maxLength={5}
-                      placeholder="ABC"
-                      onChange={e => setLocation(i, { alliance_tag: e.target.value.toUpperCase() })}
-                      style={{ ...inputStyle, textTransform: 'uppercase' }}
-                    />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Add location */}
@@ -3093,12 +3288,14 @@ export function TaskTabContent({
      !cfg.march_manager.transport.target_y || cfg.march_manager.transport.target_y <= 0)
   )
 
+  const goldHasErrorTab = Boolean(goldError && goldHasIncompleteLocations)
+
   return (
     <div className="relative space-y-5 w-full task-tab-content-root">
       <TaskTabs
         active={currentTab}
         onChange={handleTabChange}
-        errorTab={transportHasMissingCoords ? 'transport' : null}
+        errorTab={goldHasErrorTab ? 'gold' : transportHasMissingCoords ? 'transport' : null}
       />
 
       <TaskAccordionContext.Provider value={{ expandedTaskId, toggleTask: toggleTaskAccordion }}>

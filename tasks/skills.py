@@ -339,30 +339,8 @@ class SkillsTask(BaseTask):
     # ──────────────────────────────────────────────────────────────────
 
     def _print_inquiry_report(self, skills: List[Dict[str, Any]]):
-        print("\n" + "═" * 70)
-        print("  🔮 استعلام حالة المهارات التلقائية (Smart Skills Inquiry)")
-        print("═" * 70)
-
-        for s in skills:
-            icon = s["icon"]
-            name = s["name"]
-            sid = s["id"]
-            set_id = s["set_id"]
-            is_ready = s["is_ready"]
-            remain = s["remain_formatted"]
-
-            if not s["is_unlocked"]:
-                status_str = "🔒 غير مفتوحة في القلعة"
-            elif not s["is_active_set_match"] and s["key"] != "warehouse":
-                status_str = f"⚠️ في طقم مواهب غير نشط (طقم {set_id} بينما النشط {s['active_set']})"
-            elif is_ready:
-                status_str = "🟢 جاهزة للتفعيل الآن!"
-            else:
-                status_str = f"⏳ في فترة تبريد (متبقي: {remain})"
-
-            print(f"  {icon} {name:<14} (ID: {sid:<5} | طقم: {set_id:<3}) ──> {status_str}")
-
-        print("═" * 70 + "\n")
+        """تقرير الطرفية — معطّل في Thread Pool mode (المعلومات تمر عبر Firebase)."""
+        pass
 
 
 # ════════════════════════════════════════════════════════════════════

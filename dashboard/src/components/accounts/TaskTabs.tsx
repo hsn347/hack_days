@@ -47,16 +47,16 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
         boxSizing: 'border-box',
       }}
     >
-      {/* Arrow left (RTL: scroll right) */}
+      {/* Arrow left */}
       <button
         type="button"
-        onClick={() => scroll('right')}
+        onClick={() => scroll('left')}
         className="task-tabs-arrow"
         style={{
-          flexShrink: 0, padding: '3px 6px',
-          borderRadius: '6px', border: 'none',
+          flexShrink: 0, padding: '4px 8px',
+          borderRadius: '8px', border: 'none',
           background: 'none', color: '#6b7280',
-          cursor: 'pointer', fontSize: '14px',
+          cursor: 'pointer', fontSize: '16px',
           display: 'flex', alignItems: 'center',
         }}
       >
@@ -125,10 +125,10 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
         })}
       </div>
 
-      {/* Arrow right (RTL: scroll left) */}
+      {/* Arrow right */}
       <button
         type="button"
-        onClick={() => scroll('left')}
+        onClick={() => scroll('right')}
         className="task-tabs-arrow"
         style={{
           flexShrink: 0, padding: '4px 8px',
