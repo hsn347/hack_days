@@ -2,7 +2,7 @@ __pycache__/
 apk_libs/
 bin/
 decompiled/
-lib/
+/lib/
 lua_src/
 h/*.apk
 h/*.zip

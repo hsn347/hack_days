@@ -614,6 +614,7 @@ def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str,
 # ══════════════════════════════════════════════════════════════════
 
 @app.get("/")
+@app.get("/api/health")
 def root():
     return {"status": "online", "service": "Empire Bot API", "time": datetime.now().isoformat()}
 

@@ -12,6 +12,7 @@ RestartSec=5
 StandardOutput=append:/var/www/osmanli/api_server.log
 StandardError=append:/var/www/osmanli/bot_errors.log
 Environment=PYTHONUNBUFFERED=1
+Environment=CORS_ORIGINS=*
 
 [Install]
 WantedBy=multi-user.target
