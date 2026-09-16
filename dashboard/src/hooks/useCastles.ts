@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '../lib/firebase'
-import { startBot, stopBot, checkApiAvailable } from '../lib/botApi'
+import { startBot, stopBot, checkApiAvailable, getWsBaseUrl } from '../lib/botApi'
 import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
@@ -170,8 +170,7 @@ export function useRealBotStatus(castleId: string, enabled: boolean = true): {
   useEffect(() => {
     if (!enabled || !castleId) return
 
-    const WS_BASE = (import.meta.env.VITE_BOT_API_URL ?? 'http://localhost:8000')
-      .replace(/^http/, 'ws')
+    const WS_BASE = getWsBaseUrl()
     let ws: WebSocket | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let destroyed = false

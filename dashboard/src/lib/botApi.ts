@@ -8,7 +8,24 @@
 
 import { auth } from './firebase'
 
-const API_URL = import.meta.env.VITE_BOT_API_URL ?? 'http://localhost:8000'
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_BOT_API_URL as string | undefined)?.trim()
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '')
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  return 'http://localhost:8000'
+}
+
+export function getWsBaseUrl(): string {
+  const base = getApiBaseUrl()
+  if (base.startsWith('https://')) {
+    return base.replace(/^https:\/\//, 'wss://')
+  }
+  return base.replace(/^http:\/\//, 'ws://')
+}
 
 export interface BotStartPayload {
   castle_id:     string
@@ -41,9 +58,10 @@ export async function getAuthHeader(): Promise<Record<string, string>> {
 // ── هل الخادم متاح؟ ───────────────────────────────────────────────
 export async function checkApiAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_URL}/api/health`, { signal: AbortSignal.timeout(3000) })
+    const api = getApiBaseUrl()
+    const res = await fetch(`${api}/api/health`, { signal: AbortSignal.timeout(3000) })
     if (res.ok) return true
-    const fallback = await fetch(`${API_URL}/`, { signal: AbortSignal.timeout(3000) })
+    const fallback = await fetch(`${api}/`, { signal: AbortSignal.timeout(3000) })
     return fallback.ok
   } catch {
     return false
@@ -53,7 +71,7 @@ export async function checkApiAvailable(): Promise<boolean> {
 // ── تشغيل بوت ─────────────────────────────────────────────────────
 export async function startBot(payload: BotStartPayload): Promise<{ status: string }> {
   const authHeaders = await getAuthHeader()
-  const res = await fetch(`${API_URL}/api/bot/start`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/bot/start`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body:    JSON.stringify(payload),
@@ -68,7 +86,7 @@ export async function startBot(payload: BotStartPayload): Promise<{ status: stri
 // ── إيقاف بوت لقلعة معينة ─────────────────────────────────────────
 export async function stopBot(castleId: string): Promise<{ status: string }> {
   const authHeaders = await getAuthHeader()
-  const res = await fetch(`${API_URL}/api/bot/stop/${castleId}`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/bot/stop/${castleId}`, {
     method:  'POST',
     headers: authHeaders,
   })
@@ -82,7 +100,7 @@ export async function stopBot(castleId: string): Promise<{ status: string }> {
 // ── إيقاف جميع بوتات المستخدم (خاص بالإدارة عند الحظر/انتهاء الاشتراك) ──
 export async function stopUserBots(userId: string): Promise<{ status: string; stopped_count: number }> {
   const authHeaders = await getAuthHeader()
-  const res = await fetch(`${API_URL}/api/bot/stop-user/${userId}`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/bot/stop-user/${userId}`, {
     method:  'POST',
     headers: authHeaders,
   })
@@ -96,7 +114,7 @@ export async function stopUserBots(userId: string): Promise<{ status: string; st
 // ── حالة بوت واحد ─────────────────────────────────────────────────
 export async function getBotStatus(castleId: string): Promise<BotStatusResult> {
   const authHeaders = await getAuthHeader()
-  const res = await fetch(`${API_URL}/api/bot/status/${castleId}`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/bot/status/${castleId}`, {
     headers: authHeaders,
   })
   if (!res.ok) throw new Error('فشل جلب حالة البوت')
@@ -106,7 +124,7 @@ export async function getBotStatus(castleId: string): Promise<BotStatusResult> {
 // ── حالة جميع البوتات ─────────────────────────────────────────────
 export async function getAllBotStatus(): Promise<Record<string, string>> {
   const authHeaders = await getAuthHeader()
-  const res = await fetch(`${API_URL}/api/bot/status`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/bot/status`, {
     headers: authHeaders,
   })
   if (!res.ok) throw new Error('فشل جلب الحالات')
@@ -116,7 +134,7 @@ export async function getAllBotStatus(): Promise<Record<string, string>> {
 
 // ── WebSocket URL للـ logs المباشرة ────────────────────────────────
 export async function getLogsWsUrl(castleId: string): Promise<string> {
-  const wsBase = API_URL.replace(/^http/, 'ws')
+  const wsBase = getWsBaseUrl()
   try {
     const user = auth.currentUser
     if (user) {

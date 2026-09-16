@@ -9,8 +9,8 @@ WorkingDirectory=/var/www/osmanli
 ExecStart=/var/www/osmanli/venv/bin/python api_server.py --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/www/osmanli/api_server.log
-StandardError=append:/var/www/osmanli/bot_errors.log
+StandardOutput=journal
+StandardError=journal
 Environment=PYTHONUNBUFFERED=1
 Environment=CORS_ORIGINS=*
 
