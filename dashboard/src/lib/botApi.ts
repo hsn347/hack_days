@@ -9,10 +9,21 @@
 import { auth } from './firebase'
 
 export function getApiBaseUrl(): string {
+  // 1. إذا كان الكود يعمل في المتصفح على نطاق عام، نستخدم دائماً نفس عنوان الموقع المشفر (https://ibraabot.online)
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const origin = window.location.origin
+    if (!origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      return origin
+    }
+  }
+
+  // 2. متغير البيئة إذا وُجد ولم يكن localhost
   const envUrl = (import.meta.env.VITE_BOT_API_URL as string | undefined)?.trim()
-  if (envUrl) {
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     return envUrl.replace(/\/+$/, '')
   }
+
+  // 3. الوضع الافتراضي للتطوير المحلي
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }

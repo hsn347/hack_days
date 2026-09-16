@@ -1133,10 +1133,10 @@ def main():
     args = parser.parse_args()
 
     print("\n" + "═" * 60)
-    print("🚀 Empire Bot API Server")
-    print(f"   العنوان  : http://{args.host}:{args.port}")
-    print(f"   الوثائق  : http://localhost:{args.port}/docs")
-    print(f"   الوقت    : {datetime.now():%Y-%m-%d %H:%M:%S}")
+    print("🚀 Empire Bot API Server (Online)")
+    print(f"   المنفذ الداخلي (Nginx Reverse Proxy) : http://{args.host}:{args.port}")
+    print("   الرابط العام المشفر (Production)     : https://ibraabot.online/api")
+    print(f"   الوقت                                : {datetime.now():%Y-%m-%d %H:%M:%S}")
     print("═" * 60 + "\n")
 
     uvicorn.run(
