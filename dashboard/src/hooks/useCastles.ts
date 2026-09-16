@@ -4,9 +4,8 @@ import {
   startAfter, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { db } from '../lib/firebase'
-import { startBot, stopBot, checkApiAvailable, getWsBaseUrl } from '../lib/botApi'
+import { startBot, stopBot, checkApiAvailable } from '../lib/botApi'
 import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
@@ -171,7 +170,8 @@ export function useRealBotStatus(castleId: string, enabled: boolean = true): {
   useEffect(() => {
     if (!enabled || !castleId) return
 
-    const WS_BASE = getWsBaseUrl()
+    const WS_BASE = (import.meta.env.VITE_BOT_API_URL ?? 'http://localhost:8000')
+      .replace(/^http/, 'ws')
     let ws: WebSocket | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let destroyed = false
@@ -245,8 +245,11 @@ export function useBotControl(userId: string) {
       castle: Castle
       state: 'running' | 'idle'
     }) => {
+      const apiAvailable = await checkApiAvailable()
+
       if (state === 'running') {
-        try {
+        if (apiAvailable) {
+          // ✅ استدعاء API مباشرة لتشغيل البوت
           await startBot({
             castle_id:    castle.id,
             user_id:      userId,
@@ -255,30 +258,36 @@ export function useBotControl(userId: string) {
             config:       castle.config as unknown as Record<string, unknown>,
             loop_interval: 55,
           })
-          toast.success(`تم إرسال أمر تشغيل البوت للحساب ${castle.email}`)
+        } else {
+          // ⚠️ API غير متاح — حدّث Firebase فقط (Fallback)
+          console.warn('⚠️ api_server.py غير متاح — تحديث Firebase فقط')
+          await updateDoc(
+            doc(db, 'users', userId, 'castles', castle.id),
+            {
+              'bot_status.state':            'running',
+              'bot_status.conn_state':       'connected',
+              'bot_status.conn_message':     'في انتظار خادم البوت...',
+              'bot_status.last_run_message': 'في انتظار خادم البوت...',
+              'bot_status.conn_updated':     new Date().toISOString(),
+            }
+          )
           return
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
-          console.error('فشل تشغيل البوت:', msg)
-          toast.error(msg)
-          throw err
         }
       } else {
-        try {
+        if (apiAvailable) {
+          // ✅ إيقاف عبر API
           await stopBot(castle.id)
-        } catch (err) {
-          console.warn('stopBot warning:', err)
         }
       }
 
-      // تحديث Firebase عند الإيقاف (لمزامنة الحالة في لوحة التحكم)
+      // تحديث Firebase دائماً (لمزامنة الحالة في لوحة التحكم)
       await updateDoc(
         doc(db, 'users', userId, 'castles', castle.id),
         {
-          'bot_status.state':            'idle',
-          'bot_status.conn_state':       'idle',
-          'bot_status.conn_message':     'تم إيقاف البوت بواسطة المستخدم',
-          'bot_status.last_run_message': 'تم الإيقاف',
+          'bot_status.state':            state,
+          'bot_status.conn_state':       state === 'running' ? 'connected' : 'idle',
+          'bot_status.conn_message':     state === 'running' ? 'البوت متصل ويعمل الآن...' : 'تم إيقاف البوت بواسطة المستخدم',
+          'bot_status.last_run_message': state === 'running' ? 'البوت يعمل الآن...' : 'تم الإيقاف',
           'bot_status.conn_updated':     new Date().toISOString(),
         }
       )

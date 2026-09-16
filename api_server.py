@@ -353,42 +353,28 @@ def _bot_thread(req: StartBotRequest):
     log.info(f"🚀 [{email}] بدء تشغيل البوت (Thread Pool)...")
     _update_firebase_status(user_id, castle_id, "running", "البوت يعمل الآن...")
 
-    # 2. تسجيل الدخول إذا لم تكن الجلسة موجودة
-    password = req.password
-    if not password:
-        try:
-            _ensure_firebase()
-            import firebase_admin
-            from firebase_admin import firestore as fb_fs
-            if firebase_admin._apps:
-                db = fb_fs.client()
-                c_snap = db.collection("users").document(user_id).collection("castles").document(castle_id).get()
-                if c_snap.exists:
-                    password = (c_snap.to_dict() or {}).get("password")
-        except Exception as ex:
-            log.warning(f"⚠️ فشل جلب كلمة المرور من Firestore: {ex}")
-
+    # 2. فحص session_cache.json أولاً ثم تسجيل الدخول وحفظ الجلسة تلقائياً إذا لم تكن موجودة
     try:
         from core.session_manager import SessionManager
         sm = SessionManager()
-        sessions = sm.load()
-        if email not in sessions:
-            if password:
-                log.info(f"🔑 [{email}] تسجيل دخول جديد وحفظ الجلسة...")
-                log_q.put(f"[{datetime.now():%H:%M:%S}] 🔑 جاري تسجيل الدخول وحفظ الجلسة...")
-                sm.login_and_save(email, password)
-                log_q.put(f"[{datetime.now():%H:%M:%S}] ✅ تم تسجيل الدخول بنجاح")
-            else:
-                err_msg = f"كلمة المرور غير مسجلة لحساب {email}. يرجى تعديل القلعة وحفظ كلمة المرور."
-                log.error(f"❌ {err_msg}")
-                log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ {err_msg}")
-                _update_firebase_status(user_id, castle_id, "error", err_msg, conn_state="error")
-                return
+        account = sm.get_or_login(
+            email=email,
+            password=req.password,
+            user_id=user_id,
+            castle_id=castle_id,
+        )
+        if not account:
+            err_msg = f"الحساب {email} غير موجود في الكاش وتعذر تسجيل دخوله (تأكد من صحة البريد وكلمة المرور)"
+            log.error(f"❌ [{email}] {err_msg}")
+            log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ {err_msg}")
+            _update_firebase_status(user_id, castle_id, "error", err_msg, conn_state="error")
+            return
+        else:
+            log.info(f"✅ [{email}] تم تأكيد الجلسة بنجاح.")
     except Exception as e:
-        err_str = str(e)
-        log.warning(f"⚠️ [{email}] خطأ في تسجيل الدخول: {err_str}")
-        log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ خطأ تسجيل الدخول: {err_str}")
-        _update_firebase_status(user_id, castle_id, "error", f"خطأ تسجيل الدخول: {err_str}", conn_state="error")
+        log.error(f"💥 [{email}] خطأ أثناء التحقق من الجلسة: {e}")
+        log_q.put(f"[{datetime.now():%H:%M:%S}] 💥 خطأ الجلسة: {e}")
+        _update_firebase_status(user_id, castle_id, "error", str(e), conn_state="error")
         return
 
     # 3. ملف log البوت مع التدوير التلقائي
@@ -657,14 +643,14 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
     if not is_admin and caller_uid != req.user_id:
         raise HTTPException(status_code=403, detail="غير مصرح بتشغيل قلاع مستخدم آخر")
 
-    # 1. التحقق من صلاحية الاشتراك وحظر الحساب (بحد زمني 4 ثوانٍ لضمان استجابة سريعة)
+    # 1. التحقق من صلاحية الاشتراك وحظر الحساب
     try:
         _ensure_firebase()
         import firebase_admin
         from firebase_admin import firestore as fb_fs
         if firebase_admin._apps:
             db = fb_fs.client()
-            user_snap = db.collection("users").document(req.user_id).get(timeout=4)
+            user_snap = db.collection("users").document(req.user_id).get()
             if user_snap.exists:
                 user_doc = user_snap.to_dict() or {}
                 from core.firebase_schema import check_user_subscription
@@ -797,12 +783,11 @@ async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: 
         from core.session_manager import SessionManager
         from game_client import GameConnection
 
-        # 1. تحميل جلسة الحساب
+        # 1. تحميل أو تجديد جلسة الحساب تلقائياً
         sm = SessionManager()
-        sessions = sm.load()
-        account = sessions.get(email)
+        account = sm.get_or_login(email=email, user_id=user_id, castle_id=castle_id)
         if not account:
-            raise HTTPException(status_code=404, detail=f"الحساب {email} غير موجود في session_cache.json")
+            raise HTTPException(status_code=404, detail=f"تعذر العثور على جلسة الحساب {email} أو تسجيل دخوله (تحقق من كلمة المرور)")
 
         # 2. الاتصال بالسيرفر
         conn = GameConnection(account)

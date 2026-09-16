@@ -914,10 +914,9 @@ class BotManager:
     ):
         if isinstance(account_or_email, str):
             sm = SessionManager()
-            accs = sm.load()
-            acc = accs.get(account_or_email)
+            acc = sm.get_or_login(account_or_email, user_id=user_id, castle_id=castle_id)
             if not acc:
-                raise ValueError(f"الحساب {account_or_email} غير موجود في session_cache.json!")
+                raise ValueError(f"الحساب {account_or_email} غير موجود في الكاش ولم يتم العثور على كلمة مرور لتسجيل دخوله!")
             self.account = acc
         else:
             self.account = account_or_email
@@ -1278,6 +1277,15 @@ class BotManager:
 
         self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
         ok = await self.conn.connect()
+        if not ok and self.user_id and self.castle_id:
+            log.warning(f"⚠️ [تسجيل الدخول] فشل الاتصال بالجلسة الحالية لـ {self.email}. جاري تجديد الجلسة تلقائياً بكلمة المرور...")
+            sm = SessionManager()
+            fresh_acc = sm.refresh_session(self.email, user_id=self.user_id, castle_id=self.castle_id)
+            if fresh_acc:
+                self.account = fresh_acc
+                self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
+                ok = await self.conn.connect()
+
         if not ok:
             log.error(f"❌ [تسجيل الدخول] فشل الاتصال بالحساب {self.email}!")
             return False

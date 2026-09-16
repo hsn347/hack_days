@@ -13,7 +13,6 @@ StandardOutput=append:/var/www/osmanli/api_server.log
 StandardError=append:/var/www/osmanli/bot_errors.log
 Environment=PYTHONUNBUFFERED=1
 Environment=CORS_ORIGINS=*
-Environment=GRPC_DNS_RESOLVER=native
 
 [Install]
 WantedBy=multi-user.target
