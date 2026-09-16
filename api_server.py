@@ -402,6 +402,7 @@ def _bot_thread(req: StartBotRequest):
 
     def _log_callback(line: str):
         """يُعالج كل سطر من BotManager: يكتبه للـ log file ويُرسله للـ queue ويُحدّث conn_state."""
+        print(f"[{email}] {line}", flush=True)
         if _log_file_handle:
             try:
                 _log_file_handle.write(line + "\n")
@@ -673,7 +674,9 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
     with _lock:
         _threads[req.castle_id] = t  # تسجيل فوري قبل الإطلاق
     t.start()
-    log.info(f"▶️  [{req.email}] طلب تشغيل قُبل من {caller_uid}")
+    msg = f"▶️  [{req.email}] طلب تشغيل قُبل من {caller_uid} (castle_id={req.castle_id[:10]})"
+    log.info(msg)
+    print(msg, flush=True)
     return {"status": "starting", "castle_id": req.castle_id, "email": req.email}
 
 
@@ -1141,7 +1144,7 @@ def main():
         host=args.host,
         port=args.port,
         reload=args.reload,
-        log_level="warning",  # نستخدم logging الخاص بنا
+        log_level="info",
     )
 
 
