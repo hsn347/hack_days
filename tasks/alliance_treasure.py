@@ -245,6 +245,7 @@ class AllianceTreasureTask(BaseTask):
             "ready": ready,
             "in_alliance": True,
             "free_dig_ready": free_dig_ready,
+            "dig_list": dig_list,
             "can_receive_list": can_receive_list,
             "can_receive_help_rewards": can_receive_help_rewards,
             "can_help_list": can_help_list,
@@ -280,28 +281,34 @@ class AllianceTreasureTask(BaseTask):
         total_help_rewards = 0
         total_helped = 0
         help_requested_count = 0
+        received_indices = set()
 
         # ── الخطوة 2أ: استلام أي صناديق حفر خاصة مكتملة (2015/6 - receiveType: 1) ──
         can_receive_list = st.get("can_receive_list", [])
         if can_receive_list:
             for item in can_receive_list:
-                own_uid = item.get("ownUid")
+                own_uid = item.get("ownUid") or self.uid or getattr(self.conn, "uid", 0)
                 idx = item.get("index")
                 if idx is not None:
-                    self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx} (2015/6 Type 1)...")
+                    idx_int = int(idx)
+                    self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx_int} [UID: {own_uid}] (2015/6 Type 1)...")
                     await asyncio.sleep(0.3)
                     r_recv = await self.conn.query(
                         self.CMD_ALLIANCE_TREASURE,
                         self.REQ_RECEIVE,
-                        {"receiveType": 1, "ownUid": int(own_uid) if own_uid else 0, "index": int(idx)},
+                        {"receiveType": 1, "ownUid": int(own_uid), "index": idx_int},
                         timeout=8
                     )
                     if r_recv and str(r_recv.get("err", "-1")) == "0":
                         total_received += 1
-                        self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx} بنجاح!")
+                        received_indices.add(idx_int)
+                        self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx_int} بنجاح!")
+                    elif r_recv and str(r_recv.get("err")) == "620002":
+                        received_indices.add(idx_int)
+                        self.log.info(f"ℹ️ جائزة صندوق التحالف الخاص بي #{idx_int} مستلمة مسبقاً.")
                     else:
                         err = r_recv.get("err") if r_recv else "timeout"
-                        self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx}: {err}")
+                        self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx_int}: {err}")
 
         # ── الخطوة 2ب: استلام جوائز مساعدة أعضاء التحالف (2015/6 - receiveType: 2) ──
         can_receive_help_rewards = st.get("can_receive_help_rewards", [])
@@ -368,32 +375,77 @@ class AllianceTreasureTask(BaseTask):
                     except Exception as e_h:
                         self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
 
-        # ── الخطوة 4: طلب المساعدة للصناديق الجارية الخاصة بي (2015/4) [إلزامي وتلقائي] ──
-        active_digs = st.get("active_digs", [])
-        for d in active_digs:
+        # ── الخطوة 4: فحص الصناديق الخاصة: استلام الجوائز إن وجدت (2015/6) وطلب المساعدة للجارية (2015/4) ──
+        my_digs = st.get("dig_list", []) or (st.get("can_receive_list", []) + st.get("active_digs", []))
+        now_ts = int(time.time())
+        for d in my_digs:
             d_idx = d.get("index") or d.get("digIndex")
-            if d_idx is not None:
-                self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
-                await asyncio.sleep(0.3)
-                try:
-                    r_ch = await self.conn.query(
-                        self.CMD_ALLIANCE_TREASURE,
-                        self.REQ_CALL_HELP,
-                        {"index": int(d_idx)},
-                        timeout=6
-                    )
-                    if r_ch and str(r_ch.get("err", "-1")) == "0":
-                        help_requested_count += 1
-                        d["canCallHelp"] = False
-                        self.log.info(f"✅ تم إرسال طلب المساعدة للصندوق الجاري #{d_idx} بنجاح.")
-                    elif r_ch and str(r_ch.get("err")) == "620011":
-                        d["canCallHelp"] = False
-                        self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
-                    else:
-                        err_ch = r_ch.get("err") if r_ch else "timeout"
-                        self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
-                except Exception as e_ch:
-                    self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
+            if d_idx is None:
+                continue
+
+            d_idx_int = int(d_idx)
+            d_own_uid = d.get("ownUid") or self.uid or getattr(self.conn, "uid", 0)
+            endtime = int(d.get("endtime", 0))
+            can_recv = d.get("canReceive") in (True, 1, "1", "true")
+
+            # 1. إذا كان الصندوق مكتملاً أو انتهى وقته وجاهزاً للاستلام (2015/6 - receiveType: 1)
+            if can_recv or (endtime > 0 and endtime <= now_ts):
+                if d_idx_int not in received_indices:
+                    self.log.info(f"🎁 استلام جائزة صندوق التحالف المكتمل #{d_idx_int} [UID: {d_own_uid}] (2015/6 - receiveType: 1)...")
+                    await asyncio.sleep(0.3)
+                    try:
+                        r_recv = await self.conn.query(
+                            self.CMD_ALLIANCE_TREASURE,
+                            self.REQ_RECEIVE,
+                            {"receiveType": 1, "ownUid": int(d_own_uid), "index": d_idx_int},
+                            timeout=8
+                        )
+                        if r_recv and str(r_recv.get("err", "-1")) == "0":
+                            total_received += 1
+                            received_indices.add(d_idx_int)
+                            d["canReceive"] = False
+                            self.log.info(f"✅ تم استلام جائزة صندوق التحالف الخاص #{d_idx_int} بنجاح!")
+                        elif r_recv and str(r_recv.get("err")) == "620002":
+                            received_indices.add(d_idx_int)
+                            self.log.info(f"ℹ️ جائزة صندوق التحالف #{d_idx_int} مستلمة مسبقاً.")
+                        else:
+                            err_r = r_recv.get("err") if r_recv else "timeout"
+                            self.log.warning(f"⚠️ تعذر استلام جائزة صندوق التحالف #{d_idx_int}: {err_r}")
+                    except Exception as e_r:
+                        self.log.debug(f"تنبيه أثناء استلام جائزة صندوق التحالف #{d_idx_int}: {e_r}")
+
+            # 2. إذا كان الصندوق لا يزال قيد الحفر، نطلب مساعدة التحالف لتسريعه (2015/4)
+            else:
+                can_call = d.get("canCallHelp", True) not in (False, 0, "0", "false")
+                if can_call:
+                    self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
+                    await asyncio.sleep(0.3)
+                    try:
+                        r_ch = await self.conn.query(
+                            self.CMD_ALLIANCE_TREASURE,
+                            self.REQ_CALL_HELP,
+                            {"index": int(d_idx)},
+                            timeout=6
+                        )
+                        if r_ch and str(r_ch.get("err", "-1")) == "0":
+                            help_requested_count += 1
+                            d["canCallHelp"] = False
+                            self.log.info(f"✅ تم إرسال طلب المساعدة للصندوق الجاري #{d_idx} بنجاح.")
+                        elif r_ch and str(r_ch.get("err")) == "620011":
+                            d["canCallHelp"] = False
+                            self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
+                        elif r_ch and str(r_ch.get("err")) == "620003":
+                            d["canCallHelp"] = False
+                            self.log.info(f"ℹ️ الصندوق #{d_idx} تمت مساعدته بالكامل مسبقاً.")
+                        else:
+                            err_ch = r_ch.get("err") if r_ch else "timeout"
+                            self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
+                    except Exception as e_ch:
+                        self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
+
+        # إذا تم استلام أي صندوق مكتمل في الخطوة 4، نحدث الحالة لمعرفة هل توفر حفر مجاني جديد
+        if total_received > 0:
+            st = await self.get_free_status(force_query=True)
 
         # ── الخطوة 5: التحقق الصارم من توفر الحفر المجاني ─────────────────────
         if not st.get("free_dig_ready"):
