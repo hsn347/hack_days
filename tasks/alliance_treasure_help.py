@@ -27,7 +27,8 @@ class AllianceTreasureHelpTask(BaseTask):
 
     def __init__(self, conn, config: Optional[Dict[str, Any]] = None):
         super().__init__(conn, config)
-        self.log = logging.getLogger(f"task.alliance_treasure_help[{getattr(self.conn, 'email', 'unknown')}]")
+        email_str = getattr(self, "email", "") or getattr(conn, "email", "unknown")
+        self.log = logging.getLogger(f"task.alliance_treasure_help[{email_str}]")
 
     async def get_status(self, force_query: bool = True) -> Dict[str, Any]:
         """استعلام الحالة المسبقة لكنز التحالف والصناديق الجارية وجوائز الاستلام."""
