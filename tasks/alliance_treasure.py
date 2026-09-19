@@ -149,27 +149,6 @@ class AllianceTreasureTask(BaseTask):
         is_digging = len(active_digs) > 0
         dig_remain = max(0, active_digs[0].get("endtime", 0) - now_ts) if is_digging else 0
 
-        # تحليل قائمة جوائز مساعدة أعضاء التحالف (helpInfo) - استلام جائزة مساعدة التحالف (receiveType: 2)
-        help_info_raw = data.get("helpInfo", [])
-        help_info_list: List[Dict[str, Any]] = []
-        if isinstance(help_info_raw, list):
-            help_info_list = [x for x in help_info_raw if isinstance(x, dict)]
-        elif isinstance(help_info_raw, dict):
-            for v in help_info_raw.values():
-                if isinstance(v, dict):
-                    help_info_list.append(v)
-                elif isinstance(v, list):
-                    help_info_list.extend([x for x in v if isinstance(x, dict)])
-
-        can_receive_help_list: List[Dict[str, Any]] = []
-        for h in help_info_list:
-            if not isinstance(h, dict):
-                continue
-            can_receive = h.get("canReceive") in (True, 1, "1", "true")
-            endtime = int(h.get("endtime", 0))
-            if can_receive or (endtime > 0 and endtime <= now_ts):
-                can_receive_help_list.append(h)
-
         # تحليل قائمة الأعضاء الذين يمكن مساعدتهم (canHelpList)
         can_help_raw = data.get("canHelpList", {})
         can_help_list: List[Dict[str, Any]] = []
@@ -198,6 +177,27 @@ class AllianceTreasureTask(BaseTask):
             if is_h in (False, 0, "0", "false", None):
                 unhelped_members.append(m)
 
+        # تحليل قائمة جوائز مساعدة أعضاء التحالف (helpInfo)
+        help_info_raw = data.get("helpInfo", [])
+        help_list: List[Dict[str, Any]] = []
+        if isinstance(help_info_raw, list):
+            help_list = [x for x in help_info_raw if isinstance(x, dict)]
+        elif isinstance(help_info_raw, dict):
+            for v in help_info_raw.values():
+                if isinstance(v, dict):
+                    help_list.append(v)
+                elif isinstance(v, list):
+                    help_list.extend([x for x in v if isinstance(x, dict)])
+
+        can_receive_help_rewards: List[Dict[str, Any]] = []
+        for h in help_list:
+            if not isinstance(h, dict):
+                continue
+            can_recv = h.get("canReceive") in (True, 1, "1", "true")
+            endtime_h = int(h.get("endtime", 0))
+            if can_recv or (endtime_h > 0 and endtime_h <= now_ts):
+                can_receive_help_rewards.append(h)
+
         # فحص إمكانية الحفر المجاني والمساعدات
         dig_count = int(other_info.get("digCount", 0))
         max_dig_count = int(other_info.get("maxDigCount", 8))
@@ -221,15 +221,11 @@ class AllianceTreasureTask(BaseTask):
         can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
         can_request_help = any(d.get("canCallHelp", True) not in (False, 0, "0", "false") for d in active_digs)
 
-        ready = bool(can_receive_list or can_receive_help_list or free_dig_ready or can_help_others or can_request_help)
+        ready = bool(can_receive_list or can_receive_help_rewards or free_dig_ready or can_help_others or can_request_help)
 
-        if can_receive_list or can_receive_help_list:
-            recv_parts = []
-            if can_receive_list:
-                recv_parts.append(f"{len(can_receive_list)} صندوق حفر")
-            if can_receive_help_list:
-                recv_parts.append(f"{len(can_receive_help_list)} جائزة مساعدة")
-            msg = f"🎁 يوجد { ' و '.join(recv_parts) } جاهزة للاستلام فوراً!"
+        if can_receive_list or can_receive_help_rewards:
+            total_pending_claims = len(can_receive_list) + len(can_receive_help_rewards)
+            msg = f"🎁 يوجد {total_pending_claims} جوائز صناديق تحالف ومساعدة جاهزة للاستلام فوراً!"
         elif free_dig_ready:
             msg = f"🎁 حفر صندوق التحالف المجاني متاح وجاهز فوراً! (متبقي {left_free_today}/{max_dig_count} اليوم)"
         elif can_help_others:
@@ -250,8 +246,7 @@ class AllianceTreasureTask(BaseTask):
             "in_alliance": True,
             "free_dig_ready": free_dig_ready,
             "can_receive_list": can_receive_list,
-            "can_receive_help_list": can_receive_help_list,
-            "help_info": help_info_list,
+            "can_receive_help_rewards": can_receive_help_rewards,
             "can_help_list": can_help_list,
             "unhelped_members": unhelped_members,
             "active_digs": active_digs,
@@ -282,19 +277,18 @@ class AllianceTreasureTask(BaseTask):
             return TaskResult(success=True, message=st.get("message", "غير منضم لتحالف"))
 
         total_received = 0
-        total_received_help = 0
+        total_help_rewards = 0
         total_helped = 0
         help_requested_count = 0
 
-        # ── الخطوة 2: استلام أي صناديق مكتملة جاهزة فوراً (حفرياتي وجوائز المساعدة) ─────
-        # أ) استلام صناديق الحفر الخاصة بي المكتملة (receiveType: 1)
+        # ── الخطوة 2أ: استلام أي صناديق حفر خاصة مكتملة (2015/6 - receiveType: 1) ──
         can_receive_list = st.get("can_receive_list", [])
         if can_receive_list:
             for item in can_receive_list:
                 own_uid = item.get("ownUid")
                 idx = item.get("index")
                 if idx is not None:
-                    self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل #{idx} (2015/6 - نوع 1)...")
+                    self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx} (2015/6 Type 1)...")
                     await asyncio.sleep(0.3)
                     r_recv = await self.conn.query(
                         self.CMD_ALLIANCE_TREASURE,
@@ -304,36 +298,36 @@ class AllianceTreasureTask(BaseTask):
                     )
                     if r_recv and str(r_recv.get("err", "-1")) == "0":
                         total_received += 1
-                        self.log.info(f"✅ تم استلام جوائز صندوق التحالف #{idx} بنجاح!")
+                        self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx} بنجاح!")
                     else:
                         err = r_recv.get("err") if r_recv else "timeout"
-                        self.log.warning(f"⚠️ تعذر استلام صندوق التحالف #{idx}: {err}")
+                        self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx}: {err}")
 
-        # ب) استلام جوائز مساعدة التحالف المكتملة (receiveType: 2)
-        can_receive_help_list = st.get("can_receive_help_list", [])
-        if can_receive_help_list:
-            for h_item in can_receive_help_list:
-                h_uid = h_item.get("ownUid")
-                h_idx = h_item.get("index")
-                nick = h_item.get("nickName", f"uid:{h_uid}")
-                if h_uid is not None and h_idx is not None:
-                    self.log.info(f"🎁 استلام جائزة مساعدة التحالف للعضو {nick} [UID: {h_uid}, Index: {h_idx}] (2015/6 - نوع 2)...")
+        # ── الخطوة 2ب: استلام جوائز مساعدة أعضاء التحالف (2015/6 - receiveType: 2) ──
+        can_receive_help_rewards = st.get("can_receive_help_rewards", [])
+        if can_receive_help_rewards:
+            for item in can_receive_help_rewards:
+                own_uid = item.get("ownUid")
+                idx = item.get("index")
+                nick = item.get("nickName", f"uid:{own_uid}")
+                if idx is not None and own_uid is not None:
+                    self.log.info(f"🎁 استلام جائزة مساعدة العضو {nick} [UID: {own_uid}, Index: {idx}] (2015/6 Type 2)...")
                     await asyncio.sleep(0.3)
-                    r_recv_h = await self.conn.query(
+                    r_recv = await self.conn.query(
                         self.CMD_ALLIANCE_TREASURE,
                         self.REQ_RECEIVE,
-                        {"receiveType": 2, "ownUid": int(h_uid), "index": int(h_idx)},
+                        {"receiveType": 2, "ownUid": int(own_uid), "index": int(idx)},
                         timeout=8
                     )
-                    if r_recv_h and str(r_recv_h.get("err", "-1")) == "0":
-                        total_received_help += 1
-                        self.log.info(f"✅ تم استلام جائزة مساعدة التحالف للعضو {nick} بنجاح!")
+                    if r_recv and str(r_recv.get("err", "-1")) == "0":
+                        total_help_rewards += 1
+                        self.log.info(f"✅ تم استلام جائزة مساعدة العضو {nick} لصندوق #{idx} بنجاح!")
                     else:
-                        err_h = r_recv_h.get("err") if r_recv_h else "timeout"
-                        self.log.warning(f"⚠️ تعذر استلام جائزة مساعدة التحالف للعضو {nick}: {err_h}")
+                        err = r_recv.get("err") if r_recv else "timeout"
+                        self.log.warning(f"⚠️ تعذر استلام جائزة مساعدة العضو {nick} #{idx}: {err}")
 
-        if can_receive_list or can_receive_help_list:
-            # إعادة تحديث الحالة بعد الاستلام
+        if can_receive_list or can_receive_help_rewards:
+            # إعادة تحديث الحالة بعد الاستلامات
             st = await self.get_free_status(force_query=True)
 
         # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي] ──
@@ -407,8 +401,8 @@ class AllianceTreasureTask(BaseTask):
             summary_parts = []
             if total_received > 0:
                 summary_parts.append(f"استلام {total_received} صندوق مكتمل")
-            if total_received_help > 0:
-                summary_parts.append(f"استلام {total_received_help} جائزة مساعدة")
+            if total_help_rewards > 0:
+                summary_parts.append(f"استلام {total_help_rewards} جائزة مساعدة أعضاء")
             if total_helped > 0:
                 summary_parts.append(f"مساعدة {total_helped} من أعضاء التحالف")
             if help_requested_count > 0:
@@ -422,7 +416,7 @@ class AllianceTreasureTask(BaseTask):
                 message=final_msg,
                 data={
                     "received": total_received,
-                    "received_help": total_received_help,
+                    "help_rewards": total_help_rewards,
                     "helped": total_helped,
                     "help_requested": help_requested_count,
                     "free_dig_ready": False,
@@ -474,12 +468,12 @@ class AllianceTreasureTask(BaseTask):
 
         left_times = max(0, st.get("left_free_today", 1) - 1)
         res_msg = f"🎁 تم حفر صندوق التحالف المجاني #{target_index} بنجاح"
-        if help_requested_count > 0:
-            res_msg += " وطلب المساعدة"
         if total_received > 0:
             res_msg += f" واستلام {total_received} صندوق"
-        if total_received_help > 0:
-            res_msg += f" واستلام {total_received_help} جائزة مساعدة"
+        if total_help_rewards > 0:
+            res_msg += f" واستلام {total_help_rewards} جائزة مساعدة"
+        if help_requested_count > 0:
+            res_msg += " وطلب المساعدة"
         if total_helped > 0:
             res_msg += f" ومساعدة {total_helped} أعضاء"
         res_msg += f" (متبقي {left_times} اليوم)"
@@ -494,7 +488,7 @@ class AllianceTreasureTask(BaseTask):
                 "dig_index": dig_real_index,
                 "left_free_today": left_times,
                 "received": total_received,
-                "received_help": total_received_help,
+                "help_rewards": total_help_rewards,
                 "helped": total_helped,
                 "help_requested": help_requested_count,
             }
