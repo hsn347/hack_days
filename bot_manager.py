@@ -1643,7 +1643,7 @@ class BotManager:
             ctx.alliance_treasure_ready = at_st.get("ready", False)
             ctx.alliance_treasure_in_alliance = at_st.get("in_alliance", True)
             ctx.alliance_treasure_free_dig_ready = at_st.get("free_dig_ready", False)
-            ctx.alliance_treasure_can_receive = len(at_st.get("can_receive_list", [])) > 0
+            ctx.alliance_treasure_can_receive = (len(at_st.get("can_receive_list", [])) > 0 or len(at_st.get("can_receive_help_list", [])) > 0)
             ctx.alliance_treasure_is_digging = at_st.get("is_digging", False)
             ctx.alliance_treasure_dig_remain = at_st.get("dig_remain", 0)
             ctx.alliance_treasure_dig_count = at_st.get("dig_count", 0)
@@ -2024,7 +2024,7 @@ class BotManager:
         if not ctx.alliance_treasure_in_alliance:
             print("📦 صندوق التحالف (Alliance Treasure): ⚠️ غير متاح (الحساب غير منضم إلى أي تحالف)")
         elif ctx.alliance_treasure_can_receive:
-            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 صندوق مكتمل جاهز للاستلام فوراً! (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
+            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 صناديق مكتملة أو جوائز مساعدة جاهزة للاستلام فوراً! (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
         elif ctx.alliance_treasure_free_dig_ready:
             print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 حفر صندوق مجاني جاهز فوراً! (متبقي {ctx.alliance_treasure_left_free_today}/{ctx.alliance_treasure_max_dig} اليوم)")
         elif ctx.alliance_treasure_is_digging:
