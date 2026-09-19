@@ -1810,11 +1810,15 @@ class BotManager:
                                 claimable_c += 1
                     else:
                         ready_c += 1
+            tr = pve_ctrl.get("timeReward", {})
+            tr_begin = float(tr.get("beginTime", 0)) if isinstance(tr, dict) else 0
+            tr_seconds = max(0, int(now_t - tr_begin)) if tr_begin > 0 else 0
             ctx.port_delegate_status = {
                 "ready_tasks": ready_c,
                 "running_tasks": running_c,
                 "claimable_tasks": claimable_c,
-                "island_points": pts
+                "island_points": pts,
+                "time_reward_seconds": tr_seconds
             }
 
         # 19. فحص حالة دار الادخار وبنك التوفير (savingsBankAgCtrl)
@@ -2988,6 +2992,7 @@ class BotManager:
             "buy_all": buy_all,
             "buy_items": buy_items,
             "auto_claim": True,
+            "claim_time_reward": True,
             "skip_delegate": False,
             "skip_shop": (choice_str in ("none", "لا_شيء", "تعطيل", "0", ""))
         }

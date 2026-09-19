@@ -8,10 +8,12 @@ tasks/port_delegate.py — مهمة الميناء العسكري: التعيي�
     cmd: "2064", subcmd: "10", data: {"taskId": taskId, "heros": [hero1, hero2]}
   - استلام مكافأة مهمة مكتملة:
     cmd: "2064", subcmd: "11", data: {"taskId": taskId}
+  - استلام الجائزة الآلية لمكافأة الوقت:
+    cmd: "2064", subcmd: "9", data: {}
   - ميزات:
     1. 🔍 استعلام ذكي وتلقائي عن حالة مهام التعيين الـ 10 ومستويات الفتح.
     2. ⚡ الإرسال السريع والتعيين الذكي للأبطال مع مطابقة شروط البونص والبدائل المتاحة.
-    3. 🎁 استلام مكافآت المهام المكتملة تلقائياً وتحرير الأبطال.
+    3. 🎁 استلام مكافآت المهام المكتملة والجائزة الآلية تلقائياً وتحرير الأبطال.
 
 القسم الثاني (Part 2) — متجر الجزيرة الغامضة (CMD 5011):
   - شراء المنتجات المحددة وفق نقاط الحرب البحرية / الجزيرة المتوفرة:
@@ -259,6 +261,7 @@ class PortDelegateTask(BaseTask):
         super().__init__(conn, config)
         self.check_only: bool = self.config.get("check_only", False)
         self.auto_claim: bool = self.config.get("auto_claim", True)
+        self.claim_time_reward: bool = bool(self.config.get("claim_time_reward", True))
         self.target_task_ids: Optional[List[int]] = self.config.get("task_ids")
         self.buy_items: Optional[Any] = self.config.get("buy_items")
         self.buy_all: bool = bool(self.config.get("buy_all", False))
@@ -373,10 +376,19 @@ class PortDelegateTask(BaseTask):
                 "cond2": meta["cond2"]
             })
 
+        time_rwd = pve.get("timeReward", {})
+        time_reward_seconds = 0
+        if isinstance(time_rwd, dict):
+            b_time = float(time_rwd.get("beginTime", 0))
+            if b_time > 0:
+                time_reward_seconds = max(0, int(now - b_time))
+
         return {
             "cur_level_id": cur_level_id,
             "tasks": tasks_list,
-            "busy_heroes": busy_hero_ids
+            "busy_heroes": busy_hero_ids,
+            "time_reward_seconds": time_reward_seconds,
+            "time_reward_raw": time_rwd
         }
 
     # ──────────────────────────────────────────────────────────────────
@@ -508,6 +520,52 @@ class PortDelegateTask(BaseTask):
             return False, f"استثناء أثناء إرسال المهمة: {e}"
 
     # ──────────────────────────────────────────────────────────────────
+    #  استلام الجائزة الآلية لمكافأة الوقت (CMD 2064 / 9)
+    # ──────────────────────────────────────────────────────────────────
+
+    async def _claim_time_reward(self) -> Tuple[bool, str, int]:
+        """
+        إرسال طلب استلام الجائزة الآلية لمكافأة الوقت في الميناء العسكري والحرب البحرية:
+        cmd: "2064", subcmd: "9", data: {}
+        يرجع (نجاح/فشل, الرسالة, فارق النقاط المكتسبة).
+        """
+        pve = self.conn.init_data.get("PveBattleCtrl", {})
+        cur_level_id = int(pve.get("nCurLevelId", 0))
+        time_rwd = pve.get("timeReward")
+
+        # إذا لم يتم فتح الحرب البحرية / الميناء إطلاقاً
+        if cur_level_id <= 0 and not time_rwd:
+            return False, "الحرب البحرية غير مفتوحة في القلعة حالياً", 0
+
+        old_points = self.get_island_points()
+        try:
+            rsp = await self.conn.query("2064", "9", {})
+            if not rsp:
+                return False, "لم يتم استلام رد من السيرفر", 0
+
+            err = str(rsp.get("err", ""))
+            if err == "0":
+                data = rsp.get("data", {})
+                new_tr = data.get("timeReward")
+                if new_tr and isinstance(new_tr, dict):
+                    pve_local = self.conn.init_data.setdefault("PveBattleCtrl", {})
+                    pve_local["timeReward"] = new_tr
+
+                # انتظار قصير لالتقاط NOTIFY_PVE_BATTLE وتحديث النقاط إن وُجد
+                await asyncio.sleep(0.3)
+                new_points = self.get_island_points()
+                pts_gained = max(0, new_points - old_points)
+
+                msg = f"تم استلام الجائزة الآلية بنجاح (+{pts_gained:,} نقطة)" if pts_gained > 0 else "تم استلام الجائزة الآلية بنجاح"
+                return True, msg, pts_gained
+            elif err in ("1002", "1001"):
+                return False, "لا توجد جائزة آلية جاهزة للاستلام حالياً", 0
+            else:
+                return False, f"فشل استلام الجائزة الآلية (كود: {err})", 0
+        except Exception as e:
+            return False, f"استثناء أثناء استلام الجائزة الآلية: {e}", 0
+
+    # ──────────────────────────────────────────────────────────────────
     #  عرض تقرير الاستعلام في الطرفية
     # ──────────────────────────────────────────────────────────────────
 
@@ -515,12 +573,19 @@ class PortDelegateTask(BaseTask):
         tasks = info["tasks"]
         cur_level = info["cur_level_id"]
         busy_count = len(info["busy_heroes"])
+        tr_secs = info.get("time_reward_seconds", 0)
 
         print("\n" + "═" * 78)
         print("  ⚓ تقرير مهام التعيين في الميناء العسكري (Military Port Delegate Tasks)")
         print("═" * 78)
         print(f"  🗺️ المرحلة الحالية في الحرب البحرية:  Level ID {cur_level}")
         print(f"  🦸 أبطال القلعة المتوفرون:             {len(castle_heroes)} بطل (المشغولون: {busy_count})")
+        if tr_secs > 0:
+            h = tr_secs // 3600
+            m = (tr_secs % 3600) // 60
+            print(f"  ⏳ الجائزة الآلية لمكافأة الوقت:      تتراكم منذ {h} س و {m} د")
+        elif info.get("time_reward_raw"):
+            print("  ⏳ الجائزة الآلية لمكافأة الوقت:      جاهزة / تم الاستلام حديثاً")
         print("─" * 78)
         print(f"  {'رقم المهمة':<12} {'الاسم':<22} {'النجوم':<8} {'الحالة':<30}")
         print("─" * 78)
@@ -778,8 +843,22 @@ class PortDelegateTask(BaseTask):
         claimed_count = 0
         dispatched_count = 0
         failed_count = 0
+        time_reward_claimed = False
+        time_reward_pts = 0
 
-        # ── القسم الأول: مهام التعيين ──
+        # ── القسم الأول: استلام الجائزة الآلية لمكافأة الوقت (CMD 2064 / 9) ──
+        if self.auto_claim and self.claim_time_reward:
+            ok, msg, pts_gained = await self._claim_time_reward()
+            if ok:
+                time_reward_claimed = True
+                time_reward_pts = pts_gained
+                print(f"  🎁 [الجائزة الآلية]: {msg}")
+                jitter = round(random.uniform(1.2, 2.0), 2)
+                await asyncio.sleep(jitter)
+            else:
+                self.log.info(f"ℹ️ [الجائزة الآلية]: {msg}")
+
+        # ── القسم الثاني: مهام التعيين ──
         if not self.skip_delegate:
             claimable_tasks = [t for t in info["tasks"] if t["status_code"] == "claimable"]
             if claimable_tasks and self.auto_claim:
@@ -831,12 +910,16 @@ class PortDelegateTask(BaseTask):
                         failed_count += 1
                         print(f"  ❌ [{t['name']}]: {err_msg}")
 
-        # ── القسم الثاني: الشراء من متجر الجزيرة الغامضة ──
+        # ── القسم الثالث: الشراء من متجر الجزيرة الغامضة ──
         shop_res = {"bought_items": 0, "total_spent": 0, "details": []}
         if not self.skip_shop and (self.buy_items or self.buy_all):
             shop_res = await self._execute_shop_purchases()
 
         summary_parts = []
+        if time_reward_claimed:
+            tr_desc = f"الجائزة الآلية (+{time_reward_pts:,} نقطة)" if time_reward_pts > 0 else "الجائزة الآلية"
+            summary_parts.append(tr_desc)
+
         if not self.skip_delegate:
             summary_parts.append(f"التعيين: إرسال {dispatched_count} مهمة")
             if claimed_count > 0:
@@ -853,6 +936,8 @@ class PortDelegateTask(BaseTask):
             dispatched=dispatched_count,
             claimed=claimed_count,
             failed=failed_count,
+            time_reward_claimed=time_reward_claimed,
+            time_reward_points=time_reward_pts,
             shop_bought=shop_res["bought_items"],
             shop_spent=shop_res["total_spent"]
         )
@@ -867,6 +952,7 @@ async def _cli_main():
     parser.add_argument("--email", type=str, help="البريد الإلكتروني للحساب")
     parser.add_argument("--check-only", action="store_true", help="استعلام فقط وعرض حالة المهام والمتجر")
     parser.add_argument("--no-claim", action="store_true", help="عدم استلام مكافآت المهام المكتملة تلقائياً")
+    parser.add_argument("--no-time-reward", action="store_true", help="عدم استلام الجائزة الآلية (مكافأة الوقت)")
     parser.add_argument("--skip-delegate", action="store_true", help="تخطي مهام التعيين والاكتفاء بالمتجر فقط")
     parser.add_argument("--skip-shop", action="store_true", help="تخطي الشراء من المتجر والاكتفاء بمهام التعيين")
     parser.add_argument("--buy-items", type=str, help="المنتجات المراد شراؤها (مثال: 1,2,3 أو 1:2,5:5 أو morale,recruit)")
@@ -900,6 +986,7 @@ async def _cli_main():
     config = {
         "check_only": args.check_only,
         "auto_claim": not args.no_claim,
+        "claim_time_reward": not args.no_time_reward,
         "skip_delegate": args.skip_delegate,
         "skip_shop": args.skip_shop,
         "buy_items": args.buy_items,

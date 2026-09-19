@@ -324,6 +324,11 @@ class GateClient:
                     notify_data = data_obj.get('notifyData', [])
                     if notify_id == 'NOTIFY_LOCAL_QUEUE_SYNC' and isinstance(notify_data, list):
                         self.local_queues = notify_data
+                    if notify_id == 'NOTIFY_PVE_BATTLE' and isinstance(notify_data, list):
+                        pve = self.init_data.setdefault('PveBattleCtrl', {})
+                        for item in notify_data:
+                            if isinstance(item, dict) and item.get('notifyType') == 'points':
+                                pve['points'] = int(item.get('points', pve.get('points', 0)))
                     if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
                         if isinstance(notify_data, list):
                             for item in notify_data:
