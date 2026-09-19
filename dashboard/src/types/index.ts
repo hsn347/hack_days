@@ -128,8 +128,15 @@ export interface CastleConfig {
   building: BaseTaskConfig & { upgrade_castle: boolean; speedup_castle: boolean; upgrade_support_buildings: boolean; target_buildings?: Record<string, boolean> }
   prestige: BaseTaskConfig & { subtasks: PrestigeSubtasks }
   march_manager: MarchManagerConfig
+  troy_treasure?: BaseTaskConfig & {
+    subtasks?: {
+      claim_quests?: boolean
+      [key: string]: any
+    }
+  }
   gold_gather?: { enabled: boolean; locations: GoldLocation[] }
 }
+
 
 export interface Castle {
   id: string
@@ -178,6 +185,12 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
       watermill: false,
       train: false,
       fortress: false,
+    },
+  },
+  troy_treasure: {
+    enabled: false,
+    subtasks: {
+      claim_quests: true,
     },
   },
   march_manager: {
@@ -259,6 +272,12 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
       watermill: false,
       train: false,
       fortress: false,
+    },
+  },
+  troy_treasure: {
+    enabled: true,
+    subtasks: {
+      claim_quests: true,
     },
   },
   gold_gather: { enabled: false, locations: [] },

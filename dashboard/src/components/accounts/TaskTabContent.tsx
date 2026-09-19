@@ -2854,19 +2854,13 @@ export function TaskTabContent({
   if (tab === 'events') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {/* طروادة — coming soon */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '12px',
-          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
-          borderRadius: '12px', padding: '12px 14px', opacity: 0.5,
-        }}>
-          <span style={{ fontSize: '20px' }}>🏛️</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#9ca3af', fontWeight: 600, fontSize: '13px' }}>{t('tasks.troyEvent')}</div>
-            <div style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.troyDesc')}</div>
-          </div>
-          <Toggle value={false} onChange={() => {}} disabled size="sm" />
-        </div>
+        {/* كنز طروادة (troy_treasure) */}
+        <TaskRow
+          emoji="🏛️"
+          label={t('tasks.troyEvent')}
+          enabled={!!cfg.troy_treasure?.enabled}
+          onToggle={toggle('troy_treasure')}
+        />
 
         {/* الزنزانة الأساسية (port_delegate) */}
         {(() => {

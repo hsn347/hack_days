@@ -69,7 +69,9 @@ from tasks.savings_bank import SavingsBankTask, SAVINGS_PLANS, DEFAULT_DAYS as D
 from tasks.building import BuildingTask, BUILDING_INFO
 from tasks.prestige import PrestigeTask
 from tasks.prestige_box import PrestigeBoxTask
+from tasks.troy_treasure import TroyTreasureTask
 from tasks.hospital import HospitalTask
+
 
 
 # ── إعداد نظام التسجيل (Logging) ───────────────────────────────────
@@ -326,7 +328,17 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,                   # تفعيل/تعطيل استلام صناديق الهيبة اليومية تلقائياً
     },
 
+    # 🏛️ 22d. مهمة كنز طروادة (Troy Treasure Task)
+    # فحص مهام طروادة واستلام جوائز إنجاز المهام المستحقة (CMD 1028 / SUB 5)
+    "troy_treasure": {
+        "enabled": True,                   # تفعيل/تعطيل مهمة كنز طروادة
+        "subtasks": {
+            "claim_quests": True,          # استلام جوائز إنجاز المهام
+        },
+    },
+
     # 🏥 22b. مهمة معالجة الجنود الجرحى في المشفى (Hospital Cure Task)
+
     # تفحص جاهزية المشفى وتعالج كافة الجنود المصابين تلقائياً بالمشفى (mode: 0) قبل تشغيل منسق الفيالق
     "hospital": {
         "enabled": True,                   # تفعيل/تعطيل علاج الجنود بالمشفى تلقائياً
@@ -2191,6 +2203,7 @@ class BotManager:
             ("🏗️ ترقية المباني (Building Upgrade)",             self.step_20_building_task,            "building"),
             ("🎖️ مهام الهيبة اليومية (Prestige Quests)",        self.step_22_prestige_task,            "prestige"),
             ("🎁 استلام صناديق الهيبة (Prestige Boxes)",         self.step_22c_prestige_box_task,       "prestige_box"),
+            ("🏛️ كنز طروادة (Troy Treasure)",                  self.step_22d_troy_treasure_task,      "troy_treasure"),
             ("🏥 معالجة الجنود بالمشفى (Hospital Cure)",        self.step_22b_hospital_task,           "hospital"),
             ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
             # ──────────────────────────────────────────────────────────────────────────────
@@ -3127,6 +3140,37 @@ class BotManager:
             log.info(f"🎉 نتيجة استلام صناديق الهيبة: {res.message}")
         else:
             log.warning(f"⚠️ تنبيه في صناديق الهيبة: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
+    async def step_22d_troy_treasure_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة كنز طروادة (Troy Treasure Task):
+          - فحص تفعيل المهمة (troy_treasure.enabled).
+          - المرحلة 1: استلام كافة جوائز إنجاز المهام الجاهزة (CMD 1028 / SUB 5).
+          - إنهاء المهمة فوراً إذا لم تكن الفعالية نشطة أو لا توجد جوائز جاهزة.
+        """
+        cfg = self.config.get("troy_treasure", {})
+        if isinstance(cfg, bool):
+            cfg = {"enabled": cfg, "subtasks": {"claim_quests": True}}
+        elif not isinstance(cfg, dict):
+            cfg = {"enabled": True, "subtasks": {"claim_quests": True}}
+
+        if not bool(cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة كنز طروادة (troy_treasure.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        log.info("🏛️ بدء مهمة كنز طروادة (Troy Treasure)...")
+        task = TroyTreasureTask(self.conn, cfg)
+        await task.on_start()
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة كنز طروادة: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في كنز طروادة: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
