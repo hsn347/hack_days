@@ -139,7 +139,7 @@ class AllianceTreasureTask(BaseTask):
         for d in dig_list:
             if not isinstance(d, dict):
                 continue
-            can_receive = bool(d.get("canReceive", False))
+            can_receive = d.get("canReceive") in (True, 1, "1", "true")
             endtime = int(d.get("endtime", 0))
             if can_receive or (endtime > 0 and endtime <= now_ts):
                 can_receive_list.append(d)
