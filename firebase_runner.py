@@ -225,14 +225,31 @@ class FirebaseRunner:
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
 
-            log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
-            with open(log_path, "a", encoding="utf-8", errors="replace") as lf:
-                lf.write(f"\n{'='*60}\n[{datetime.now():%Y-%m-%d %H:%M:%S}] دورة جديدة\n{'='*60}\n")
-                lf.flush()
+            # حفظ اللوق في ملف مسموح فقط للمستخدم shreher@gmail.com
+            is_shreher = (email.strip().lower() == "shreher@gmail.com")
+            if not is_shreher and user_id:
+                try:
+                    import core.database as db
+                    u = db.get_user(user_id)
+                    if u and str(u.get("email", "")).strip().lower() == "shreher@gmail.com":
+                        is_shreher = True
+                except Exception:
+                    pass
 
+            if is_shreher:
+                log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+                with open(log_path, "a", encoding="utf-8", errors="replace") as lf:
+                    lf.write(f"\n{'='*60}\n[{datetime.now():%Y-%m-%d %H:%M:%S}] دورة جديدة\n{'='*60}\n")
+                    lf.flush()
+                    proc = subprocess.Popen(
+                        cmd, cwd=_ROOT, env=env,
+                        stdout=lf, stderr=lf,
+                        text=True, encoding="utf-8", errors="replace"
+                    )
+            else:
                 proc = subprocess.Popen(
                     cmd, cwd=_ROOT, env=env,
-                    stdout=lf, stderr=lf,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     text=True, encoding="utf-8", errors="replace"
                 )
 
@@ -454,19 +471,13 @@ class FirebaseRunner:
 # ══════════════════════════════════════════════════════════════════════
 
 def main():
-    global SERVICE_ACCOUNT_KEY
-    parser = argparse.ArgumentParser(description="Firebase Runner")
-    parser.add_argument("--project",       default=PROJECT_ID)
-    parser.add_argument("--loop-interval", type=int, default=90)
-    parser.add_argument("--service-key",   default=SERVICE_ACCOUNT_KEY)
-    args = parser.parse_args()
-
-    SERVICE_ACCOUNT_KEY = args.service_key
-
-    FirebaseRunner(
-        project_id    = args.project,
-        loop_interval = args.loop_interval,
-    ).run()
+    print("\n" + "=" * 60)
+    print("⚠️  تم إيقاف وتشغيل firebase_runner.py القديم!")
+    print("🚀 النظام يعمل الآن عبر خادم api_server.py فائق السرعة والمدعوم بـ SQLite.")
+    print("   لتشغيل الخادم:")
+    print("   python api_server.py")
+    print("=" * 60 + "\n")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

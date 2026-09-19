@@ -129,14 +129,24 @@ class StaminaTask(BaseTask):
                 await asyncio.sleep(1.8)  # فاصل زمني آمن لحماية الحساب
 
         # 3. شراء الطاقة بالذهب (2060/1) بالتكرار الدقيق بعدد المرات المطلوب
+        max_price = int(cfg.get('max_price', cfg.get('price_limit', 0)))
         if gold_buys > 0:
-            self.log.info(f"🪙 جاري تنفيذ {gold_buys} عمليات شراء طاقة بالذهب بأمر 2060/1...")
+            self.log.info(f"🪙 جاري تنفيذ {gold_buys} عمليات شراء طاقة بالذهب بأمر 2060/1 (الحد الأقصى للسعر: {max_price if max_price > 0 else 'غير محدد'})...")
             for i in range(gold_buys):
-                self.log.info(f"🪙 إرسال طلب الشراء بالذهب #{i+1} من أصل {gold_buys}...")
+                # فحص السعر الحالي قبل إرسال الطلب لحماية الذهب
+                bs_now = self.conn.init_data.get('buyStaminaCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+                cur_p = int(bs_now.get('price', 0)) if isinstance(bs_now, dict) else 0
+                if max_price > 0 and cur_p > max_price:
+                    self.log.warning(f"⚠️ توقف شراء الطاقة بالذهب: سعر التبديل الحالي بالقلعة ({cur_p} ذهب) تجاوز الحد الأقصى ({max_price} ذهب).")
+                    break
+
+                self.log.info(f"🪙 إرسال طلب الشراء بالذهب #{i+1} من أصل {gold_buys} (السعر الحالي: {cur_p} ذهب)...")
                 r_buy = await self.conn.query('2060', '1', {}, timeout=8)
                 if r_buy and str(r_buy.get('err', '0')) == '0':
                     gold_buys_done += 1
                     total_stamina_gained += 100
+                    if isinstance(r_buy.get('data'), dict) and 'buyStaminaCtrl' in r_buy['data']:
+                        self.conn.init_data['buyStaminaCtrl'].update(r_buy['data']['buyStaminaCtrl'])
                     self.log.info(f"✅ تم تنفيذ طلب الشراء بالذهب #{i+1} بنجاح ✅")
                 else:
                     err_code = str(r_buy.get('err', 'unknown')) if r_buy else 'timeout'

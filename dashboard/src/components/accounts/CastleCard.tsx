@@ -3,18 +3,17 @@ import { useTranslation } from 'react-i18next'
 import {
   ChevronDown, ChevronUp, Play, Square, Trash2, Edit2, Clock,
   Zap, Globe, MapPin, Crown, Activity, Lock, ShieldAlert, AlertTriangle,
-  Copy
+  Copy, Sparkles
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
-import { doc, onSnapshot } from 'firebase/firestore'
 import toast from 'react-hot-toast'
-import { db } from '../../lib/firebase'
 import { ResourceBar } from './ResourceBar'
 import { TaskTabContent } from './TaskTabContent'
 import { ConfirmStopModal } from './ConfirmStopModal'
-import type { Castle, BotState } from '../../types'
-import { useBotControl } from '../../hooks/useCastles'
+import { ConfirmPresetModal } from './ConfirmPresetModal'
+import { Castle, BotState, FIXED_PRESET_CONFIG } from '../../types'
+import { useBotControl, useRealBotStatus, useUpdateCastleConfig } from '../../hooks/useCastles'
 import { useAuth } from '../../hooks/useAuth'
 
 export interface CastleCardProps {
@@ -25,26 +24,51 @@ export interface CastleCardProps {
   onEdit?: (castle: Castle) => void
   onSetBatchTemplate?: (castleId: string) => void
   isPending?: boolean
+  isExpanded?: boolean
+  onToggleExpand?: () => void
 }
 
-export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatchTemplate, isPending }: CastleCardProps) {
+export function CastleCard({
+  castle,
+  userId,
+  index,
+  onDelete,
+  onEdit,
+  onSetBatchTemplate,
+  isPending,
+  isExpanded,
+  onToggleExpand,
+}: CastleCardProps) {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
+  const isControlled = typeof isExpanded === 'boolean'
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const expanded = isControlled ? isExpanded : internalExpanded
   const [hasBeenExpanded, setHasBeenExpanded] = useState(false)
+
+  useEffect(() => {
+    if (expanded) setHasBeenExpanded(true)
+  }, [expanded])
 
   const handleToggleExpand = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    setExpanded(prev => {
-      const next = !prev
-      if (next) setHasBeenExpanded(true)
-      return next
-    })
+    if (isControlled) {
+      onToggleExpand?.()
+    } else {
+      setInternalExpanded(prev => {
+        const next = !prev
+        if (next) setHasBeenExpanded(true)
+        return next
+      })
+    }
   }
   const [liveCastle, setLiveCastle] = useState<Castle>(castle)
   const [liveState, setLiveState] = useState<string>(castle.bot_status.state)
   const [connState, setConnState] = useState<string>(castle.bot_status?.conn_state ?? '')
   const [showStopModal, setShowStopModal] = useState(false)
+  const [showPresetModal, setShowPresetModal] = useState(false)
+  const [isApplyingPreset, setIsApplyingPreset] = useState(false)
   const botControl = useBotControl(userId)
+  const updateConfig = useUpdateCastleConfig(userId, castle.id)
   const { user } = useAuth()
 
   const isSuperAdmin = user?.role === 'admin' || user?.email?.trim().toLowerCase() === 'ibraboths@gmail.com'
@@ -61,27 +85,16 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
     setConnState(castle.bot_status?.conn_state ?? '')
   }, [castle])
 
-  // Real-time listener — Firebase هو المصدر الوحيد للحقيقة
+  // WebSocket Real-time listener — مراقبة الحالة الحقيقية للبوت عبر WebSocket بدون استعلامات فايربيس
+  const { status: realStatus } = useRealBotStatus(castle.id)
+
   useEffect(() => {
-    const ref = doc(db, 'users', userId, 'castles', castle.id)
-    const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as Record<string, unknown>
-        delete data.password
-        setLiveCastle(prev => ({
-          ...prev,
-          ...data,
-          castle_info: (data.castle_info as any) || prev.castle_info,
-          resources:   (data.resources   as any) || prev.resources,
-          bot_status:  (data.bot_status  as any) || prev.bot_status,
-        }))
-        const bs = data.bot_status as any
-        if (bs?.state) setLiveState(bs.state)
-        if (bs?.conn_state !== undefined) setConnState(bs.conn_state ?? '')
-      }
-    })
-    return unsub
-  }, [userId, castle.id])
+    if (realStatus && realStatus !== 'offline') {
+      const bs = realStatus === 'starting' ? 'starting' : (realStatus === 'idle' ? 'idle' : 'running')
+      setLiveState(bs)
+      setConnState(realStatus)
+    }
+  }, [realStatus])
 
   const info      = liveCastle.castle_info || castle.castle_info
   const bot       = liveCastle.bot_status  || castle.bot_status
@@ -183,12 +196,25 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
     setShowStopModal(false)
   }
 
+  const handleConfirmPreset = async () => {
+    setIsApplyingPreset(true)
+    try {
+      await updateConfig.mutateAsync(FIXED_PRESET_CONFIG)
+      toast.success(t('accounts.fixedPresetSuccess'))
+      setShowPresetModal(false)
+    } catch {
+      toast.error(t('common.error'))
+    } finally {
+      setIsApplyingPreset(false)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
-        'castle-card relative backdrop-blur-xl rounded-2xl overflow-hidden transition-colors duration-200',
+        'relative backdrop-blur-xl rounded-2xl overflow-hidden transition-colors duration-200 castle-card',
         (isBanned || isExpired) && !isRunningNow
           ? 'castle-card-locked bg-rose-950/15 border border-rose-500/30 shadow-md'
           : isRunningNow
@@ -220,13 +246,13 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
       {/* ── Header Row ─────────────────────────────────────── */}
       <div
         onClick={handleToggleExpand}
-        className="castle-card-header flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-3.5 sm:p-5 cursor-pointer select-none"
+        className="flex sm:flex-row flex-col justify-between sm:items-center gap-3.5 p-3.5 sm:p-5 cursor-pointer select-none castle-card-header"
       >
         {/* Left / Castle Info */}
         <div className="flex items-start sm:items-center gap-3 min-w-0">
           {/* Index Number */}
           {typeof index === 'number' && (
-            <span className="castle-index hidden sm:inline-block w-5 font-mono font-bold text-gray-500 text-xs select-none">
+            <span className="hidden sm:inline-block w-5 font-mono font-bold text-gray-500 text-xs select-none castle-index">
               {String(index + 1).padStart(2, '0')}
             </span>
           )}
@@ -235,7 +261,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
           <div className="relative flex-shrink-0">
             <div
               className={clsx(
-                'castle-avatar flex justify-center items-center rounded-2xl w-11 h-11 sm:w-12 sm:h-12 font-black text-base transition-all duration-300',
+                'flex justify-center items-center rounded-2xl w-11 sm:w-12 h-11 sm:h-12 font-black text-base transition-all duration-300 castle-avatar',
                 isRunningNow
                   ? 'avatar-running bg-gradient-to-br from-emerald-500/25 via-emerald-600/35 to-teal-500/25 border-2 border-emerald-400/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
                   : isWaitingCycle
@@ -252,19 +278,19 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             {isRunningNow && (
               <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
                 <span className="inline-flex absolute bg-emerald-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="castle-beacon-dot inline-flex relative bg-emerald-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5"></span>
+                <span className="inline-flex relative bg-emerald-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
               </span>
             )}
             {isWaitingCycle && (
               <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
                 <span className="inline-flex absolute bg-sky-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="castle-beacon-dot inline-flex relative bg-sky-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5"></span>
+                <span className="inline-flex relative bg-sky-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
               </span>
             )}
             {isDisconnected && (
               <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
                 <span className="inline-flex absolute bg-amber-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="castle-beacon-dot inline-flex relative bg-amber-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5"></span>
+                <span className="inline-flex relative bg-amber-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
               </span>
             )}
           </div>
@@ -273,18 +299,18 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
           <div className="flex-1 min-w-0">
             {/* Row 1: Name, Alliance, Status Badge */}
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <span className="castle-lord-name font-bold text-white text-sm sm:text-base truncate tracking-wide">
+              <span className="font-bold text-white text-sm sm:text-base truncate tracking-wide castle-lord-name">
                 {displayLordName}
               </span>
 
               {info.alliance_name && (
-                <span className="castle-alliance-badge bg-primary-500/15 px-1.5 sm:px-2 py-0.5 border border-primary-500/30 rounded-md font-semibold text-primary-300 text-[10px] sm:text-xs">
+                <span className="bg-primary-500/15 px-1.5 sm:px-2 py-0.5 border border-primary-500/30 rounded-md font-semibold text-[10px] text-primary-300 sm:text-xs castle-alliance-badge">
                   [{info.alliance_name.split(' ')[0]}]
                 </span>
               )}
 
               {info.vip_level > 0 && (
-                <span className="castle-vip-badge flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 px-1.5 py-0.5 border border-amber-500/40 rounded-md font-bold text-[10px] text-amber-300">
+                <span className="flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 px-1.5 py-0.5 border border-amber-500/40 rounded-md font-bold text-[10px] text-amber-300 castle-vip-badge">
                   <Crown size={10} className="text-amber-400" />
                   VIP {info.vip_level}
                 </span>
@@ -292,22 +318,22 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
 
               {/* Status Badge */}
               {isBanned ? (
-                <span className="castle-status-badge status-badge-banned flex items-center gap-1.5 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.3)] px-2.5 py-0.5 border border-rose-500/50 rounded-full font-bold text-rose-300 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1.5 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.3)] px-2.5 py-0.5 border border-rose-500/50 rounded-full font-bold text-[10px] text-rose-300 sm:text-xs castle-status-badge status-badge-banned">
                   <ShieldAlert size={12} className="text-rose-400" />
                   <span>{t('status.banned')}</span>
                 </span>
               ) : isExpired ? (
-                <span className="castle-status-badge status-badge-expired flex items-center gap-1.5 bg-rose-500/15 shadow-[0_0_12px_rgba(244,63,94,0.25)] px-2.5 py-0.5 border border-rose-500/40 rounded-full font-bold text-rose-300 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1.5 bg-rose-500/15 shadow-[0_0_12px_rgba(244,63,94,0.25)] px-2.5 py-0.5 border border-rose-500/40 rounded-full font-bold text-[10px] text-rose-300 sm:text-xs castle-status-badge status-badge-expired">
                   <AlertTriangle size={12} className="text-rose-400" />
                   <span>{t('status.stoppedExpired')}</span>
                 </span>
               ) : isPending || liveState === 'pending' ? (
-                <span className="castle-status-badge status-badge-pending flex items-center gap-1 bg-amber-500/15 px-2 py-0.5 border border-amber-500/30 rounded-full font-semibold text-amber-400 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1 bg-amber-500/15 px-2 py-0.5 border border-amber-500/30 rounded-full font-semibold text-[10px] text-amber-400 sm:text-xs castle-status-badge status-badge-pending">
                   <Clock size={11} />
                   {t('status.pending')}
                 </span>
               ) : isDisconnected ? (
-                <span className="castle-status-badge status-badge-disconnected flex items-center gap-1 bg-amber-500/20 px-2 py-0.5 border border-amber-500/50 rounded-full font-bold text-amber-300 text-[10px] sm:text-xs animate-pulse">
+                <span className="flex items-center gap-1 bg-amber-500/20 px-2 py-0.5 border border-amber-500/50 rounded-full font-bold text-[10px] text-amber-300 sm:text-xs animate-pulse castle-status-badge status-badge-disconnected">
                   <span className="relative flex w-1.5 h-1.5">
                     <span className="inline-flex absolute bg-amber-400 opacity-70 rounded-full w-full h-full animate-ping"></span>
                     <span className="inline-flex relative bg-amber-400 rounded-full w-1.5 h-1.5"></span>
@@ -315,13 +341,13 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
                   <span>{t('status.otherDevice')}</span>
                 </span>
               ) : isReconnecting ? (
-                <span className="castle-status-badge status-badge-reconnecting flex items-center gap-1 bg-orange-500/15 px-2 py-0.5 border border-orange-500/35 rounded-full font-semibold text-orange-300 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1 bg-orange-500/15 px-2 py-0.5 border border-orange-500/35 rounded-full font-semibold text-[10px] text-orange-300 sm:text-xs castle-status-badge status-badge-reconnecting">
                   <span className="bg-orange-400 rounded-full w-1.5 h-1.5 animate-spin" style={{borderRadius:'50%', border:'2px solid transparent', borderTopColor:'#fb923c'}} />
                   <span>{t('status.reconnecting')}</span>
                 </span>
               ) : isWaitingCycle ? (
                 <span
-                  className="castle-status-badge status-badge-waiting flex items-center gap-1.5 bg-sky-500/15 shadow-[0_0_10px_rgba(56,189,248,0.2)] px-2 py-0.5 border border-sky-500/35 rounded-full font-semibold text-sky-300 text-[10px] sm:text-xs"
+                  className="flex items-center gap-1.5 bg-sky-500/15 shadow-[0_0_10px_rgba(56,189,248,0.2)] px-2 py-0.5 border border-sky-500/35 rounded-full font-semibold text-[10px] text-sky-300 sm:text-xs castle-status-badge status-badge-waiting"
                   title={bot?.conn_message || t('status.waitingCycle')}
                 >
                   <span className="relative flex w-1.5 h-1.5">
@@ -336,7 +362,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
                 </span>
               ) : isRunningNow ? (
                 <span
-                  className="castle-status-badge status-badge-running flex items-center gap-1.5 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.35)] px-2.5 py-0.5 border border-emerald-500/50 rounded-full font-bold text-emerald-300 text-[10px] sm:text-xs animate-pulse"
+                  className="flex items-center gap-1.5 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.35)] px-2.5 py-0.5 border border-emerald-500/50 rounded-full font-bold text-[10px] text-emerald-300 sm:text-xs animate-pulse castle-status-badge status-badge-running"
                   title={bot?.conn_message || t('status.runningNow')}
                 >
                   <span className="relative flex w-1.5 h-1.5">
@@ -346,12 +372,12 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
                   <span>{t('status.runningNow')}</span>
                 </span>
               ) : isError ? (
-                <span className="castle-status-badge status-badge-error flex items-center gap-1 bg-rose-500/15 px-2 py-0.5 border border-rose-500/40 rounded-full font-semibold text-rose-300 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1 bg-rose-500/15 px-2 py-0.5 border border-rose-500/40 rounded-full font-semibold text-[10px] text-rose-300 sm:text-xs castle-status-badge status-badge-error">
                   <span className="bg-rose-400 rounded-full w-1.5 h-1.5 animate-pulse" />
                   <span>{t('status.error')}</span>
                 </span>
               ) : (
-                <span className="castle-status-badge status-badge-idle flex items-center gap-1 bg-white/5 px-2 py-0.5 border border-white/10 rounded-full font-medium text-gray-400 text-[10px] sm:text-xs">
+                <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 border border-white/10 rounded-full font-medium text-[10px] text-gray-400 sm:text-xs castle-status-badge status-badge-idle">
                   <span className="bg-gray-500 rounded-full w-1.5 h-1.5" />
                   <span>{t('status.idle')}</span>
                 </span>
@@ -359,26 +385,26 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             </div>
 
             {/* Row 2: Email */}
-            <div className="castle-email mt-0.5 font-mono text-gray-400 text-[11px] sm:text-xs truncate select-all">
+            <div className="mt-0.5 font-mono text-[11px] text-gray-400 sm:text-xs truncate select-none castle-email">
               {castle.email}
             </div>
 
             {/* Row 3: Meta Stat Badges */}
             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
               {/* Power */}
-              <span className="castle-stat-power flex items-center gap-1 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 border border-purple-500/25 rounded-md font-semibold text-[10px] sm:text-[11px] text-purple-300">
+              <span className="flex items-center gap-1 bg-purple-500/10 px-1.5 sm:px-2 py-0.5 border border-purple-500/25 rounded-md font-semibold text-[10px] text-purple-300 sm:text-[11px] castle-stat-power">
                 <Zap size={10} className="text-purple-400" />
                 {(info.lord_power / 1_000_000).toFixed(1)}M
               </span>
 
               {/* Server */}
-              <span className="castle-stat-server flex items-center gap-1 bg-blue-500/10 px-1.5 sm:px-2 py-0.5 border border-blue-500/25 rounded-md font-semibold text-[10px] sm:text-[11px] text-blue-300">
+              <span className="flex items-center gap-1 bg-blue-500/10 px-1.5 sm:px-2 py-0.5 border border-blue-500/25 rounded-md font-semibold text-[10px] text-blue-300 sm:text-[11px] castle-stat-server">
                 <Globe size={10} className="text-blue-400" />
                 #{info.server_id}
               </span>
 
               {/* Coordinates */}
-              <span className="castle-stat-coords flex items-center gap-1 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 border border-cyan-500/25 rounded-md font-semibold text-[10px] sm:text-[11px] text-cyan-300">
+              <span className="flex items-center gap-1 bg-cyan-500/10 px-1.5 sm:px-2 py-0.5 border border-cyan-500/25 rounded-md font-semibold text-[10px] text-cyan-300 sm:text-[11px] castle-stat-coords">
                 <MapPin size={10} className="text-cyan-400" />
                 {info.coordinates.x},{info.coordinates.y}
               </span>
@@ -387,14 +413,14 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
         </div>
 
         {/* Right / Actions: on mobile full width with distinct thumb button, on desktop inline */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/6 w-full sm:w-auto sm:ms-auto">
+        <div className="flex justify-between sm:justify-end items-center gap-2 sm:ms-auto pt-2 sm:pt-0 border-white/6 border-t sm:border-t-0 w-full sm:w-auto">
           {/* Main Start / Stop Button */}
           {isBanned ? (
             <button
               type="button"
               onClick={handleToggleClick}
               title={t('accounts.bannedTooltip')}
-              className="castle-btn-toggle btn-locked flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl sm:rounded-lg font-bold text-xs bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 transition-all duration-200 cursor-pointer select-none"
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 px-3.5 py-2 sm:py-1.5 border border-rose-500/40 rounded-xl sm:rounded-lg font-bold text-rose-300 text-xs transition-all duration-200 cursor-pointer select-none castle-btn-toggle btn-locked"
             >
               <Lock size={13} className="text-rose-400" />
               <span>{t('accounts.lockedBanned')}</span>
@@ -404,7 +430,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
               type="button"
               onClick={handleToggleClick}
               title={t('accounts.expiredTooltip')}
-              className="castle-btn-toggle btn-locked flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl sm:rounded-lg font-bold text-xs bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 transition-all duration-200 cursor-pointer select-none"
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 px-3.5 py-2 sm:py-1.5 border border-rose-500/40 rounded-xl sm:rounded-lg font-bold text-rose-300 text-xs transition-all duration-200 cursor-pointer select-none castle-btn-toggle btn-locked"
             >
               <Lock size={13} className="text-rose-400" />
               <span>{t('accounts.lockedExpired')}</span>
@@ -412,7 +438,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
           ) : isPending || liveState === 'pending' ? (
             <span
               onClick={e => e.stopPropagation()}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 bg-yellow-500/10 px-3 py-2 sm:py-1.5 border border-yellow-500/30 rounded-xl sm:rounded-lg font-semibold text-yellow-400 text-xs cursor-not-allowed"
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1 bg-yellow-500/10 px-3 py-2 sm:py-1.5 border border-yellow-500/30 rounded-xl sm:rounded-lg font-semibold text-yellow-400 text-xs cursor-not-allowed"
             >
               <Clock size={13} />
               {t('status.pending')}
@@ -421,7 +447,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             <button
               onClick={handleToggleClick}
               className={clsx(
-                'castle-btn-toggle flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl sm:rounded-lg font-bold text-xs active:scale-95 transition-all duration-200 cursor-pointer select-none',
+                'flex sm:flex-initial flex-1 justify-center items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl sm:rounded-lg font-bold text-xs active:scale-95 transition-all duration-200 cursor-pointer select-none castle-btn-toggle',
                 isBotActive
                   ? 'btn-stop-bot bg-rose-500/20 border border-rose-500/50 text-rose-300 hover:bg-rose-500/30 hover:border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.25)]'
                   : 'btn-start-bot bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.35)]'
@@ -441,6 +467,20 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             </button>
           )}
 
+          {/* Preset Settings Button */}
+          {!isPending && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setShowPresetModal(true) }}
+              disabled={isApplyingPreset}
+              title={t('accounts.fixedPresetTooltip')}
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 px-3 py-2 sm:py-1.5 border border-amber-500/40 rounded-xl sm:rounded-lg font-bold text-amber-900 dark:text-amber-300 text-xs active:scale-95 transition-all duration-200 cursor-pointer select-none castle-btn-preset"
+            >
+              <Sparkles size={13} className={isApplyingPreset ? 'animate-spin text-amber-700 dark:text-amber-400' : 'text-amber-700 dark:text-amber-400'} />
+              <span>{isApplyingPreset ? t('accounts.applyingPreset') : t('accounts.fixedPreset')}</span>
+            </button>
+          )}
+
           {/* Icon Controls Group */}
           <div
             onClick={e => e.stopPropagation()}
@@ -451,7 +491,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onSetBatchTemplate(castle.id) }}
-                className="castle-action-btn castle-action-btn-template hover:bg-primary-500/20 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-primary-300 transition-colors cursor-pointer"
+                className="hover:bg-primary-500/20 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-primary-300 transition-colors cursor-pointer castle-action-btn castle-action-btn-template"
                 title={t('accounts.useAsBatchTemplate')}
               >
                 <Copy size={15} />
@@ -462,7 +502,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             {onEdit && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(castle) }}
-                className="castle-action-btn hover:bg-white/8 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-white transition-colors cursor-pointer"
+                className="hover:bg-white/8 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-white transition-colors cursor-pointer castle-action-btn"
                 title={t('accounts.editCredentials')}
               >
                 <Edit2 size={15} />
@@ -473,7 +513,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
             {onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(castle.id, castle.is_active) }}
-                className="castle-action-btn castle-action-btn-delete hover:bg-rose-500/10 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-500 hover:text-rose-400 transition-colors cursor-pointer"
+                className="hover:bg-rose-500/10 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-500 hover:text-rose-400 transition-colors cursor-pointer castle-action-btn castle-action-btn-delete"
                 title={t('accounts.confirmDelete')}
               >
                 <Trash2 size={15} />
@@ -485,7 +525,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
               type="button"
               onClick={handleToggleExpand}
               className={clsx(
-                'castle-action-btn castle-action-btn-expand p-2 sm:p-1.5 rounded-lg sm:rounded-md transition-colors cursor-pointer',
+                'p-2 sm:p-1.5 rounded-lg sm:rounded-md transition-colors cursor-pointer castle-action-btn castle-action-btn-expand',
                 expanded
                   ? 'text-primary-400 bg-primary-500/15'
                   : 'text-gray-400 hover:text-white hover:bg-white/8'
@@ -501,11 +541,11 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
       {/* ── Resources Row ─────────────────────────────────── */}
       <div
         onClick={handleToggleExpand}
-        className="castle-resources-row bg-white/[0.01] px-4 sm:px-5 pt-3 pb-3.5 border-white/8 border-t cursor-pointer select-none"
+        className="bg-white/[0.01] px-4 sm:px-5 pt-3 pb-3.5 border-white/8 border-t cursor-pointer select-none castle-resources-row"
       >
         <ResourceBar resources={resources} />
         {bot.last_error && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-rose-400">
+          <div className="flex items-center gap-2 mt-2 text-rose-400 text-xs">
             <span className="max-w-full truncate" title={bot.last_error}>
               ⚠ {bot.last_error}
             </span>
@@ -517,7 +557,7 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
       {hasBeenExpanded && (
         <div
           className={clsx(
-            'castle-expanded-section border-white/8 border-t w-full',
+            'border-white/8 border-t w-full castle-expanded-section',
             expanded ? 'block' : 'hidden'
           )}
           onClick={e => e.stopPropagation()}
@@ -532,6 +572,16 @@ export function CastleCard({ castle, userId, index, onDelete, onEdit, onSetBatch
           </div>
         </div>
       )}
+
+      {/* ── Confirm Preset Modal ───────────────────────────── */}
+      <ConfirmPresetModal
+        isOpen={showPresetModal}
+        onClose={() => setShowPresetModal(false)}
+        onConfirm={handleConfirmPreset}
+        lordName={displayLordName}
+        email={castle.email}
+        isPending={isApplyingPreset}
+      />
 
       {/* ── Confirm Stop Modal ─────────────────────────────── */}
       <ConfirmStopModal

@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { useAuth } from '../hooks/useAuth'
 import { useCastles } from '../hooks/useCastles'
 import { motion } from 'framer-motion'
-import { Plus, Users, Shield, Zap, Bot, Crown, AlertTriangle, AlertCircle, ShieldAlert } from 'lucide-react'
+import { Plus, Users, Shield, Zap, Bot, Crown, AlertTriangle, AlertCircle, ShieldAlert, Clock } from 'lucide-react'
 
 import { localizePlanName, localizeUsername } from '../lib/localize'
 
@@ -27,9 +27,10 @@ export function DashboardPage() {
   const now = Date.now()
   const expDate = sub?.expires_at ? new Date(sub.expires_at) : null
   const isLifetime = expDate ? expDate.getFullYear() >= 2090 : false
-  const isExpired = !isLifetime && (sub?.status === 'expired' || (expDate ? expDate.getTime() < now : false))
-  const daysRemaining = isLifetime ? 99999 : (expDate ? Math.ceil((expDate.getTime() - now) / 86400000) : (sub?.days_remaining ?? 0))
-  const isExpiringSoon = !isAdmin && !isExpired && daysRemaining <= 3 && daysRemaining >= 0
+  const isPendingApproval = !isAdmin && sub?.status === 'pending_approval'
+  const isExpired = !isLifetime && !isPendingApproval && (sub?.status === 'expired' || (expDate && !isNaN(expDate.getTime()) ? expDate.getTime() < now : false))
+  const daysRemaining = isLifetime ? 99999 : isPendingApproval ? 0 : (expDate && !isNaN(expDate.getTime())) ? Math.ceil((expDate.getTime() - now) / 86400000) : (sub?.days_remaining ?? 0)
+  const isExpiringSoon = !isAdmin && !isExpired && !isPendingApproval && Boolean(expDate && !isNaN(expDate.getTime())) && daysRemaining <= 3 && daysRemaining >= 0
   const isBanned = !isAdmin && Boolean(user?.is_banned)
 
   const stats = [
@@ -38,23 +39,23 @@ export function DashboardPage() {
     { label: t('dashboard.idleCastles'),   value: idle,               icon: '⏸️', color: 'text-gray-400',   bg: 'bg-gray-600/10 border-gray-600/20' },
     {
       label: t('dashboard.subscription'),
-      value: isAdmin ? t('dashboard.superAdminUnlimited') : isBanned ? t('dashboard.bannedBadge') : (planDisplayName || '—'),
-      icon: isAdmin ? '👑' : isBanned ? '🚫' : isExpired ? '⚠️' : isExpiringSoon ? '⏳' : '⭐',
+      value: isAdmin ? t('dashboard.superAdminUnlimited') : isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? 'بانتظار الموافقة' : (planDisplayName || '—'),
+      icon: isAdmin ? '👑' : isBanned ? '🚫' : isPendingApproval ? '⏳' : isExpired ? '⚠️' : isExpiringSoon ? '⏳' : '⭐',
       color: isAdmin
         ? 'text-amber-400'
         : isBanned || isExpired
         ? 'text-rose-500 dark:text-rose-400'
-        : isExpiringSoon
+        : isPendingApproval || isExpiringSoon
         ? 'text-amber-500 dark:text-amber-400'
         : 'text-yellow-400',
       bg: isAdmin
         ? 'bg-amber-600/10 border-amber-600/20'
         : isBanned || isExpired
         ? 'bg-rose-500/15 border-rose-500/40 ring-1 ring-rose-500/30'
-        : isExpiringSoon
+        : isPendingApproval || isExpiringSoon
         ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30'
         : 'bg-yellow-600/10 border-yellow-600/20',
-      badge: isBanned ? t('dashboard.bannedBadge') : isExpired ? t('dashboard.expiredBadge') : isExpiringSoon ? t('dashboard.daysRemainingShort', { count: daysRemaining }) : undefined,
+      badge: isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? 'قيد المراجعة' : isExpired ? t('dashboard.expiredBadge') : isExpiringSoon ? t('dashboard.daysRemainingShort', { count: daysRemaining }) : undefined,
     },
   ]
 
@@ -73,6 +74,32 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Pending Approval Alert ── */}
+        {isPendingApproval && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3.5 bg-amber-500/10 dark:bg-amber-500/15 shadow-xs p-4 border border-amber-500/30 rounded-2xl text-amber-900 dark:text-amber-100"
+          >
+            <div className="flex justify-center items-center bg-amber-500/20 border border-amber-500/30 rounded-xl w-10 h-10 text-amber-600 dark:text-amber-400 shrink-0">
+              <Clock size={22} className="animate-pulse" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-bold text-amber-950 dark:text-amber-100 text-sm">
+                  {t('dashboard.pendingApprovalTitle')}
+                </h3>
+                <span className="py-0.5 text-[10px] badge badge-yellow font-bold">
+                  {t('dashboard.pendingApprovalBadge')}
+                </span>
+              </div>
+              <p className="mt-0.5 text-amber-800 dark:text-amber-300/90 text-xs">
+                {t('dashboard.pendingApprovalDesc')}
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Banned Alert ── */}
         {isBanned && (
@@ -233,13 +260,16 @@ export function DashboardPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2 font-medium text-sm brand-title">
                 {isAdmin && <Crown size={15} className="inline text-amber-500" />}
-                <span>{isAdmin ? t('dashboard.superAdminFull') : planDisplayName}</span>
+                <span>{isAdmin ? t('dashboard.superAdminFull') : isPendingApproval ? t('dashboard.pendingApprovalStatus') : planDisplayName}</span>
+                {isPendingApproval && <span className="text-[10px] badge badge-yellow animate-pulse font-bold">{t('dashboard.pendingApprovalBadge')}</span>}
                 {isExpired && <span className="text-[10px] badge badge-red">{t('dashboard.expiredBadge')}</span>}
                 {isExpiringSoon && <span className="text-[10px] animate-pulse badge badge-yellow">{t('dashboard.expiringSoonBadge')}</span>}
               </div>
               <div className="mt-0.5 text-gray-500 text-xs">
                 {isAdmin ? (
                   <span className="font-medium text-emerald-500 dark:text-emerald-400">{t('dashboard.superAdminLifetime')}</span>
+                ) : isPendingApproval ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">{t('dashboard.pendingApprovalNote')}</span>
                 ) : (
                   <>
                     {t('dashboard.expiresOn')}: <span dir="ltr" className="font-mono font-medium">{expDate ? `${expDate.getFullYear()}/${String(expDate.getMonth() + 1).padStart(2, '0')}/${String(expDate.getDate()).padStart(2, '0')}` : '—'}</span>

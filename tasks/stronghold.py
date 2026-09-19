@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
+from tasks.monster import get_monster_recommended_power, calculate_smart_combat_troops
 
 # ── ملف تاريخ الاستبعاد ──────────────────────────────────────────
 HISTORY_FILE = os.path.join(_ROOT_DIR, "exclude_history.json")
@@ -373,11 +374,13 @@ class StrongholdTask(BaseTask):
         wait_interval  = float(cfg.get('wait_interval', 15.0))
         max_wait_cycles = int(cfg.get('max_wait_cycles', 40))
         wait_cycles = 0
+        last_result = None
 
         while sent_count < max_marches:
             current_target_idx = sent_count + 1
             self.log.info(f"🚀 محاولة إرسال مسيرة المعقل رقم ({current_target_idx}/{max_marches})...")
             result_code = await self._send_one_stronghold(min_lv, max_lv, search_range, formation_id, troops_cfg)
+            last_result = result_code
 
             if result_code == "SUCCESS":
                 sent_count += 1
@@ -442,7 +445,9 @@ class StrongholdTask(BaseTask):
 
         self.log.info(f"🏁 إجمالي مسيرات الهجوم على المعقل المُرسَلة: {sent_count}/{max_marches}")
         if sent_count > 0:
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة هجوم على المعقل", sent=sent_count)
+            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة هجوم على المعقل", sent=sent_count, queue_full=(last_result == "QUEUE_FULL"))
+        if last_result == "QUEUE_FULL":
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True)
         return TaskResult.fail("لم يتم إرسال أي مسيرة هجوم على المعقل", retry_after=120)
 
     # ── إرسال مسيرة معقل واحدة ────────────────────────────────────
@@ -566,21 +571,71 @@ class StrongholdTask(BaseTask):
             self.log.info(f"⚔️ أبطال الحرب المختارون: {chosen_heroes}")
 
         # 7. تكوين جيش المسيرة الذكي (التشكيلة مع الإكمال التلقائي للنقص بالجنود المناسبين)
-        army_list = []
-        needed_target = troops_cfg or DEFAULT_TROOPS_COUNT
+        # جلب قوة القلعة الإجمالية من بيانات الجلسة لفحص القوة الموصى بها
+        castle_power = 0
+        try:
+            fc_info = self.conn.init_data.get("lordInfoCtrl", {}).get("fcInfo", {})
+            castle_power = int(fc_info.get("totalFc", 0))
+            if not castle_power:
+                castle_power = int(self.conn.init_data.get("charInfo", {}).get("power", 0))
+        except Exception:
+            pass
 
-        if form_army_dict:
+        target_lv = int(candidates[0].get('level', max_lv)) if candidates else max_lv
+        smart_troops, rec_power, power_status = calculate_smart_combat_troops(
+            target_type="stronghold",
+            target_level=target_lv,
+            castle_power=castle_power,
+            user_troops_cfg=troops_cfg
+        )
+
+        army_list = []
+        max_safe_capacity = 170000  # سقف أمان سعة مسيرة اللورد القصوى لمنع خطأ 8035
+
+        if form_army_dict and formation_id > 0:
+            # حساب إجمالي القوات المطلوبة في التشكيلة المحفوظة باللعبة (مع استبعاد فخاخ الجدار 800-899)
+            total_form_req = sum(
+                int(v) for k, v in form_army_dict.items()
+                if str(k).isdigit() and str(v).isdigit() and not (800 <= int(k) < 900)
+            )
+
+            # اعتماد التشكيلة المحفوظة بالكامل كما هي دون تقليصها إلى 30 ألف
+            scale = 1.0
+            if total_form_req > max_safe_capacity:
+                scale = float(max_safe_capacity) / float(total_form_req)
+                needed_target = max_safe_capacity
+                self.log.info(
+                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] إجمالي جنودها المسجل باللعبة ({total_form_req:,}) يتجاوز سعة مسيرة اللورد — "
+                    f"تم ضبطها لـ {needed_target:,} جندي بأعلى نسبة أمان لمنع خطأ 8035"
+                )
+            else:
+                needed_target = total_form_req
+                self.log.info(
+                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] اعتماد كامل جنود التشكيلة المسجلة باللعبة ({needed_target:,} جندي) دون أي تقليص"
+                )
+
             for k, v in form_army_dict.items():
                 if str(k).isdigit() and str(v).isdigit():
                     tid = int(k)
                     if 800 <= tid < 900:
                         continue
                     req = int(v)
+                    scaled_req = max(1, int(req * scale)) if scale < 1.0 else req
                     avail = available.get(tid, 0)
-                    take = min(req, avail)
+                    take = min(scaled_req, avail)
                     if take > 0:
                         army_list.append({"id": tid, "num": take})
                         available[tid] -= take
+        else:
+            needed_target = smart_troops
+            if rec_power > 0:
+                self.log.info(
+                    f"🎯 [فحص القوة الذكي] الهدف: معقل (لفل {target_lv}) | "
+                    f"القوة الموصى بها: {rec_power:,} | قوة قلعتك: {castle_power:,} | الحالة: {power_status}"
+                )
+                self.log.info(
+                    f"⚔️ [حساب الجيش الذكي] تم احتساب سعة المسيرة ديناميكياً: {needed_target:,} جندي (وفق فحص الهدف وسعة اللورد)"
+                )
 
         form_troops_count = sum(item['num'] for item in army_list)
 
@@ -591,7 +646,7 @@ class StrongholdTask(BaseTask):
         elif form_troops_count < needed_target:
             deficit = needed_target - form_troops_count
             self.log.info(
-                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين ({form_troops_count:,}/{needed_target:,} جندي) — "
+                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين بالقلعة ({form_troops_count:,}/{needed_target:,} جندي) — "
                 f"جاري إكمال النقص ({deficit:,} جندي) تلقائياً بأفضل قوات قتالية متوازنة..."
             )
             extra_army = select_combat_army(available, needed_count=deficit)
@@ -602,6 +657,17 @@ class StrongholdTask(BaseTask):
                 for item in extra_army:
                     army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
                 army_list = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
+        elif form_troops_count > needed_target:
+            # ضبط الزيادة الناتجة عن التقريب لضمان عدم تجاوز الحد الأقصى للمسيرة
+            excess = form_troops_count - needed_target
+            for item in sorted(army_list, key=lambda x: x['num'], reverse=True):
+                if excess <= 0:
+                    break
+                trim = min(excess, item['num'] - 1)
+                if trim > 0:
+                    item['num'] -= trim
+                    available[item['id']] = available.get(item['id'], 0) + trim
+                    excess -= trim
 
         if not army_list:
             self.log.warning("⚠️ لا توجد قوات متوفرة بالقلعة لإرسال المسيرة!")
@@ -695,8 +761,28 @@ class StrongholdTask(BaseTask):
                 for hid in chosen_heroes:
                     self._busy.add(hid)
                 return "HERO_BUSY"
-            elif err in ('8062', '8063', '8060', '8013', '9007062'):
-                self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول (كود {err}) — فحص معقل بديل فوراً...")
+            elif err == '8035':
+                current_total = sum(item['num'] for item in army_list)
+                if current_total > 5000:
+                    reduced_troops = max(1000, int(current_total * 0.88))
+                    self.log.warning(f"⚠️ خطأ 8035 (تجاوز سعة مسيرة اللورد) | إعادة المحاولة فوراً بضبط القوات ({reduced_troops:,} جندي)...")
+                    scale_down = reduced_troops / float(current_total)
+                    for itm in army_list:
+                        itm['num'] = max(1, int(itm['num'] * scale_down))
+                    total_troops = sum(itm['num'] for itm in army_list)
+                    attack_payload['data']['army'] = army_list
+                    r_retry = await self.conn.query('1007', '2', attack_payload)
+                    if r_retry and str(r_retry.get('err', '0')) == '0':
+                        self.log.info(f"✅ تم إرسال مسيرة المعقل بنجاح بعد ضبط القوات! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                        for hid in chosen_heroes:
+                            self._busy.add(hid)
+                        for item in army_list:
+                            self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
+                        return "SUCCESS"
+                self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
+                continue
+            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100):
+                self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
                 continue
             else:
                 self.log.error(f"❌ خطأ غير معروف: {err} | الهدف={target_id}")

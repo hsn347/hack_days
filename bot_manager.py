@@ -1,39 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-bot_manager.py — مدير البوت ومنسق المهام الشامل (Empire Bot Manager & Orchestrator)
-════════════════════════════════════════════════════════════════════════════════════════
-يقوم هذا الملف بدور "مدير البوت" للحساب:
-  1. تسجيل الدخول مرة واحدة فقط وإجراء المصافحة المشفرة مع السيرفر.
-  2. الاستعلام الشامل الأولي (Comprehensive Status Query):
-     - جلب بيانات اللورد (الاسم، المستوى، المملكة، القوة القتالية، الذهب).
-     - جلب مباني المدينة ومستوياتها وحالاتها (القلعة، الأسوار، الثكنات الأربعة، الخيام).
-     - جلب طوابير العمل النشطة (البناء، التدريب، الأبحاث، المسيرات).
-     - فحص سفن الميناء المتاحة.
-     - فحص الحيوانات الأليفة المتاحة وحالة دورياتها.
-     - تخزين هذه البيانات في سياق موحد (Account Context) لتمريرها للمهام.
-  3. تنفيذ المهام بالترتيب المحدد وفق رغبة المستخدم في منطقة مهام واضحة وسهلة التعديل:
-     • الخطوة 1: حصد مزارع المدينة (City Harvest Task)
-     • الخطوة 2: أبحاث الأكاديمية والعلوم (Academy Research Task)
-     • الخطوة 3: مهمة التحالف ومساعدة الأعضاء والتبرع للعلوم (Alliance Task)
-     • الخطوة 4: مهمة الميناء التجاري (Port Task)
-     • الخطوة 5: مهمة تدريب الجنود (Train Task)
-     • الخطوة 6: مهمة دورية الحيوانات الأليفة (Pet Patrol Task)
-     • الخطوة 7: مهمة جمع جوائز التوسع الإقليمي (Territory Expansion Task)
-     • الخطوة 8: مهمة درع السلام التلقائي وحماية القلعة (Peace Shield Task)
-     • الخطوة 9: مهمة استخدام وشراء الطاقة (Stamina Task)
-     • الخطوة 10: مهمة تفعيل المهارات التلقائية (Skills Task)
-     • الخطوة 11: مهمة تجنيد الأبطال وسحب الصناديق اليومية (Hero Draw Task)
-     • الخطوة 12: مهمة قاعة الاستراتيجيات وتطوير التكتيكات (Tactics Hall Task)
-     • الخطوة 13: مهمة طاحونة الماء وزيادة إنتاج موارد القلعة (Watermill Task)
-     • الخطوة 14: مهمة نافورة الأمنيات الملكية وبئر الحظ (Trevi Fountain Task)
-     • الخطوة 15: مهمة ورشة المواد وصناعة خامات العتاد (Material Workshop Task)
-     • الخطوة 16: مهمة القافلة التجارية وحراسة الكنز (Caravan Task)
-     • الخطوة 17: مهمة التاجر المتجول والمقايضة التلقائية (Traveling Merchant Task)
-     • الخطوة 18: مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة (Port Delegate Task)
-     • الخطوة 19: مهمة دار الادخار وبنك التوفير واستثمار الذهب (Savings Bank Task)
-     • الخطوة 20: مهمة ترقية القلعة ومباني الموارد والمعسكرات والتسريع (Building Upgrade Task)
-     • الخطوة 21: مهمة تدريب فخاخ حصن الحرب التلقائية (War Fortress Traps Task)
-
 أمثلة التشغيل من سطر الأوامر (CLI):
   # 1. تشغيل افتراضي شامل:
   python bot_manager.py --email "johan2003@yopmail.com"
@@ -69,14 +35,14 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from game_client import GameConnection, AccountSession
 from core.session_manager import SessionManager
 from tasks.port import PortTask
 from tasks.train import TrainTask, BUILDING_TROOP_MAP, TYPE_ALIASES
 from tasks.pet_patrol import (
-    PetPatrolTask, KNOWN_PETS, DEFAULT_PET_ID, DEFAULT_DESTINATION,
+    PetPatrolTask, KNOWN_PETS, DEFAULT_DESTINATION,
     PET_DESTINATIONS, resolve_pet_destination
 )
 from tasks.city_harvest import CityHarvestTask
@@ -84,31 +50,27 @@ from tasks.research import ResearchTask, load_tech_names
 from tasks.alliance import AllianceTask
 from tasks.territory_expansion import TerritoryExpansionTask
 from tasks.shield import ShieldTask, SHIELD_TYPES, DURATION_ALIASES
-from tasks.stamina import StaminaTask, STAMINA_POTIONS
+from tasks.stamina import StaminaTask
 from tasks.skills import SkillsTask, SUPPORTED_SKILLS
 from tasks.hero_draw import HeroDrawTask
+from tasks.treasure_pavilion import TreasurePavilionTask
+from tasks.blacksmith_forge import BlacksmithForgeTask
+from tasks.imperial_mausoleum import ImperialMausoleumTask
+from tasks.alliance_treasure import AllianceTreasureTask
+from tasks.daily_luxury_gift import DailyLuxuryGiftTask
+from tasks.vip_gift import VipGiftTask
 from tasks.tactics_hall import TacticsHallTask, TACTICS_MAP, parse_tactic_choice
-from tasks.watermill import WatermillTask, BUILDING_CONFIG as WATERMILL_BUILDING_CONFIG
-from tasks.fountain import FountainTask, SUPPORTED_RESOURCES as FOUNTAIN_RESOURCES
+from tasks.watermill import WatermillTask
+from tasks.fountain import FountainTask
 from tasks.material_workshop import MaterialWorkshopTask, MATERIALS_MAP as WORKSHOP_MATERIALS_MAP, parse_materials_choice
 from tasks.caravan import CaravanTask
 from tasks.port_delegate import PortDelegateTask, DELEGATE_TASKS_CONFIG, ISLAND_SHOP_CATALOG, resolve_island_goods_id
 from tasks.savings_bank import SavingsBankTask, SAVINGS_PLANS, DEFAULT_DAYS as DEFAULT_SAVINGS_DAYS
 from tasks.building import BuildingTask, BUILDING_INFO
-from tasks.prestige import PrestigeTask, PRESTIGE_SUBTASKS_ALL, PRESTIGE_SUBTASK_ALIASES
-from tasks.march_manager import (
-    MarchManagerTask,
-    DEFAULT_PRIORITIES as MARCH_DEFAULT_PRIORITIES,
-    DEFAULT_TRANSPORT_CONFIG as MARCH_DEFAULT_TRANSPORT,
-    DEFAULT_RUINS_CONFIG as MARCH_DEFAULT_RUINS,
-    DEFAULT_COMBAT_CONFIG as MARCH_DEFAULT_COMBAT,
-    DEFAULT_ELF_CONFIG as MARCH_DEFAULT_ELF,
-    DEFAULT_INVADERS_CONFIG as MARCH_DEFAULT_INVADERS,
-    DEFAULT_REBELS_CONFIG as MARCH_DEFAULT_REBELS,
-    DEFAULT_STRONGHOLD_CONFIG as MARCH_DEFAULT_STRONGHOLD,
-    DEFAULT_GATHER_CONFIG as MARCH_DEFAULT_GATHER,
-    RESOURCE_SUBTYPE_MAP as MARCH_RESOURCE_SUBTYPE_MAP,
-)
+from tasks.prestige import PrestigeTask
+from tasks.prestige_box import PrestigeBoxTask
+from tasks.hospital import HospitalTask
+
 
 # ── إعداد نظام التسجيل (Logging) ───────────────────────────────────
 # مستوى CRITICAL فقط (صمت تام) لتقليل الضجيج عند تشغيل 500+ قلعة
@@ -124,39 +86,55 @@ if not log.handlers:
 log.propagate = False  # لا نُكرر الرسائل في root logger
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════
-# 🔥🔥🔥 [متغيرات وإعدادات المستخدم القادمة من فايربيس — FIREBASE USER CONFIG] 🔥🔥🔥
-# ════════════════════════════════════════════════════════════════════════════════════════
-# هذا المخطط (Schema) يمثل الحقول والقيم التي سيتم جلبها لاحقاً من قاعدة بيانات Firebase
-# لكل حساب مستخدم بناءً على ما يختاره ويحدده المستخدم من لوحة التحكم (Web Dashboard):
-# ════════════════════════════════════════════════════════════════════════════════════════
+class _LogCallbackStream:
+    """محوّل يحول log_callback إلى كائن شبيه بالملف ليعمل مع StreamHandler."""
+    def __init__(self, callback):
+        self._callback = callback
+        self._buffer = ""
 
-# ════════════════════════════════════════════════════════════════════════════════════════
-# 🕐 نظام الجدولة الزمنية للمهام (Task Scheduling System)
-# ════════════════════════════════════════════════════════════════════════════════════════
-# يمكن إضافة مفتاح "schedule" لأي مهمة للتحكم في توقيت تشغيلها.
-# البوت يعمل في حلقة مستمرة (افتراضياً كل 60 دقيقة) ويفحص الجدول في كل دورة.
-#
-# الأنواع المدعومة:
-#
-#  ① times_per_day — عدد مرات التشغيل يومياً (موزعة تلقائياً):
-#     "schedule": {"times_per_day": 3}   → كل ~8 ساعات
-#     "schedule": {"times_per_day": 2}   → كل ~12 ساعة
-#     "schedule": {"times_per_day": 24}  → في كل دورة (إذا كانت الدورة ساعة)
-#
-#  ② hours — ساعات محددة بالتوقيت المحلي (24h):
-#     "schedule": {"hours": [8, 20]}        → مرتين: 8 صباحاً و8 مساءً
-#     "schedule": {"hours": [6, 14, 22]}    → ثلاث مرات في اليوم
-#
-#  ③ active_window — نافذة زمنية للتشغيل (from <= hour < to):
-#     "schedule": {"active_window": {"from": 7, "to": 23}}  → بين 7 ص و11 م فقط
-#
-#  ④ دمج أنواع متعددة معاً:
-#     "schedule": {"times_per_day": 3, "active_window": {"from": 7, "to": 23}}
-#     → تُشغَّل 3 مرات يومياً لكن فقط بين 7 صباحاً و11 مساءً
-#
-#  ⑤ بدون "schedule" أو schedule = None → تُشغَّل في كل دورة (الافتراضي)
-#
+    def write(self, msg):
+        self._buffer += msg
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                self._callback(line)
+
+    def flush(self):
+        if self._buffer.strip():
+            self._callback(self._buffer.strip())
+            self._buffer = ""
+
+
+def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = logging.INFO) -> None:
+    """تنظيف أي StreamHandler سابق وربط callback واحد فقط لمنع تكرار السجلات نهائياً عبر الدورات."""
+    if not hasattr(task, "log") or not task.log:
+        return
+    task.log.propagate = False
+    try:
+        task.log.handlers.clear()
+    except Exception:
+        task.log.handlers = []
+    if not log_cb:
+        return
+    try:
+        h = logging.StreamHandler(_LogCallbackStream(log_cb))
+        h.setLevel(level)
+        h.setFormatter(logging.Formatter("%(message)s"))
+        task.log.setLevel(level)
+        task.log.addHandler(h)
+    except Exception:
+        pass
+
+
+def _safe_unbind_task_logger(task: Any) -> None:
+    """إزالة handler الـ callback بعد انتهاء تشغيل المهمة لمنع تراكمه في الذاكرة."""
+    if not hasattr(task, "log") or not task.log:
+        return
+    try:
+        task.log.handlers.clear()
+    except Exception:
+        task.log.handlers = []
+
 # تشغيل وضع الحلقة الدائمة من سطر الأوامر:
 #   python bot_manager.py --email "..." --loop
 #   python bot_manager.py --email "..." --loop --loop-interval 30   (كل 30 دقيقة)
@@ -171,7 +149,6 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     # 🔬 2. مهمة أبحاث الأكاديمية والعلوم (Academy Research)
     "research": {
         "enabled": True,
-        "schedule": {"times_per_day": 4}
     },
 
     # 🤝 3. مهمة التحالف ومساعدة الأعضاء وتبرعات العلوم (Alliance Task)
@@ -214,14 +191,12 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,             # تفعيل/تعطيل درع السلام التلقائي لحماية القلعة
         "duration": "8h",            # مدة الدرع: "8h" (8 ساعات) أو "24h" (24 ساعة) أو "3d" (3 أيام)
         "allow_gold": False,         # السماح بالشراء بالذهب عند نفاد دروع الحقيبة المجانية (False افتراضياً لحماية الذهب)
-        "schedule": {"times_per_day": 4}
     },
 
     # ⚡ 9. مهمة استخدام جرعات وشراء الطاقة (Stamina Task)
     "stamina": {
         "enabled": True,             # تفعيل/تعطيل مهمة استخدام وشراء الطاقة
         "gold_buys": 1,              # عدد مرات شراء الطاقة بالذهب المحدد من المستخدم (0 = مجاني فقط بدون شراء بالذهب)
-        "schedule": {"times_per_day": 4}
     },
 
     # 🎯 10. مهمة تفعيل المهارات التلقائية (Skills Task)
@@ -239,11 +214,42 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,             # تفعيل/تعطيل تجنيد الأبطال وبحث المهارات وسحب الصناديق اليومية تلقائياً
     },
 
+    # 💎 11b. مهمة استكشاف جناح الكنز المجاني (Treasure Pavilion)
+    "treasure_pavilion": {
+        "enabled": True,             # تفعيل/تعطيل استكشاف جناح الكنز المجاني تلقائياً
+    },
+
+    # 🔨 11c. مهمة معمل الحدادة وصقل الرون المجاني (Blacksmith Forge)
+    "blacksmith_forge": {
+        "enabled": True,             # تفعيل/تعطيل صقل معمل الحدادة المجاني تلقائياً
+    },
+
+    # 🏛️ 11d. مهمة الضريح الإمبراطوري المجاني (Imperial Mausoleum / Pyramid)
+    "imperial_mausoleum": {
+        "enabled": True,             # تفعيل/تعطيل الضريح الإمبراطوري المجاني تلقائياً
+    },
+
+    # 📦 11e. مهمة صندوق التحالف المجاني (Alliance Treasure)
+    "alliance_treasure": {
+        "enabled": True,             # تفعيل/تعطيل حفر صندوق التحالف المجاني تلقائياً
+        "index": 1,                  # رقم الصندوق المستهدف افتراضياً (1)
+        "auto_help": True,           # طلب مساعدة التحالف تلقائياً بعد بدء الحفر
+    },
+
+    # 🎁 11f. مهمة الهدية الفاخرة اليومية (Daily Luxury Gift)
+    "daily_luxury_gift": {
+        "enabled": True,             # تفعيل/تعطيل جمع الهدية الفاخرة اليومية تلقائياً
+    },
+
+    # 👑 11g. مهمة صندوق الـ VIP اليومي المجاني (VIP Daily Free Gift)
+    "vip_gift": {
+        "enabled": True,             # تفعيل/تعطيل استلام صندوق الـ VIP اليومي المجاني تلقائياً
+    },
+
     # 🏛️ 12. مهمة قاعة الاستراتيجيات وتطوير التكتيكات (Tactics Hall)
     "tactics_hall": {
         "enabled": True,             # تفعيل/تعطيل أبحاث قاعة الاستراتيجيات
         "tactic": "القلعة الفارغة",   # اسم أو معرف البحث المستهدف الذي يحدده المستخدم (مثال: "القلعة الفارغة", "قمة الاتقان", "البحث الكامل", 91010000)
-        "schedule": {"times_per_day": 2}
     },
 
     # 💧 13. مهمة طاحونة الماء وزيادة إنتاج موارد القلعة (Watermill Production Boost)
@@ -264,7 +270,6 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         ],
         "allow_gold": False,         # السماح بالشراء بالذهب بعد انتهاء المرات المجانية (False افتراضياً لحماية الذهب)
         "gold_times": 0,             # عدد مرات الشراء بالذهب لكل مورد محدد عند السماح بالشراء بالذهب
-        "schedule": {"times_per_day": 2}
     },
 
     # 🔨 15. مهمة ورشة المواد وصناعة خامات العتاد (Material Workshop)
@@ -276,27 +281,23 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "metal",
             "coal",
         ],
-        "schedule": {"times_per_day": 2}
     },
 
     # 🐪 16. مهمة القافلة التجارية وحراسة الكنز (Caravan / Carriage Escort)
     "caravan": {
         "enabled": True,             # تفعيل/تعطيل إرسال القافلة وحراسة الكنز وجمع الجوائز تلقائياً
-        "schedule": {"times_per_day": 5, "active_window": {"from": 7, "to": 23}}
     },
 
     # ⚓ 18. مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة (Port Delegate & Island Store)
     "port_delegate": {
         "enabled": True,             # تفعيل/تعطيل مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة
         "shop_item": "7",            # المنتج المطلوب شراؤه بالكامل من متجر الجزيرة (رقم 1-7 أو اسمه أو all للكل)
-        "schedule": {"times_per_day": 3}
     },
 
     # 🏦 19. مهمة دار الادخار وبنك التوفير (Savings Bank)
     "savings_bank": {
         "enabled": True,             # تفعيل/تعطيل استثمار الذهب وسحب الأرباح في دار الادخار تلقائياً
         "days": 7,                   # خطة الاستثمار والمدة المختارة بالأيام: 7 (أسبوعية), 15 (نصف شهرية), 30 (شهرية)
-        "schedule": {"times_per_day": 1}
     },
 
     # 🏗️ 20. مهمة ترقية القلعة والمباني والتسريع (Building Upgrade & Castle)
@@ -305,61 +306,74 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "upgrade_castle": True,            # ترقية القلعة ومتطلباتها (الخيار الأول)
         "speedup_castle": False,           # استخدام التسريع لترقية القلعة من الحقيبة والمجاني (الخيار الثاني)
         "upgrade_support_buildings": True, # ترقية المعسكرات والمراكز الطبية والمزارع وخيم العسكرية (الخيار الثالث)
-        "schedule": {"times_per_day": 3}
     },
 
-    # 🎖️ 22. مهمة مهام الهيبة اليومية (Daily Prestige Quests)
+    # 🎖️ 22. مهمة مهام الهيبة اليومية داخل المدينة (Daily Prestige Quests)
+    # ملاحظة: مهام المسيرات الخارجية (الغزاة، المعاقل، جمع الموارد 25k) نُقلت بالكامل لمنسق الفيالق march_manager
     "prestige": {
         "enabled": True,                   # تفعيل/تعطيل مهمة مهام الهيبة اليومية
-        "schedule": {
-            "hours": [3],                  # تشغيل مرة واحدة في اليوم الساعة 3 فجراً
-        },
-        "invaders_max_lv": 30,             # الحد الأقصى لمستوى الغزاة المطلوب قتالهم (1-30)
-        "subtasks": {                      # تفعيل كل مهمة من مهام الهيبة على حدة
+        "subtasks": {                      # مهام الهيبة الداخلية
             "smuggler": True,              # متجر المهربين (10 مشتريات بالموارد)
-            "invaders": True,              # قتال الغزاة (5 هجمات)
-            "stronghold": True,            # احتلال المعاقل / الملاجئ (مرتان)
-            "gather": True,                # جمع الموارد الأربعة خارج القلعة بحمولة 25k
             "watermill": True,             # الساقية وتفعيل مباني الموارد
             "train": True,                 # تدريب الجنود (250 من كل نوع مستوى 1)
             "fortress": True,              # حصن الحرب وتدريب الفخاخ
         },
     },
 
+    # 🎁 22c. مهمة استلام صناديق مهام الهيبة والنشاط اليومي (Prestige Boxes)
+    # تفحص نقاط النشاط اليومي واستلام الصناديق المستحقة (CMD 3105 / SUB 2)
+    "prestige_box": {
+        "enabled": True,                   # تفعيل/تعطيل استلام صناديق الهيبة اليومية تلقائياً
+    },
+
+    # 🏥 22b. مهمة معالجة الجنود الجرحى في المشفى (Hospital Cure Task)
+    # تفحص جاهزية المشفى وتعالج كافة الجنود المصابين تلقائياً بالمشفى (mode: 0) قبل تشغيل منسق الفيالق
+    "hospital": {
+        "enabled": True,                   # تفعيل/تعطيل علاج الجنود بالمشفى تلقائياً
+    },
+
     # 🎖️ 23. مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator)
-    # يدير كافة مسيرات الخريطة الخارجية للقلعة وفق الأولويات وسعة الفيالق المتاحة (تأتي من فايربيس)
+    # يدير كافة مسيرات الخريطة الخارجية للقلعة وفق مصفوفة أولويات ذكية (تأتي من فايربيس)
     "march_manager": {
         "enabled": True,                   # تفعيل/تعطيل منسق الفيالق كلياً
         "duration_minutes": 20,            # مدة تشغيل المهمة الإجمالية بالدقائق (ثلث ساعة = 20 دقيقة ككل)
-        "max_queues": 6,                   # سعة طوابير الفيالق القصوى للقلعة (5 أو 6)
-        "priority_order": [                # قائمة الأولويات المعتمدة بالترتيب
-            "transport",                   # 1. مساعدة الموارد
-            "ruins",                       # 2. استكشاف الأطلال (مسيرة واحدة حصراً)
-            "combat",                      # 3. القتال (عفريت / غزاة / متمردين)
-            "stronghold",                  # 4. الهجوم على الملاجئ
-            "gold_gather",                 # 5. جمع الذهب في أراضي التحالفات (قبل الأخير)
-            "gather",                      # 6. جمع الموارد بالفيالق الشاغرة
-        ],
-        # [1] إعدادات مساعدة الموارد (Transport)
+
+        # [1] أولوية قتل غزاة الهيبة (Prestige Invaders)
+        "prestige_invaders": {
+            "enabled": True,               # تفعيل قتل غزاة الهيبة
+        },
+
+        # [2] أولوية الهجوم على المعقل الخاص بمهمة الهيبة (Prestige Stronghold)
+        "prestige_stronghold": {
+            "enabled": True,               # تفعيل الهجوم على معقل الهيبة
+        },
+
+        # [3] أولوية جمع الموارد لمهام الهيبة (Prestige Gathering)
+        "prestige_gather": {
+            "enabled": True,               # تفعيل جمع موارد الهيبة
+        },
+
+        # [4] إعدادات مساعدة الموارد (Transport)
         "transport": {
             "enabled": False,              # تفعيل مساعدة الموارد
             "target_x": None,              # إحداثي X للقلعة الهدف (مثال: 344)
             "target_y": None,              # إحداثي Y للقلعة الهدف (مثال: 447)
             "resource_ids": [1002, 1003, 1004, 1005],  # الموارد (1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس)
         },
-        # [2] إعدادات استكشاف الأطلال (Ruins) — مسيرة واحدة فقط حصراً
+
+        # [5] إعدادات استكشاف الأطلال (Ruins) — مسيرة واحدة فقط حصراً
         "ruins": {
             "enabled": True,               # تفعيل استكشاف الأطلال
             "explore_time": 900,           # مدة الاستكشاف بالثواني (900 = 15 دقيقة)
             "formation_id": 1,             # رقم التشكيلة العسكرية (1 إلى 5)
         },
-        # [3] إعدادات القتال الشامل (Combat) — يحدد المستخدم خياراً واحداً حصراً (عفريت أو غزاة أو متمردين)
+
+        # [6] إعدادات القتال الشامل (Combat) — يحدد المستخدم خياراً واحداً حصراً (عفريت أو غزاة أو متمردين)
         "combat": {
             "enabled": True,               # تفعيل أولوية القتال
             "choice": "elf",               # الخيار المستهدف: "elf" (عفريت) أو "invaders" (غزاة) أو "rebels" (متمردين)
             "level": 30,                   # مستوى الهدف المطلوب مهاجمته (للغزاة/المتمردين)
             "formation_id": 1,             # رقم تشكيلة القتال (1 إلى 5)
-            "count": 1,                    # عدد الهجمات
         },
         # تخصيص كل هدف قتالي على حدة لدعم واجهات Firebase المتنوعة:
         "elf": {
@@ -370,28 +384,29 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "enabled": False,              # تفعيل الغزاة
             "level": 30,                   # مستوى الغزاة
             "formation_id": 1,             # رقم التشكيلة
-            "count": 1,                    # عدد الهجمات
         },
         "rebels": {
             "enabled": False,              # تفعيل المتمردين
             "level": 30,                   # مستوى المتمردين
             "formation_id": 1,             # رقم التشكيلة
-            "count": 1,                    # عدد الهجمات
         },
-        # [4] إعدادات الهجوم على المعاقل والملاجئ (Stronghold)
+
+        # [7] إعدادات الهجوم على المعاقل والملاجئ العامة (Stronghold)
         "stronghold": {
             "enabled": False,              # تفعيل مهاجمة الملاجئ
             "level": 30,                   # مستوى الملجأ المستهدف (1 إلى 30)
             "count": 2,                    # عدد الملاجئ المستهدفة
             "formation_id": 1,             # رقم التشكيلة
         },
-        # [5] إعدادات جمع الذهب في أراضي التحالفات (Gold Gather)
+
+        # [8] إعدادات جمع الذهب في أراضي التحالفات (Gold Gather)
         "gold_gather": {
             "enabled": False,              # تفعيل جمع الذهب في أراضي التحالفات
             "locations": [],               # قائمة التحالفات المستهدفة: [{"alliance_tag": "POL", "x": 241, "y": 260}]
             "max_marches": 0,              # 0 = استغلال الفيالق المتاحة
         },
-        # [6] إعدادات جمع الموارد الخارجية (Gathering) — تستهلك كافة الفيالق الشاغرة
+
+        # [9] إعدادات جمع الموارد الخارجية (Gathering) — تستهلك كافة الفيالق الشاغرة
         "gather": {
             "enabled": True,               # تفعيل جمع الموارد بالفيالق المتبقية حتى الامتلاء
             "res_type": 1,                 # نوع المورد: 1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس
@@ -399,60 +414,9 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "search_range": 100,           # نطاق البحث الأقصى حول القلعة
         },
     },
-
-    # 🪙 24. إعدادات جمع الذهب المتوافقة مع واجهة المستخدم (Firebase Root Fallback)
-    "gold_gather": {
-        "enabled": False,
-        "locations": [],
-    }
 }
 
 
-# ════════════════════════════════════════════════════════════════════
-#  قاموس وتسميات الحيوانات الأليفة (Pet Aliases)
-# ════════════════════════════════════════════════════════════════════
-
-PET_ALIASES: Dict[str, int] = {
-    # الغزال
-    "غزال": 1261, "الغزال": 1261, "gazelle": 1261, "1261": 1261,
-    # الأسد
-    "اسد": 1262, "أسد": 1262, "الاسد": 1262, "الأسد": 1262, "lion": 1262, "1262": 1262,
-    # الصقر
-    "صقر": 1263, "الصقر": 1263, "falcon": 1263, "1263": 1263,
-    # الذئب
-    "ذئب": 1264, "الذئب": 1264, "wolf": 1264, "1264": 1264,
-    # النمر / الفهد
-    "نمر": 1265, "فهد": 1265, "النمر": 1265, "الفهد": 1265, "leopard": 1265, "1265": 1265,
-    # الدب
-    "دب": 1266, "الدب": 1266, "bear": 1266, "1266": 1266,
-    # الفيل
-    "فيل": 1267, "الفيل": 1267, "elephant": 1267, "1267": 1267,
-    # وحيد القرن
-    "وحيد القرن": 1268, "rhino": 1268, "1268": 1268,
-    # الثور البري
-    "ثور": 1269, "الثور": 1269, "bull": 1269, "1269": 1269,
-    # الكلب
-    "كلب": 1270, "الكلب": 1270, "كانغال": 1270, "dog": 1270, "1270": 1270,
-    # النمر الناري
-    "نمر ناري": 1271, "fire tiger": 1271, "1271": 1271,
-    # الثعبان الملكي
-    "ثعبان": 1272, "الثعبان": 1272, "افعى": 1272, "snake": 1272, "1272": 1272,
-    # الجريفين
-    "جريفين": 1273, "الجريفين": 1273, "griffin": 1273, "1273": 1273,
-    # التنين
-    "تنين": 1274, "التنين": 1274, "dragon": 1274, "1274": 1274,
-    # فينيكس
-    "فينيكس": 1275, "طائر الفينيق": 1275, "عنقاء": 1275, "العنقاء": 1275, "phoenix": 1275, "1275": 1275,
-}
-
-def resolve_pet_id(pet_input: Union[str, int]) -> int:
-    """تحويل اسم الحيوان المدخل بالعربية أو الإنجليزية أو المعرف الرقمي إلى ID صحيح."""
-    if isinstance(pet_input, int):
-        return pet_input
-    key = str(pet_input).strip().lower()
-    if key.isdigit():
-        return int(key)
-    return PET_ALIASES.get(key, DEFAULT_PET_ID)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -547,6 +511,54 @@ def parse_savings_days(val: Any) -> int:
     return SAVINGS_DAYS_ALIASES.get(s, DEFAULT_SAVINGS_DAYS)
 
 
+# ── أهداف صناديق النشاط اليومي الستة لمهام المجد (Daily Glory & Merit Chests) ───
+DAILY_MERIT_CHEST_GOALS: List[Tuple[int, int]] = [
+    (1, 40),
+    (2, 110),
+    (3, 180),
+    (4, 250),
+    (5, 340),
+    (6, 450),
+]
+
+# ── مسميات وأيقونات مهام المجد والنشاط اليومية (34 مهمة) ────────────────────
+DAILY_MERIT_TASK_NAMES: Dict[int, Dict[str, str]] = {
+    4112000: {"name": "جمع القمح من الخريطة", "icon": "🌾"},
+    4112001: {"name": "جمع الخشب من الخريطة", "icon": "🪵"},
+    4112002: {"name": "جمع الحجر من الخريطة", "icon": "⛏️"},
+    4112003: {"name": "جمع الكوارتز من الخريطة", "icon": "💎"},
+    4112004: {"name": "الهجوم على الغزاة في الخريطة", "icon": "⚔️"},
+    4112005: {"name": "ترقية مباني القلعة", "icon": "🏗️"},
+    4112006: {"name": "إجراء بحث علمي بالأكاديمية", "icon": "🔬"},
+    4112007: {"name": "إهداء الزهور للوردات", "icon": "🌹"},
+    4112008: {"name": "تقوية العتاد بمعمل الحدادة", "icon": "🔨"},
+    4112009: {"name": "علاج الجنود المصابين بالمشفى", "icon": "🏥"},
+    4112010: {"name": "تدريب جنود المشاة", "icon": "🛡️"},
+    4112011: {"name": "تدريب الرماة", "icon": "🏹"},
+    4112012: {"name": "تدريب الفرسان", "icon": "🐎"},
+    4112013: {"name": "تدريب عربات الحصار", "icon": "🚜"},
+    4112014: {"name": "تصنيع الفخاخ بحصن الحرب", "icon": "🏰"},
+    4112015: {"name": "استلام موارد سفينة الشحن", "icon": "🚢"},
+    4112016: {"name": "تقديم المساعدة لأعضاء التحالف", "icon": "🤝"},
+    4112017: {"name": "إرسال تعزيزات عسكرية لحليف", "icon": "🛡️"},
+    4112018: {"name": "إرسال معونات موارد لعضو تحالف", "icon": "📦"},
+    4112019: {"name": "التبرع لتقنيات التحالف", "icon": "🧪"},
+    4112020: {"name": "استلام جوائز وشحن الميناء", "icon": "⚓"},
+    4112021: {"name": "رحلات القافلة والبحث عن الكنز", "icon": "🐪"},
+    4112022: {"name": "الشراء من التاجر المتجول / المهربين", "icon": "🛒"},
+    4112023: {"name": "استكشاف الضريح الإمبراطوري", "icon": "🏛️"},
+    4112024: {"name": "استبدال الميداليات بمتجر الحرب", "icon": "🎖️"},
+    4112025: {"name": "إنفاق واستهلاك الذهب", "icon": "🪙"},
+    4112026: {"name": "استلام جوائز الباقة الأسبوعية", "icon": "🎁"},
+    4112027: {"name": "تعزيز إنتاج حقول الموارد (الساقية)", "icon": "⚡"},
+    4112028: {"name": "تجنيد وسحب الأبطال بقاعة الأبطال", "icon": "🦸"},
+    4112029: {"name": "تطوير مستوى الأبطال بلفائف الخبرة", "icon": "📜"},
+    4112030: {"name": "احتلال المعاقل والملاجئ", "icon": "🏰"},
+    4112031: {"name": "معارك التحدي اليومي (الزنزانة)", "icon": "⚔️"},
+    4112032: {"name": "قراءة الطالع / نظام المحظيات", "icon": "☕"},
+    4112033: {"name": "مكاسب المحيطات الغامضة التلقائية", "icon": "🌊"},
+}
+
 
 # ════════════════════════════════════════════════════════════════════
 #  كلاس سياق وبيانات الحساب (Account Context)
@@ -610,14 +622,53 @@ class AccountContext:
         self.shield_active: bool = False
         self.shield_status_str: str = "غير محمي (مكشوف)"
 
-        # جرعات الطاقة المتوفرة في الحقيبة
+        # جرعات الطاقة المتوفرة في الحقيبة وسعر الشراء بالذهب
         self.stamina_potions: Dict[int, int] = {300401: 0, 300402: 0, 300403: 0}
+        self.stamina_gold_cost: int = 0
+        self.stamina_buy_times: int = 0
+        self.stamina_limit_times: int = 0
 
         # حالة المهارات التلقائية (Skills)
         self.skills_status: List[Dict[str, Any]] = []
 
         # سحوبات وتجنيد الأبطال اليومية المجانية
         self.hero_draw_ready_count: int = 0
+
+        # استكشاف جناح الكنز المجاني (Treasure Pavilion)
+        self.treasure_pavilion_ready: bool = False
+        self.treasure_pavilion_left_times: int = 0
+
+        # صقل معمل الحدادة المجاني (Blacksmith Forge)
+        self.blacksmith_forge_ready: bool = False
+        self.blacksmith_forge_left_times: int = 0
+
+        # استكشاف الضريح الإمبراطوري المجاني (Imperial Mausoleum / Pyramid)
+        self.imperial_mausoleum_ready: bool = False
+        self.imperial_mausoleum_has_award: bool = False
+        self.imperial_mausoleum_free_throw: bool = False
+        self.imperial_mausoleum_copper: int = 0
+        self.imperial_mausoleum_dice_count: int = 0
+
+        # فحص وحفر صندوق التحالف المجاني (Alliance Treasure)
+        self.alliance_treasure_ready: bool = False
+        self.alliance_treasure_in_alliance: bool = True
+        self.alliance_treasure_free_dig_ready: bool = False
+        self.alliance_treasure_can_receive: bool = False
+        self.alliance_treasure_is_digging: bool = False
+        self.alliance_treasure_dig_remain: int = 0
+        self.alliance_treasure_dig_count: int = 0
+        self.alliance_treasure_max_dig: int = 8
+        self.alliance_treasure_left_free_today: int = 0
+
+        # فحص واستلام الهدية الفاخرة اليومية (Daily Luxury Gift)
+        self.daily_luxury_gift_ready: bool = False
+        self.daily_luxury_gift_count: int = 0
+        self.daily_luxury_gift_max_day: int = 0
+
+        # فحص واستلام صندوق الـ VIP اليومي المجاني (VIP Daily Gift)
+        self.vip_gift_ready: bool = False
+        self.vip_lv: int = 0
+        self.vip_point: int = 0
 
         # حالة أبحاث قاعة الاستراتيجيات (Tactics Hall)
         self.tactics_hall_status: Dict[str, Any] = {
@@ -692,200 +743,23 @@ class AccountContext:
             "wall_capacity": 0,
         }
 
+        # حالة مهام المجد والنشاط اليومي (Meritorious / Glory Quests)
+        self.merit_level: int = 0
+        self.merit_exp: int = 0
+        self.merit_daily_points: int = 0
+        self.merit_chests_claimed: List[int] = []
+        self.merit_chests_ready: List[Tuple[int, int]] = []
+        self.merit_next_chest_goal: int = 0
+        self.merit_next_chest_remain: int = 0
+        self.merit_tasks_total: int = 0
+        self.merit_tasks_claimed: int = 0
+        self.merit_tasks_ready: int = 0
+        self.merit_tasks_in_progress: int = 0
+        self.merit_tasks_details: List[Dict[str, Any]] = []
+
         # البيانات الخام الكاملة
         self.raw_city: List[Dict[str, Any]] = []
         self.raw_lord: Dict[str, Any] = {}
-
-
-# ════════════════════════════════════════════════════════════════════
-#  كلاس الجدولة الزمنية للمهام (BotScheduler)
-# ════════════════════════════════════════════════════════════════════
-
-class BotScheduler:
-    """
-    محرك الجدولة الزمنية للمهام — مصمم للكفاءة القصوى مع آلاف الحسابات المتزامنة.
-
-    ⚡ تصميم خفيف الوزن (مناسب لـ 1000+ حساب):
-      - Dict بسيط بدون threads أو background tasks أو timers
-      - يستخدم asyncio.sleep() للانتظار — لا يستهلك CPU إطلاقاً
-      - يحفظ الحالة في ملف JSON صغير (<1KB) لكل حساب منفصلاً
-      - جميع العمليات O(1) — لا عمليات بحث أو loop ثقيلة
-
-    أنواع الجدولة المدعومة (قابلة للدمج):
-      ① times_per_day  : عدد مرات التشغيل يومياً (كل N ساعة تلقائياً)
-      ② hours          : قائمة ساعات تشغيل محددة بالتوقيت المحلي [8, 14, 20]
-      ③ active_window  : نافذة زمنية {"from": 7, "to": 23} — 7 ص إلى 11 م
-      ④ بدون schedule  : يُشغَّل في كل دورة (السلوك الافتراضي)
-
-    مثال دمج متعدد:
-      {"times_per_day": 3, "active_window": {"from": 7, "to": 23}}
-      → تُشغَّل 3 مرات يومياً لكن فقط بين 7 صباحاً و11 مساءً
-    """
-
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        state_file: Optional[str] = None,
-    ) -> None:
-        # استخراج إعدادات الجدولة فقط من المهام التي تحتوي عليها
-        self._schedules: Dict[str, Dict[str, Any]] = {}
-        for task_key, task_cfg in config.items():
-            if isinstance(task_cfg, dict):
-                sched = task_cfg.get("schedule")
-                if sched and isinstance(sched, dict):
-                    self._schedules[task_key] = sched
-
-        # آخر وقت تشغيل لكل مهمة: {task_key: unix_timestamp}
-        self._last_run: Dict[str, float] = {}
-
-        # ملف حفظ الحالة لاستمراريتها عند إعادة تشغيل البوت
-        self._state_file = state_file
-        self._load_state()
-
-    # ── حفظ وتحميل الحالة ──────────────────────────────────────────
-
-    def _load_state(self) -> None:
-        """تحميل آخر وقت تشغيل لكل مهمة من ملف الحالة المحفوظ."""
-        if not self._state_file or not os.path.exists(self._state_file):
-            return
-        try:
-            with open(self._state_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                self._last_run = {k: float(v) for k, v in data.items()}
-        except Exception:
-            self._last_run = {}  # إذا تلف الملف نبدأ من جديد بأمان
-
-    def save_state(self) -> None:
-        """حفظ آخر وقت تشغيل لكل مهمة في ملف JSON (خفيف جداً < 1KB)."""
-        if not self._state_file:
-            return
-        try:
-            with open(self._state_file, "w", encoding="utf-8") as f:
-                json.dump(self._last_run, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass  # فشل الحفظ لا يوقف البوت
-
-    # ── منطق قرار التشغيل ─────────────────────────────────────────
-
-    def should_run(self, task_key: str, now: Optional[datetime] = None) -> bool:
-        """
-        هل يجب تشغيل هذه المهمة الآن؟
-
-        أولوية الفحص:
-          1. active_window → هل الوقت ضمن النافذة الزمنية المسموحة؟
-          2. hours         → هل الساعة الحالية مُدرجة ولم تُشغَّل فيها اليوم؟
-          3. times_per_day → هل مضت المدة الكافية منذ آخر تشغيل؟
-          4. لا إعدادات   → True دائماً (في كل دورة)
-        """
-        sched = self._schedules.get(task_key)
-        if not sched:
-            return True  # لا جدول محدد = تشغيل في كل دورة
-
-        now = now or datetime.now()
-
-        # استثناء ذكي لمهام الهيبة: إذا لم تكتمل كافة مهامها اليوم، تستمر في العمل في كل دورة حتى تكتمل بنسبة 100%
-        if task_key == "prestige":
-            last_ts = self._last_run.get(task_key, 0.0)
-            if last_ts > 0.0:
-                last_dt = datetime.fromtimestamp(last_ts)
-                if last_dt.date() == now.date():
-                    return False  # اكتملت كافة مهام الهيبة اليوم بنجاح → تخطّي
-            return True  # لم تكتمل بعد لليوم → تشغيل في هذه الدورة
-
-        # ① فحص النافذة الزمنية (active_window) — يمنع التشغيل خارجها
-        active_window = sched.get("active_window")
-        if active_window and isinstance(active_window, dict):
-            from_h = int(active_window.get("from", 0))
-            to_h   = int(active_window.get("to",   24))
-            if not (from_h <= now.hour < to_h):
-                return False  # خارج النافذة الزمنية المسموحة
-
-        # ② فحص الساعات المحددة (hours)
-        # المنطق: نفّذ في أول دورة تأتي بعد مرور الساعة المحددة (مرة لكل فترة يومياً)
-        # hours=[3]     → تشغيل في أول دورة تبدأ ≥ 03:00 ولم تُنفذ اليوم بعد 03:00
-        # hours=[3, 15] → تشغيلتان: الأولى بعد 03:00، الثانية بعد 15:00
-        hours = sched.get("hours")
-        if hours and isinstance(hours, list):
-            sorted_hours = sorted(hours)
-            now_date = now.date()
-            now_hour = now.hour
-
-            # آخر ساعة هدف مرّت (≤ الساعة الحالية) = الفترة الزمنية الحالية
-            passed_hours = [h for h in sorted_hours if now_hour >= h]
-            if not passed_hours:
-                return False  # لم تحن أي ساعة هدف بعد → انتظار
-
-            current_slot_hour = max(passed_hours)
-
-            # هل تم التشغيل بالفعل في هذه الفترة اليوم؟
-            last_ts = self._last_run.get(task_key, 0.0)
-            if last_ts > 0.0:
-                last_dt = datetime.fromtimestamp(last_ts)
-                if last_dt.date() == now_date and last_dt.hour >= current_slot_hour:
-                    return False  # نُفذت في هذه الفترة → تخطّي
-            return True  # حانت الفترة ولم تُنفذ → شغّل
-
-
-        # ③ فحص عدد مرات التشغيل يومياً (times_per_day)
-        times_per_day = sched.get("times_per_day")
-        if times_per_day and isinstance(times_per_day, (int, float)) and float(times_per_day) > 0:
-            interval_secs = 86400.0 / float(times_per_day)
-            last_ts  = self._last_run.get(task_key, 0.0)
-            elapsed  = now.timestamp() - last_ts
-            return elapsed >= interval_secs
-
-        # الجدول موجود لكن لا شروط واضحة → شغّل دائماً
-        return True
-
-    def mark_ran(self, task_key: str, now: Optional[datetime] = None) -> None:
-        """تسجيل أن المهمة تم تنفيذها بنجاح الآن."""
-        self._last_run[task_key] = (now or datetime.now()).timestamp()
-
-    def seconds_until_next_any_task(self, now: Optional[datetime] = None) -> float:
-        """
-        كم ثانية حتى تستحق أي مهمة مُجدوَلة التشغيل القادم؟
-        يُستخدم لتحديد الانتظار المُثلى بين دورات loop mode.
-        إذا لا توجد مهام مُجدوَلة أو حان وقتها فوراً: يعيد 0.
-        """
-        if not self._schedules:
-            return 0.0
-
-        now       = now or datetime.now()
-        min_wait  = float("inf")
-        now_ts    = now.timestamp()
-
-        for task_key, sched in self._schedules.items():
-            # times_per_day: حساب الوقت المتبقي حتى الدورة القادمة
-            tpd = sched.get("times_per_day")
-            if tpd and isinstance(tpd, (int, float)) and float(tpd) > 0:
-                interval = 86400.0 / float(tpd)
-                last_ts  = self._last_run.get(task_key, 0.0)
-                wait     = max(0.0, interval - (now_ts - last_ts))
-                min_wait = min(min_wait, wait)
-
-            # hours: حساب الوقت حتى أقرب ساعة تشغيل قادمة
-            hours = sched.get("hours")
-            if hours and isinstance(hours, list):
-                for h in sorted(hours):
-                    candidate = now.replace(hour=h, minute=0, second=0, microsecond=0)
-                    if candidate <= now:
-                        candidate += timedelta(days=1)
-                    wait = (candidate - now).total_seconds()
-                    min_wait = min(min_wait, wait)
-
-        return 0.0 if min_wait == float("inf") else min_wait
-
-    def summary(self) -> str:
-        """ملخص نصي لحالة الجدول (للـ logging)."""
-        if not self._schedules:
-            return "لا توجد مهام مُجدوَلة — جميعها تعمل في كل دورة"
-        lines = [f"  📅 مهام مُجدوَلة ({len(self._schedules)} مهمة):"]
-        for key, sched in self._schedules.items():
-            last_ts = self._last_run.get(key, 0.0)
-            last_str = datetime.fromtimestamp(last_ts).strftime("%H:%M") if last_ts > 0 else "لم تُشغَّل بعد"
-            lines.append(f"     • {key}: {sched} | آخر تشغيل: {last_str}")
-        return "\n".join(lines)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -899,6 +773,20 @@ class BotManager:
       2. يقوم بالاستعلام الشامل.
       3. ينفذ المهام بالترتيب المحدد ويمرر الخيارات والبيانات لكل مهمة.
     """
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  قائمة المهام الإلزامية التي تُنفَّذ دائماً في كل دورة بدون اشتراط تفعيل المستخدم
+    #  (Mandatory Tasks) — أي مهمة تضاف هنا تعمل دائماً وتتجاوز أي تعطيل أو جدول زمني
+    # ─────────────────────────────────────────────────────────────────────────
+    MANDATORY_TASKS: Set[str] = {
+        "city_harvest",        # حصد كافة مزارع ومناجم المدينة تلقائياً وبشكل دوري
+        "treasure_pavilion",   # استكشاف جناح الكنز المجاني تلقائياً في كل دورة
+        "blacksmith_forge",    # صقل معمل الحدادة المجاني تلقائياً في كل دورة
+        "imperial_mausoleum",  # الضريح الإمبراطوري المجاني تلقائياً في كل دورة
+        "alliance_treasure",   # صندوق التحالف المجاني تلقائياً في كل دورة
+        "daily_luxury_gift",   # استلام الهدية الفاخرة اليومية تلقائياً في كل دورة
+        "vip_gift",            # استلام صندوق الـ VIP المجاني تلقائياً في كل دورة
+    }
 
     def __init__(
         self,
@@ -933,8 +821,10 @@ class BotManager:
         self._stop_event: threading.Event = stop_event or threading.Event()
         self._log_callback: Optional[Callable[[str], None]] = log_callback
 
-        # دمج الإعدادات الافتراضية مع إعدادات المستخدم القادمة من Firebase
+        # دمج الإعدادات الافتراضية مع إعدادات المستخدم من قاعدة البيانات المحلية
         self.config = self._build_default_config(config or {})
+        # جلب أحدث إعدادات القلعة مباشرة من قاعدة البيانات المحلية
+        self.reload_config_from_db()
 
         # إعدادات إعادة الاتصال التلقائي عند دخول شخص آخر للحساب
         self.reconnect_wait_seconds = int(reconnect_wait_seconds)
@@ -942,23 +832,21 @@ class BotManager:
         self._disconnected_event = asyncio.Event()
         self._last_kick_reason: str = ""
 
-        # ── مدير الجدولة الزمنية للمهام ─────────────────────────────
-        # ملف حالة خفيف لكل حساب منفصلاً (يضمن العزل الكامل بين 1000 حساب)
-        _safe_email = self.email.replace("@", "_").replace(".", "_").replace("+", "_")
-        _sched_file = os.path.join(_ROOT_DIR, f".sched_{_safe_email}.json")
-        self.scheduler = BotScheduler(self.config, state_file=_sched_file)
-
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
-        """إبلاغ لوحة التحكم وFirebase بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
+        """إبلاغ لوحة التحكم وقاعدة البيانات المحلية بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
+        # 🛑 حظر صارم ولحظي: إذا طُلب إيقاف البوت، يُمنع منعاً باتاً بث أو تسجيل أي حالة نشطة (connected / reconnecting / waiting)
+        if self._stop_event.is_set() and conn_state in ("connected", "reconnecting", "waiting"):
+            return
+
         nr_arg = f" next_run_time={next_run_time}" if next_run_time else ""
-        event_line = f"[FIREBASE_EVENT] conn_state={conn_state} message={message}{nr_arg}"
+        event_line = f"[BOT_EVENT] conn_state={conn_state} message={message}{nr_arg}"
         # Thread Pool: توجيه عبر log_callback / CLI: print() مباشرة
         if self._log_callback:
             self._log_callback(event_line)
         else:
             print(event_line, flush=True)
 
-        # 1. تحديث كاش قاعدة البيانات المحلية SQLite فوراً
+        # تحديث كاش قاعدة البيانات المحلية SQLite فوراً
         try:
             from core.database import upsert_castle_conn_state
             upsert_castle_conn_state(
@@ -969,94 +857,57 @@ class BotManager:
                 user_id=getattr(self, "user_id", None),
                 castle_id=getattr(self, "castle_id", None)
             )
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"SQLite conn state update: {e}")
 
-        if not getattr(self, "user_id", None) or not getattr(self, "castle_id", None):
-            return
-        def _bg_update():
+    def stop(self) -> None:
+        """إيقاف فوري ولحظي للبوت وقطع مقبس الاتصال فوراً لإنهاء أي مهمة أو انتظار دون أي تأخير."""
+        self._stop_event.set()
+        if self.conn:
             try:
-                import firebase_admin
-                from firebase_admin import credentials, firestore as fb_fs
-                sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
-                if not firebase_admin._apps and os.path.exists(sak):
-                    firebase_admin.initialize_app(credentials.Certificate(sak))
-                if firebase_admin._apps:
-                    db = fb_fs.client()
-                    ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
-                    from datetime import timezone
-                    now_iso = datetime.now(timezone.utc).isoformat()
-                    doc_data = {
-                        "bot_status.conn_state":   conn_state,
-                        "bot_status.conn_message": message,
-                        "bot_status.conn_updated": now_iso,
-                    }
-                    if conn_state in ("connected", "reconnecting", "disconnected", "waiting"):
-                        doc_data["bot_status.state"] = "running"
-                        if conn_state == "connected":
-                            doc_data["bot_status.last_run_time"] = now_iso
-                        elif conn_state == "waiting" and next_run_time:
-                            doc_data["bot_status.next_run_time"] = next_run_time
-                    elif conn_state == "idle":
-                        doc_data["bot_status.state"] = "idle"
-                        if message:
-                            doc_data["bot_status.last_run_message"] = message
-                    ref.update(doc_data)
+                if hasattr(self.conn, "_gate") and self.conn._gate:
+                    gate = self.conn._gate
+                    gate._explicit_close = True
+                    gate._alive = False
+                    for task in (gate._recv_task, gate._heartbeat_task, gate._init_flow_task):
+                        if task and not task.done():
+                            try:
+                                task.cancel()
+                            except Exception:
+                                pass
+                    if hasattr(gate, "_writer") and gate._writer:
+                        try:
+                            gate._writer.close()
+                        except Exception:
+                            pass
             except Exception:
                 pass
-        import threading
-        threading.Thread(target=_bg_update, daemon=True, name=f"bm-fb-{conn_state}").start()
+        self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
 
     def check_subscription_validity(self) -> Tuple[bool, str]:
-        """فحص صلاحية اشتراك المستخدم وحالة الحظر من Firestore."""
+        """فحص صلاحية اشتراك المستخدم وحالة الحظر محلياً من SQLite بدون أي اتصال بالشبكة."""
         try:
-            import firebase_admin
-            from firebase_admin import credentials, firestore as fb_fs
-            sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
-            if not firebase_admin._apps and os.path.exists(sak):
-                firebase_admin.initialize_app(credentials.Certificate(sak))
-            if not firebase_admin._apps:
-                return True, "Firebase غير مهيأ"
+            user_id = getattr(self, "user_id", None)
+            if not user_id:
+                # محاولة البحث عن معرف المستخدم عبر البريد في SQLite
+                from core.database import get_castle
+                c = get_castle(self.email)
+                if c and c.get("user_id"):
+                    self.user_id = c["user_id"]
+                    self.castle_id = c.get("castle_id", getattr(self, "castle_id", None))
+                    user_id = self.user_id
 
-            db = fb_fs.client()
-            user_doc = None
-            if getattr(self, "user_id", None):
-                user_snap = db.collection("users").document(self.user_id).get()
-                if user_snap.exists:
-                    user_doc = user_snap.to_dict() or {}
-            else:
-                try:
-                    castles = db.collection_group("castles").where("email", "==", self.email.strip().lower()).limit(1).stream()
-                    for c in castles:
-                        self.castle_id = c.id
-                        u_ref = c.reference.parent.parent
-                        if u_ref:
-                            self.user_id = u_ref.id
-                            u_snap = u_ref.get()
-                            if u_snap.exists:
-                                user_doc = u_snap.to_dict() or {}
-                        break
-                except Exception:
-                    for u in db.collection("users").stream():
-                        for c in u.reference.collection("castles").where("email", "==", self.email.strip().lower()).limit(1).stream():
-                            self.castle_id = c.id
-                            self.user_id = u.id
-                            user_doc = u.to_dict() or {}
-                            break
-                        if user_doc:
-                            break
+            if not user_id:
+                return True, "صالح افتراضياً (لم يُحدد مستخدم)"
 
-            if not user_doc:
-                return True, "لم يتم العثور على مستند المستخدم"
-
-            from core.firebase_schema import check_user_subscription
-            return check_user_subscription(user_doc)
+            from core.database import check_user_subscription_db
+            return check_user_subscription_db(user_id)
         except Exception as e:
-            log.warning(f"⚠️ تنبيه أثناء التحقق من صلاحية الاشتراك: {e}")
+            log.warning(f"⚠️ تنبيه أثناء التحقق من صلاحية الاشتراك محلياً: {e}")
             return True, "تعذر التحقق"
 
     def sync_castle_resources(self) -> None:
-        """تحديث بيانات موارد ومعلومات القلعة في بداية كل دورة في Firebase."""
+        """تحديث بيانات موارد ومعلومات القلعة في بداية كل دورة في SQLite المحلية."""
         if not self.conn or not getattr(self.conn, "init_data", None):
             return
 
@@ -1118,72 +969,46 @@ class BotManager:
                     user_id=getattr(self, "user_id", None),
                     castle_id=getattr(self, "castle_id", None)
                 )
-            except Exception:
-                pass
-
-            # تحديث Firebase في الخلفية
-            def _bg_sync():
-                try:
-                    import firebase_admin
-                    from firebase_admin import credentials, firestore as fb_fs
-                    try:
-                        firebase_admin.get_app()
-                    except ValueError:
-                        sak = os.path.join(_ROOT_DIR, "firebase_service_account.json")
-                        if os.path.exists(sak):
-                            firebase_admin.initialize_app(credentials.Certificate(sak))
-
-                    if firebase_admin._apps:
-                        db = fb_fs.client()
-                        target_ref = None
-                        if getattr(self, "user_id", None) and getattr(self, "castle_id", None):
-                            target_ref = db.collection("users").document(self.user_id).collection("castles").document(self.castle_id)
-                        else:
-                            for u in db.collection("users").stream():
-                                for c in u.reference.collection("castles").where("email", "==", self.email.strip().lower()).limit(1).stream():
-                                    target_ref = c.reference
-                                    self.user_id = u.id
-                                    self.castle_id = c.id
-                                    break
-                                if target_ref:
-                                    break
-                        if target_ref:
-                            update_dict = {}
-                            for k, v in res_data.items():
-                                update_dict[f"resources.{k}"] = v
-                            for k, v in cinfo_data.items():
-                                update_dict[f"castle_info.{k}"] = v
-                            target_ref.update(update_dict)
-                            log.info(f"💾 [Firebase Sync] تم تحديث موارد وبيانات القلعة في بداية الدورة بنجاح ✅")
-                except Exception as ex:
-                    log.warning(f"⚠️ [Firebase Sync Warning]: {ex}")
-
-            import threading
-            threading.Thread(target=_bg_sync, daemon=True, name=f"res-sync-{self.email[:8]}").start()
+            except Exception as e:
+                log.debug(f"SQLite resources update: {e}")
 
         except Exception as e:
             log.warning(f"⚠️ تنبيه أثناء استخراج ومزامنة الموارد: {e}")
 
     def _build_default_config(self, user_cfg: Dict[str, Any]) -> Dict[str, Any]:
-        """بناء قاموس الإعدادات بدمج إعدادات المستخدم القادمة من Firebase مع المخطط الافتراضي.
-        ملاحظة: مفتاح 'schedule' محمي دائماً ويُؤخذ من DEFAULT_FIREBASE_USER_CONFIG فقط
-        ولا يمكن لـ Firebase تجاوزه أو تغييره."""
+        """بناء قاموس الإعدادات بدمج إعدادات المستخدم مع المخطط الافتراضي."""
         cfg = copy.deepcopy(DEFAULT_FIREBASE_USER_CONFIG)
         for section, values in (user_cfg or {}).items():
             if section in cfg and isinstance(values, dict) and isinstance(cfg[section], dict):
-                # ← نحذف 'schedule' من قيم Firebase لحماية جدول التنفيذ المحلي
-                firebase_values = {k: v for k, v in values.items() if k != 'schedule'}
-                cfg[section].update(firebase_values)
+                cfg[section].update(values)
             else:
-                # إذا كان القسم كاملاً قادماً من Firebase، نحافظ على schedule المحلي
-                if isinstance(values, dict):
-                    local_schedule = cfg.get(section, {}).get('schedule') if isinstance(cfg.get(section), dict) else None
-                    cfg[section] = {k: v for k, v in values.items() if k != 'schedule'}
-                    if local_schedule is not None:
-                        cfg[section]['schedule'] = local_schedule
-                else:
-                    cfg[section] = values
+                cfg[section] = values
         return cfg
+
+    def reload_config_from_db(self) -> None:
+        """
+        استعلام وجلب أحدث إعدادات المهام للقلعة من قاعدة البيانات المحلية SQLite في بداية كل دورة،
+        لضمان تطبيق أي تعديلات قام بها المستخدم في لوحة التحكم أثناء تشغيل البوت فوراً في الدورة التالية
+        بدون الحاجة لإعادة تشغيل البوت يدوياً.
+        """
+        try:
+            from core.database import get_castle_by_id, get_castle
+            c = None
+            cid = getattr(self, "castle_id", None)
+            uid = getattr(self, "user_id", None)
+            em = getattr(self, "email", None)
+
+            if cid:
+                c = get_castle_by_id(cid, uid)
+            if not c and em:
+                c = get_castle(em)
+
+            if c and isinstance(c.get("config"), dict) and c["config"]:
+                latest_cfg = c["config"]
+                self.config = self._build_default_config(latest_cfg)
+                log.info(f"🔄 [{self.email}] تم تحديث إعدادات المهام بنجاح من قاعدة البيانات المحلية للدورة الحالية.")
+        except Exception as ex:
+            log.warning(f"⚠️ تعذر استعلام إعدادات القلعة من قاعدة البيانات: {ex}")
 
     def is_connection_alive(self) -> bool:
         """التحقق هل اتصال الحساب مع السيرفر نشط وما زال يعمل بصحة كاملة."""
@@ -1211,6 +1036,15 @@ class BotManager:
         الانتظار دقيقة واحدة (60 ثانية) عند انقطاع الاتصال بسبب دخول شخص آخر،
         ثم إعادة تسجيل الدخول وتحديث بيانات الحساب لاستئناف المهام التي توقفت.
         """
+        if self._stop_event.is_set():
+            if self.conn:
+                try:
+                    await self.conn.close()
+                except Exception:
+                    pass
+            self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+            return False
+
         display_reason = reason or self.get_disconnect_reason()
         if not self._log_callback:
             print("\n" + "!" * 70)
@@ -1222,15 +1056,58 @@ class BotManager:
         self._update_bot_conn_state("disconnected", f"تم تسجيل الدخول من جهاز آخر: {display_reason}")
 
         for attempt in range(1, self.max_reconnect_attempts + 1):
+            if self._stop_event.is_set():
+                if self.conn:
+                    try:
+                        await self.conn.close()
+                    except Exception:
+                        pass
+                self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                return False
+
             log.info(f"⏳ [المحاولة {attempt}/{self.max_reconnect_attempts}] انتظار {self.reconnect_wait_seconds} ثانية (دقيقة واحدة)...")
             self._update_bot_conn_state("reconnecting", f"جاري انتظار إعادة الاتصال (المحاولة {attempt}/{self.max_reconnect_attempts})...")
             wait_time = self.reconnect_wait_seconds
             while wait_time > 0:
+                if self._stop_event.is_set():
+                    log.info("🛑 [إيقاف فوري ولحظي] تم استلام أمر إيقاف البوت أثناء انتظار إعادة الاتصال — إنهاء الانتظار فوراً.")
+                    if self.conn:
+                        try:
+                            await self.conn.close()
+                        except Exception:
+                            pass
+                    self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                    return False
+
                 if wait_time in (60, 45, 30, 15, 5):
                     log.info(f"⏳ متبقي على إعادة محاولة الدخول: {wait_time} ثانية...")
-                step_sleep = 5 if wait_time >= 5 else wait_time
-                await asyncio.sleep(step_sleep)
-                wait_time -= step_sleep
+
+                # فحص سريع ومجزء جداً (كل 0.25 ثانية) لضمان الاستجابة اللحظية الفورية لأمر الإيقاف دون أي تأخير
+                step_sleep = min(1.0, float(wait_time))
+                slept = 0.0
+                while slept < step_sleep:
+                    if self._stop_event.is_set():
+                        log.info("🛑 [إيقاف فوري ولحظي] تم استلام أمر إيقاف البوت أثناء انتظار إعادة الاتصال — إنهاء الانتظار فوراً.")
+                        if self.conn:
+                            try:
+                                await self.conn.close()
+                            except Exception:
+                                pass
+                        self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                        return False
+                    await asyncio.sleep(0.25)
+                    slept += 0.25
+                wait_time -= int(step_sleep)
+
+            if self._stop_event.is_set():
+                log.info("🛑 [إيقاف فوري ولحظي] تم استلام أمر إيقاف البوت قبل بدء تسجيل الدخول — إلغاء الدخول فوراً.")
+                if self.conn:
+                    try:
+                        await self.conn.close()
+                    except Exception:
+                        pass
+                self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                return False
 
             log.info(f"🔄 جاري محاولة تسجيل الدخول الآن واستئناف المهام (المحاولة {attempt}/{self.max_reconnect_attempts})...")
 
@@ -1243,11 +1120,32 @@ class BotManager:
 
             self._disconnected_event.clear()
             connected = await self.login_and_connect()
+
+            if self._stop_event.is_set():
+                log.info("🛑 [إيقاف فوري ولحظي] تم استلام أمر إيقاف البوت بعد محاولة تسجيل الدخول — قطع الاتصال فوراً.")
+                if self.conn:
+                    try:
+                        await self.conn.close()
+                    except Exception:
+                        pass
+                self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                return False
+
             if connected:
                 try:
                     await self.perform_comprehensive_query()
                 except Exception as e:
                     log.warning(f"⚠️ تنبيه أثناء تحديث بيانات الحساب بعد الدخول: {e}")
+
+                if self._stop_event.is_set():
+                    if self.conn:
+                        try:
+                            await self.conn.close()
+                        except Exception:
+                            pass
+                    self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                    return False
+
                 try:
                     self.sync_castle_resources()
                 except Exception:
@@ -1266,6 +1164,9 @@ class BotManager:
     # ─────────────────────────────────────────────────────────────────
     async def login_and_connect(self) -> bool:
         """الاتصال والمصافحة مع سيرفر اللعبة مرة واحدة، مع مراقبة انقطاع الاتصال تلقائياً."""
+        if self._stop_event.is_set():
+            return False
+
         log.info(f"🔐 [تسجيل الدخول] بدء الاتصال بالحساب: {self.email}...")
         self._disconnected_event.clear()
         self._last_kick_reason = ""
@@ -1275,27 +1176,73 @@ class BotManager:
             self._last_kick_reason = reason or "other_device"
             log.warning(f"⚠️ [تنبيه السيرفر] انقطع اتصال الحساب {self.email} (السبب: {self._last_kick_reason})")
 
+        if self._stop_event.is_set():
+            return False
+
         self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
         ok = await self.conn.connect()
+
+        if self._stop_event.is_set():
+            if self.conn:
+                try:
+                    await self.conn.close()
+                except Exception:
+                    pass
+            return False
+
         if not ok and self.user_id and self.castle_id:
+            if self._stop_event.is_set():
+                return False
             log.warning(f"⚠️ [تسجيل الدخول] فشل الاتصال بالجلسة الحالية لـ {self.email}. جاري تجديد الجلسة تلقائياً بكلمة المرور...")
             sm = SessionManager()
             fresh_acc = sm.refresh_session(self.email, user_id=self.user_id, castle_id=self.castle_id)
             if fresh_acc:
+                if self._stop_event.is_set():
+                    return False
                 self.account = fresh_acc
                 self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
                 ok = await self.conn.connect()
+                if self._stop_event.is_set():
+                    if self.conn:
+                        try:
+                            await self.conn.close()
+                        except Exception:
+                            pass
+                    return False
 
         if not ok:
             log.error(f"❌ [تسجيل الدخول] فشل الاتصال بالحساب {self.email}!")
             return False
 
+        if self._stop_event.is_set():
+            if self.conn:
+                try:
+                    await self.conn.close()
+                except Exception:
+                    pass
+            return False
+
         # انتظار وصول حزم التهيئة الأولية للبث (init_data)
         log.info("⏳ انتظار مزامنة الحزم الأولية من السيرفر...")
         for _ in range(15):
+            if self._stop_event.is_set():
+                if self.conn:
+                    try:
+                        await self.conn.close()
+                    except Exception:
+                        pass
+                return False
             await asyncio.sleep(0.3)
             if len(self.conn.init_data) > 0:
                 break
+
+        if self._stop_event.is_set():
+            if self.conn:
+                try:
+                    await self.conn.close()
+                except Exception:
+                    pass
+            return False
 
         log.info(f"✅ [تسجيل الدخول] تم الاتصال والمصافحة بنجاح 100%!")
         self._update_bot_conn_state("connected", "تم الاتصال بالقلعة بنجاح 100%")
@@ -1344,6 +1291,7 @@ class BotManager:
         ctx.gold = int(base_info.get("gold", 0))
         ctx.total_power = int(fc_info.get("totalFc", 0))
         ctx.uid = str(base_info.get("uid", getattr(self.account, "user_id", "")))
+        ctx.stamina = int(float(base_info.get("health", 100)))
 
         # 2. استعلام مباني المدينة 1001/1 وتحديث كاش الموارد والمباني
         r_city = await self.conn.query("1001", "1", {}, timeout=8)
@@ -1493,12 +1441,20 @@ class BotManager:
             a_info = alliance_ctrl.get("allianceInfo", {})
             if isinstance(a_info, dict) and a_info.get("aid"):
                 ctx.alliance_id = int(a_info.get("aid", 0))
-                ctx.alliance_name = str(a_info.get("name", "بدون تحالف"))
-                ctx.alliance_tag = str(a_info.get("tag", ""))
-            elif "memberinfo" in alliance_ctrl:
+                ctx.alliance_name = str(a_info.get("name") or "بدون تحالف")
+                ctx.alliance_tag = str(a_info.get("tag") or "")
+            if "memberinfo" in alliance_ctrl:
                 minfo = alliance_ctrl.get("memberinfo", {}).get("minfo", {})
+                uinfo = alliance_ctrl.get("memberinfo", {}).get("uinfo", {})
                 if isinstance(minfo, dict) and minfo.get("aid"):
                     ctx.alliance_id = int(minfo.get("aid", 0))
+                    if minfo.get("donateCount") is not None:
+                        ctx.alliance_available_donations = int(minfo.get("donateCount", 0))
+                if isinstance(uinfo, dict):
+                    if uinfo.get("allianceName"):
+                        ctx.alliance_name = str(uinfo.get("allianceName"))
+                    if uinfo.get("allianceAbbr"):
+                        ctx.alliance_tag = str(uinfo.get("allianceAbbr"))
 
         if ctx.alliance_id == 0:
             lord_data = self.conn.init_data.get("lord", {})
@@ -1549,14 +1505,52 @@ class BotManager:
                 if isinstance(quests, dict):
                     ctx.territory_ready_rewards = sum(1 for q in quests.values() if isinstance(q, dict) and int(q.get("status", 0)) == 3)
 
-        # 9. فحص دروع السلام وجرعات الطاقة في الحقيبة (backpackCtrl)
+        # 9. فحص دروع السلام وجرعات الطاقة في الحقيبة (backpackCtrl أو عبر 1004/1 كاحتياط)
         bp_ctrl = self.conn.init_data.get("backpackCtrl", {})
-        if isinstance(bp_ctrl, dict):
+        if isinstance(bp_ctrl, dict) and bp_ctrl:
             ctx.shield_backpack_counts["8h"] = int(bp_ctrl.get("300701", {}).get("count", 0))
             ctx.shield_backpack_counts["24h"] = int(bp_ctrl.get("300702", {}).get("count", 0))
             ctx.shield_backpack_counts["3d"] = int(bp_ctrl.get("300703", {}).get("count", 0))
             for pid in (300401, 300402, 300403):
                 ctx.stamina_potions[pid] = int(bp_ctrl.get(str(pid), {}).get("count", 0))
+
+        if sum(ctx.shield_backpack_counts.values()) == 0 or sum(ctx.stamina_potions.values()) == 0:
+            try:
+                r_bag = await self.conn.query("1004", "1", {}, timeout=6)
+                if r_bag and isinstance(r_bag.get("data"), dict):
+                    raw_data = r_bag["data"]
+                    items = raw_data.get("itemList", raw_data)
+                    if isinstance(items, dict):
+                        for k, v in items.items():
+                            if isinstance(v, dict):
+                                iid = str(v.get("id", v.get("itemID", k)))
+                                cnt = int(v.get("count", v.get("num", 0)))
+                                if iid == "300701": ctx.shield_backpack_counts["8h"] = cnt
+                                elif iid == "300702": ctx.shield_backpack_counts["24h"] = cnt
+                                elif iid == "300703": ctx.shield_backpack_counts["3d"] = cnt
+                                elif iid == "300401": ctx.stamina_potions[300401] = cnt
+                                elif iid == "300402": ctx.stamina_potions[300402] = cnt
+                                elif iid == "300403": ctx.stamina_potions[300403] = cnt
+                    elif isinstance(items, list):
+                        for v in items:
+                            if isinstance(v, dict):
+                                iid = str(v.get("id", v.get("itemID", 0)))
+                                cnt = int(v.get("count", v.get("num", 0)))
+                                if iid == "300701": ctx.shield_backpack_counts["8h"] = cnt
+                                elif iid == "300702": ctx.shield_backpack_counts["24h"] = cnt
+                                elif iid == "300703": ctx.shield_backpack_counts["3d"] = cnt
+                                elif iid == "300401": ctx.stamina_potions[300401] = cnt
+                                elif iid == "300402": ctx.stamina_potions[300402] = cnt
+                                elif iid == "300403": ctx.stamina_potions[300403] = cnt
+            except Exception:
+                pass
+
+        # فحص تكلفة تبديل وشراء الطاقة بالذهب القادم (buyStaminaCtrl)
+        bs_ctrl = self.conn.init_data.get("buyStaminaCtrl", {})
+        if isinstance(bs_ctrl, dict):
+            ctx.stamina_gold_cost = int(bs_ctrl.get("price", 0))
+            ctx.stamina_buy_times = int(bs_ctrl.get("buyTimes", 0))
+            ctx.stamina_limit_times = int(bs_ctrl.get("limitTimes", 30))
 
         # فحص حالة درع السلام النشط للقلعة
         try:
@@ -1589,6 +1583,83 @@ class BotManager:
                         if left > 0 and (cut <= now_ts or cut == 0):
                             ready_draws += 1
                 ctx.hero_draw_ready_count = ready_draws
+
+                # فحص استكشاف جناح الكنز المجاني (الفئة 6)
+                pav_info = he_data.get("6", {})
+                if isinstance(pav_info, dict):
+                    p_left = int(pav_info.get("leftTimes", 0))
+                    p_cut = int(pav_info.get("canusetime", 0))
+                    ctx.treasure_pavilion_left_times = p_left
+                    ctx.treasure_pavilion_ready = (p_left > 0 and (p_cut <= now_ts or p_cut == 0))
+
+        # فحص صقل معمل الحدادة المجاني (runeForgeAgCtrl)
+        rf_ctrl = self.conn.init_data.get("runeForgeAgCtrl", {})
+        if isinstance(rf_ctrl, dict):
+            rf_use = int(rf_ctrl.get("useTimes", 0))
+            rf_cd = int(rf_ctrl.get("cdTime", 0))
+            rf_left = max(0, 3 - rf_use)
+            now_ts = int(time.time())
+            ctx.blacksmith_forge_left_times = rf_left
+            ctx.blacksmith_forge_ready = (rf_left > 0 and (rf_cd == 0 or (now_ts - rf_cd) >= 300))
+
+        # فحص استكشاف الضريح الإمبراطوري المجاني (pyramidCtrl)
+        pyr_ctrl = self.conn.init_data.get("pyramidCtrl")
+        p_data = pyr_ctrl.get("data", {}) if isinstance(pyr_ctrl, dict) else {}
+        if not isinstance(p_data, dict) or not p_data:
+            try:
+                resp = await self.conn.query("1045", "1", {}, timeout=6)
+                if resp and str(resp.get("err", "-1")) == "0":
+                    p_data = resp.get("data", {})
+                    self.conn.init_data.setdefault("pyramidCtrl", {})["data"] = p_data
+            except Exception:
+                pass
+
+        if isinstance(p_data, dict) and p_data:
+            award = p_data.get("award", {})
+            has_pending = isinstance(award, dict) and bool(award.get("itemid"))
+            free_val = int(p_data.get("free", 0))
+            has_free = (free_val == 1)
+            ctx.imperial_mausoleum_has_award = has_pending
+            ctx.imperial_mausoleum_free_throw = has_free
+            ctx.imperial_mausoleum_ready = (has_free or has_pending)
+            ctx.imperial_mausoleum_copper = int(p_data.get("copper", 0))
+            ctx.imperial_mausoleum_dice_count = int(p_data.get("count", 0))
+
+        # فحص صندوق التحالف المجاني (Alliance Treasure - 2015/1)
+        try:
+            at_task = AllianceTreasureTask(self.conn)
+            at_st = await at_task.get_free_status(force_query=True)
+            ctx.alliance_treasure_ready = at_st.get("ready", False)
+            ctx.alliance_treasure_in_alliance = at_st.get("in_alliance", True)
+            ctx.alliance_treasure_free_dig_ready = at_st.get("free_dig_ready", False)
+            ctx.alliance_treasure_can_receive = len(at_st.get("can_receive_list", [])) > 0
+            ctx.alliance_treasure_is_digging = at_st.get("is_digging", False)
+            ctx.alliance_treasure_dig_remain = at_st.get("dig_remain", 0)
+            ctx.alliance_treasure_dig_count = at_st.get("dig_count", 0)
+            ctx.alliance_treasure_max_dig = at_st.get("max_dig_count", 8)
+            ctx.alliance_treasure_left_free_today = at_st.get("left_free_today", 0)
+        except Exception as ex_at:
+            log.debug(f"تنبيه أثناء استعلام صندوق التحالف في لوحة المعلومات: {ex_at}")
+
+        # فحص الهدية الفاخرة اليومية (Daily Luxury Gift - 3094)
+        try:
+            dlg_task = DailyLuxuryGiftTask(self.conn)
+            dlg_st = dlg_task.get_status_summary()
+            ctx.daily_luxury_gift_ready = dlg_st.get("has_rewards", False)
+            ctx.daily_luxury_gift_count = dlg_st.get("available_count", 0)
+            ctx.daily_luxury_gift_max_day = dlg_st.get("daily_max_day", 0)
+        except Exception as ex_dlg:
+            log.debug(f"تنبيه أثناء استعلام الهدية الفاخرة: {ex_dlg}")
+
+        # فحص صندوق الـ VIP اليومي المجاني (VIP Daily Gift - 1082)
+        try:
+            vg_task = VipGiftTask(self.conn)
+            vg_st = vg_task.get_vip_status()
+            ctx.vip_gift_ready = vg_st.get("free_available", False)
+            ctx.vip_lv = vg_st.get("vip_lv", 0)
+            ctx.vip_point = vg_st.get("vip_point", 0)
+        except Exception as ex_vg:
+            log.debug(f"تنبيه أثناء استعلام صندوق الـ VIP: {ex_vg}")
 
         # 12. فحص حالة قاعة الاستراتيجيات وأبحاث التكتيكات (queueCtrl -> 1257)
         queue_ctrl = self.conn.init_data.get("queueCtrl", {})
@@ -1754,6 +1825,82 @@ class BotManager:
                     "is_claimable": (rem <= 0)
                 }
 
+        # 20. فحص مهام المجد والنشاط اليومي وصناديق الجوائز (meritoriousTaskCtrl)
+        merit = self.conn.init_data.get("meritoriousTaskCtrl", {})
+        if isinstance(merit, dict) and merit:
+            ctx.merit_level = int(merit.get("meritLv", 0))
+            ctx.merit_exp = int(merit.get("meritExp", 0))
+            daily_pts = int(merit.get("dailyPoint", 0))
+            ctx.merit_daily_points = daily_pts
+
+            # فحص الصناديق اليومية
+            claimed_raw = merit.get("dailyBoxRwd", {})
+            claimed_box_ids = set()
+            if isinstance(claimed_raw, dict):
+                claimed_box_ids = {int(k) for k in claimed_raw.keys()}
+            elif isinstance(claimed_raw, list):
+                claimed_box_ids = {int(x) for x in claimed_raw if str(x).isdigit()}
+            ctx.merit_chests_claimed = sorted(list(claimed_box_ids))
+
+            ready_boxes = []
+            next_goal = 0
+            next_remain = 0
+            for box_id, goal in DAILY_MERIT_CHEST_GOALS:
+                if box_id in claimed_box_ids:
+                    continue
+                if daily_pts >= goal:
+                    ready_boxes.append((box_id, goal))
+                elif next_goal == 0:
+                    next_goal = goal
+                    next_remain = max(0, goal - daily_pts)
+
+            ctx.merit_chests_ready = ready_boxes
+            ctx.merit_next_chest_goal = next_goal
+            ctx.merit_next_chest_remain = next_remain
+
+            # فحص المهام اليومية (daily_task و taskData)
+            daily_tasks = merit.get("daily_task", {})
+            task_data = merit.get("taskData", {})
+            if isinstance(daily_tasks, dict) and isinstance(task_data, dict):
+                ctx.merit_tasks_total = len(daily_tasks)
+                c_claimed = 0
+                c_ready = 0
+                c_in_progress = 0
+                details_list = []
+                for qid_str in sorted(daily_tasks.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
+                    qid = int(qid_str)
+                    tinfo = task_data.get(str(qid)) or task_data.get(qid)
+                    if not isinstance(tinfo, dict):
+                        continue
+                    st = int(tinfo.get("status", 2))
+                    c_num = int(tinfo.get("cNum", 0))
+                    l_num = int(tinfo.get("lNum", 0))
+                    meta = DAILY_MERIT_TASK_NAMES.get(qid, {"name": f"مهمة #{qid}", "icon": "🎖️"})
+
+                    if st == 5:
+                        c_claimed += 1
+                        st_type = "claimed"
+                    elif st == 4 or (l_num > 0 and c_num >= l_num):
+                        c_ready += 1
+                        st_type = "ready"
+                    else:
+                        c_in_progress += 1
+                        st_type = "in_progress"
+
+                    details_list.append({
+                        "id": qid,
+                        "name": meta["name"],
+                        "icon": meta["icon"],
+                        "status_type": st_type,
+                        "c_num": c_num,
+                        "l_num": l_num,
+                        "remaining": max(0, l_num - c_num) if l_num > 0 else 0
+                    })
+                ctx.merit_tasks_claimed = c_claimed
+                ctx.merit_tasks_ready = c_ready
+                ctx.merit_tasks_in_progress = c_in_progress
+                ctx.merit_tasks_details = details_list
+
         # عرض ملخص الاستعلام الشامل بشكل منسق وجذاب
         self._print_account_dashboard()
         return ctx
@@ -1821,7 +1968,8 @@ class BotManager:
         p50 = ctx.stamina_potions.get(300402, 0)
         p100 = ctx.stamina_potions.get(300403, 0)
         total_pots = p10 + p50 + p100
-        print(f"⚡ جرعات الطاقة في الحقيبة: {total_pots} جرعة (🧪 {p10} جرعة +10 | 🧪 {p50} جرعة +50 | 🧪 {p100} جرعة +100)")
+        gold_cost_str = f" | 🪙 التبديل بالذهب القادم: {ctx.stamina_gold_cost} ذهب (تم {ctx.stamina_buy_times}/{ctx.stamina_limit_times} اليوم)" if ctx.stamina_gold_cost > 0 else ""
+        print(f"⚡ جرعات الطاقة في الحقيبة: {total_pots} جرعة (🧪 {p10} جرعة +10 | 🧪 {p50} جرعة +50 | 🧪 {p100} جرعة +100){gold_cost_str}")
         print("─" * 72)
         print("🎯 حالة المهارات التلقائية (Skills):")
         if ctx.skills_status:
@@ -1840,6 +1988,53 @@ class BotManager:
             print(f"🦸 سحوبات الأبطال اليومية: 🎁 {ctx.hero_draw_ready_count} سحوبات مجانية جاهزة للسحب فوراً!")
         else:
             print("🦸 سحوبات الأبطال اليومية: لا توجد سحبات مجانية جاهزة حالياً")
+        print("─" * 72)
+        if ctx.treasure_pavilion_ready:
+            print(f"💎 جناح الكنز (Treasure Pavilion): 🎁 استكشاف مجاني جاهز فوراً! (متبقي {ctx.treasure_pavilion_left_times} اليوم)")
+        elif ctx.treasure_pavilion_left_times > 0:
+            print(f"💎 جناح الكنز (Treasure Pavilion): ⏳ قيد التهدئة الفاصلة (متبقي {ctx.treasure_pavilion_left_times} سحبة اليوم)")
+        else:
+            print("💎 جناح الكنز (Treasure Pavilion): لا توجد سحبات مجانية متاحة اليوم")
+        print("─" * 72)
+        if ctx.blacksmith_forge_ready:
+            print(f"🔨 معمل الحدادة (Blacksmith Forge): 🎁 صقل مجاني جاهز فوراً! (متبقي {ctx.blacksmith_forge_left_times} اليوم)")
+        elif ctx.blacksmith_forge_left_times > 0:
+            print(f"🔨 معمل الحدادة (Blacksmith Forge): ⏳ قيد التهدئة الفاصلة (متبقي {ctx.blacksmith_forge_left_times} صقل اليوم)")
+        else:
+            print("🔨 معمل الحدادة (Blacksmith Forge): لا يوجد صقل مجاني متاح اليوم")
+        print("─" * 72)
+        if ctx.imperial_mausoleum_has_award:
+            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): 🎁 جائزة معلقة أو نرد إضافي جاهز للاستلام/الرمي! (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
+        elif ctx.imperial_mausoleum_free_throw:
+            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): 🎁 رمي مجاني جاهز فوراً! (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
+        else:
+            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): لا توجد رميات مجانية متاحة اليوم (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
+        print("─" * 72)
+        if not ctx.alliance_treasure_in_alliance:
+            print("📦 صندوق التحالف (Alliance Treasure): ⚠️ غير متاح (الحساب غير منضم إلى أي تحالف)")
+        elif ctx.alliance_treasure_can_receive:
+            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 صندوق مكتمل جاهز للاستلام فوراً! (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
+        elif ctx.alliance_treasure_free_dig_ready:
+            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 حفر صندوق مجاني جاهز فوراً! (متبقي {ctx.alliance_treasure_left_free_today}/{ctx.alliance_treasure_max_dig} اليوم)")
+        elif ctx.alliance_treasure_is_digging:
+            rem_m = max(1, ctx.alliance_treasure_dig_remain // 60)
+            print(f"📦 صندوق التحالف (Alliance Treasure): ⏳ قيد الحفر حالياً (متبقي {rem_m} دقيقة | تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
+        elif ctx.alliance_treasure_left_free_today <= 0:
+            print(f"📦 صندوق التحالف (Alliance Treasure): ✅ تم استهلاك كافة المحاولات اليوم ({ctx.alliance_treasure_max_dig}/{ctx.alliance_treasure_max_dig})")
+        else:
+            print(f"📦 صندوق التحالف (Alliance Treasure): ⏳ في فترة انتظار فاصلة (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
+        print("─" * 72)
+        if ctx.daily_luxury_gift_count > 0:
+            print(f"🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): 🎁 {ctx.daily_luxury_gift_count} هدية فاخرة جاهزة للاستلام فوراً! (حتى اليوم {ctx.daily_luxury_gift_max_day})")
+        elif ctx.daily_luxury_gift_max_day > 0:
+            print(f"🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): ✅ تم استلام كافة الهدايا المتاحة حتى اليوم {ctx.daily_luxury_gift_max_day}")
+        else:
+            print("🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): لا توجد هدايا فاخرة متاحة حالياً")
+        print("─" * 72)
+        if ctx.vip_gift_ready:
+            print(f"👑 صندوق الـ VIP اليومي (VIP Daily Gift): 🎁 صندوق مجاني جاهز للاستلام فوراً! (VIP مستوى {ctx.vip_lv} | نقاط: {ctx.vip_point:,})")
+        else:
+            print(f"👑 صندوق الـ VIP اليومي (VIP Daily Gift): ✅ تم استلام الصندوق اليوم مسبقاً (VIP مستوى {ctx.vip_lv} | نقاط: {ctx.vip_point:,})")
         print("─" * 72)
         if ctx.tactics_hall_status["active"]:
             rem_m = ctx.tactics_hall_status["remain_seconds"] // 60
@@ -1910,6 +2105,40 @@ class BotManager:
                 print(f"🏰 حصن الحرب (فخاخ السور): 🟢 متاح للتدريب (مستوى {fs['level']} | فخاخ السور: {fs['standing_traps']:,}/{fs['wall_capacity']:,})")
         else:
             print("🏰 حصن الحرب (فخاخ السور): ⚠️ مبنى حصن الحرب غير مشيد في القلعة")
+        if ctx.merit_level > 0 or ctx.merit_daily_points > 0:
+            print("─" * 72)
+            claimed_str = f"{len(ctx.merit_chests_claimed)}/6 مستلمة"
+            if ctx.merit_chests_ready:
+                ready_boxes_desc = ", ".join(f"صندوق {g}ن" for _, g in ctx.merit_chests_ready)
+                ready_str = f"🎁 {len(ctx.merit_chests_ready)} صندوق جاهز للاستلام! ({ready_boxes_desc})"
+            else:
+                ready_str = "0 جاهز للاستلام"
+            if ctx.merit_next_chest_goal > 0:
+                next_str = f"⏳ القادم عند {ctx.merit_next_chest_goal} نقطة (متبقي {ctx.merit_next_chest_remain} نقطة)"
+            else:
+                next_str = "🎉 تم فتح جميع صناديق اليوم بالكامل"
+            print(f"🎖️ مهام المجد والنشاط اليومي (Daily Glory & Prestige):")
+            print(f"   • 👑 مستوى المجد: {ctx.merit_level} | نقاط المجد: {ctx.merit_exp:,}")
+            print(f"   • ⚡ نقاط النشاط اليومي الحالية: {ctx.merit_daily_points} نقطة")
+            print(f"   • 🎁 صناديق النشاط اليومي (6 صناديق): {claimed_str} | {ready_str} | {next_str}")
+            print(f"   • 📋 إحصائيات المهام اليومية ({ctx.merit_tasks_total} مهمة): 🎁 {ctx.merit_tasks_ready} جاهزة للاستلام | ⏳ {ctx.merit_tasks_in_progress} قيد الإنجاز | ✅ {ctx.merit_tasks_claimed} مستلمة")
+            ready_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "ready"]
+            if ready_tasks:
+                print(f"   • 🎁 أبرز المهام المكتملة الجاهزة للاستلام فوراً ({len(ready_tasks)} مهمة):")
+                for t in ready_tasks[:7]:
+                    print(f"      - {t['icon']} {t['name']}: مكتملة ({t['c_num']:,}/{t['l_num']:,}) ✅")
+                if len(ready_tasks) > 7:
+                    print(f"      - ... و {len(ready_tasks) - 7} مهمة أخرى جاهزة")
+            started_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "in_progress" and t["c_num"] > 0]
+            unstarted_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "in_progress" and t["c_num"] == 0]
+            if started_tasks:
+                print(f"   • ⏳ المهام قيد الإنجاز حالياً ({len(started_tasks)} مهمة):")
+                for t in started_tasks[:6]:
+                    print(f"      - {t['icon']} {t['name']}: {t['c_num']:,}/{t['l_num']:,} (متبقي {t['remaining']:,})")
+            elif unstarted_tasks:
+                print(f"   • 📌 نماذج من المهام غير المنجزة اليوم:")
+                for t in unstarted_tasks[:4]:
+                    print(f"      - {t['icon']} {t['name']} (مطلوب {t['l_num']:,})")
         print("═" * 72 + "\n")
 
 
@@ -1922,8 +2151,13 @@ class BotManager:
     #   3. إضافة مهمة جديدة: أضف سطراً جديداً: ("اسم المهمة", self.step_X_...)
     # ════════════════════════════════════════════════════════════════════════════════════════
 
+    async def _wait_for_stop_signal(self) -> None:
+        """مراقب غير متزامن فائق السرعة يستيقظ فوراً عند طلب إيقاف البوت من خارج الـ Thread."""
+        while not self._stop_event.is_set():
+            await asyncio.sleep(0.25)
+
     async def execute_task_pipeline(self) -> Dict[str, Any]:
-        """تنفيذ سلسلة المهام بالترتيب المحدد وفق الجدول الزمني مع استئناف ذكي عند انقطاع الاتصال."""
+        """تنفيذ سلسلة المهام بالترتيب المحدد وفق الجدول الزمني مع استئناف ذكي عند انقطاع الاتصال ودعم الإيقاف الفوري اللحظي."""
         results = {}
         now = datetime.now()  # لقطة واحدة للوقت تُستخدم في كل فحوصات الجدول بالدورة
 
@@ -1941,6 +2175,12 @@ class BotManager:
             ("⚡ استخدام وشراء الطاقة (Stamina Task)",           self.step_9_stamina_task,              "stamina"),
             ("🎯 تفعيل المهارات التلقائية (Skills Task)",        self.step_10_skills_task,              "skills"),
             ("🦸 تجنيد الأبطال وسحب الصناديق (Hero Draw)",       self.step_11_hero_draw_task,           "hero_draw"),
+            ("💎 استكشاف جناح الكنز (Treasure Pavilion)",       self.step_11b_treasure_pavilion_task,  "treasure_pavilion"),
+            ("🔨 صقل معمل الحدادة (Blacksmith Forge)",          self.step_11c_blacksmith_forge_task,   "blacksmith_forge"),
+            ("🏛️ الضريح الإمبراطوري (Imperial Mausoleum)",     self.step_11d_imperial_mausoleum_task, "imperial_mausoleum"),
+            ("📦 صندوق التحالف (Alliance Treasure)",            self.step_11e_alliance_treasure_task, "alliance_treasure"),
+            ("🎁 الهدية الفاخرة اليومية (Daily Luxury Gift)",    self.step_11f_daily_luxury_gift_task, "daily_luxury_gift"),
+            ("👑 صندوق الـ VIP اليومي (VIP Daily Gift)",        self.step_11g_vip_gift_task,          "vip_gift"),
             ("🏛️ قاعة الاستراتيجيات (Tactics Hall)",             self.step_12_tactics_hall_task,        "tactics_hall"),
             ("💧 طاحونة الماء (Watermill Boost)",                self.step_13_watermill_task,           "watermill"),
             ("⛲ نافورة الأمنيات (Trevi Fountain)",              self.step_14_fountain_task,            "fountain"),
@@ -1950,6 +2190,8 @@ class BotManager:
             ("🏦 دار الادخار (Savings Bank)",                   self.step_19_savings_bank_task,        "savings_bank"),
             ("🏗️ ترقية المباني (Building Upgrade)",             self.step_20_building_task,            "building"),
             ("🎖️ مهام الهيبة اليومية (Prestige Quests)",        self.step_22_prestige_task,            "prestige"),
+            ("🎁 استلام صناديق الهيبة (Prestige Boxes)",         self.step_22c_prestige_box_task,       "prestige_box"),
+            ("🏥 معالجة الجنود بالمشفى (Hospital Cure)",        self.step_22b_hospital_task,           "hospital"),
             ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
             # ──────────────────────────────────────────────────────────────────────────────
             # لإضافة مهمة جديدة أضف سطراً: ("📌 اسم المهمة", self.step_N_..., "config_key")
@@ -1958,17 +2200,17 @@ class BotManager:
 
         step_idx = 0
         while step_idx < len(pipeline):
-            step_name, step_func, task_key = pipeline[step_idx]
+            # 0. الفحص الفوري المسبق: هل طُلب إيقاف البوت؟
+            if self._stop_event.is_set():
+                log.info(f"🛑 [إيقاف فوري] تم رصد طلب الإيقاف — إنهاء سلسلة المهام فوراً للحساب {self.email}.")
+                break
 
-            # ── فحص الجدول الزمني ─────────────────────────────────────────
-            if not self.ignore_schedule and not self.scheduler.should_run(task_key, now):
-                log.info(f"⏭️  [{step_name}] — متجاوزة (ليس وقتها بحسب الجدول)")
-                results[step_name] = {"skipped": True, "reason": "schedule"}
-                step_idx += 1
-                continue
+            step_name, step_func, task_key = pipeline[step_idx]
 
             # 1. التحقق من سلامة الاتصال قبل بدء المهمة
             if not self.is_connection_alive():
+                if self._stop_event.is_set():
+                    break
                 kick_reason = self.get_disconnect_reason()
                 log.warning(f"⚠️ تم رصد انقطاع الاتصال قبل بدء المهمة [{step_name}] (السبب: {kick_reason})")
                 reconnected = await self.wait_and_reconnect(kick_reason)
@@ -1976,6 +2218,10 @@ class BotManager:
                     log.error(f"❌ تعذر استعادة الاتصال بعد استنفاد محاولات الدخول. إيقاف السلسلة عند: {step_name}")
                     results[step_name] = {"success": False, "error": "انقطاع الاتصال وتعذر إعادة الدخول"}
                     break
+
+            # فحص إضافي بعد إعادة الاتصال إن حدثت
+            if self._stop_event.is_set():
+                break
 
             clean_step_name = step_name.split('(')[0].strip()
             self._update_bot_conn_state("connected", f"جاري تنفيذ: {clean_step_name}")
@@ -1988,6 +2234,7 @@ class BotManager:
             step_interrupted = False
             step_task = asyncio.create_task(step_func())
             disconnect_waiter = asyncio.create_task(self._disconnected_event.wait())
+            stop_waiter = asyncio.create_task(self._wait_for_stop_signal())
 
             # تحديد مهلة الأمان للمهمة: المهام العادية 300ث (5د)، ومهمة منسق الفيالق تستمر حسب مدتها (افتراضياً 20د)
             task_timeout = 300
@@ -1996,10 +2243,34 @@ class BotManager:
                 task_timeout = max(300, int((mm_dur * 60) + 180))
 
             done, pending = await asyncio.wait(
-                [step_task, disconnect_waiter],
+                [step_task, disconnect_waiter, stop_waiter],
                 timeout=task_timeout,
                 return_when=asyncio.FIRST_COMPLETED
             )
+
+            # ── التحقق اللحظي الأول: هل تم طلب إيقاف البوت أثناء عمل المهمة؟ ──
+            if stop_waiter in done or self._stop_event.is_set():
+                log.info(f"🛑 [إيقاف فوري ولحظي] تم استلام أمر إيقاف البوت أثناء تنفيذ [{step_name}] — إلغاء المهمة وقطع الاتصال والخروج فوراً.")
+                for p_task in pending:
+                    p_task.cancel()
+                    try:
+                        await p_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                results[step_name] = {"stopped": True, "message": "تم إيقاف البوت بواسطة المستخدم"}
+                if self.conn:
+                    try:
+                        await self.conn.close()
+                    except Exception:
+                        pass
+                break
+
+            # إلغاء مراقب الإيقاف طالما انتهت الخطوة بنجاح بدونه
+            stop_waiter.cancel()
+            try:
+                await stop_waiter
+            except (asyncio.CancelledError, Exception):
+                pass
 
             if not done:
                 # انتهت مهلة الأمان والمهمة لم تنتهِ
@@ -2035,6 +2306,11 @@ class BotManager:
                     log.warning(f"⚠️ [انقطاع الاتصال] تم رصد انقطاع الاتصال بعد تنفيذ [{step_name}] (السبب: {kick_reason})!")
                     step_interrupted = True
 
+            # فحص فوري لطلب الإيقاف بعد انتهاء المهمة قبل محاولة إعادة الاتصال
+            if self._stop_event.is_set():
+                log.info(f"🛑 [إيقاف فوري] تم رصد طلب الإيقاف بعد انتهاء [{step_name}] — إنهاء السلسلة فوراً.")
+                break
+
             if step_interrupted:
                 # الانتظار دقيقة واحدة وإعادة تسجيل الدخول، ثم إعادة استئناف نفس المهمة التي توقفت
                 reconnected = await self.wait_and_reconnect(kick_reason)
@@ -2052,12 +2328,17 @@ class BotManager:
                 t_data = res.get("data", {}) if isinstance(res, dict) else (getattr(res, "data", {}) or {})
                 if t_data.get("all_completed") is False:
                     log.info("⏳ [مهام الهيبة] لا تزال بعض المهام غير مكتملة — ستُستأنف في الدورة القادمة تلقائياً فور توفر الفيالق.")
-                else:
-                    self.scheduler.mark_ran(task_key, now)  # تسجيل وقت الاكتمال النهائي في الجدول
-            else:
-                self.scheduler.mark_ran(task_key, now)  # تسجيل وقت التشغيل في الجدول
             step_idx += 1
-            await asyncio.sleep(1.5)  # مهلة أمان قصيرة بين المهام
+
+            # التحقق من الإيقاف قبل فترة الأمان بين المهام
+            if self._stop_event.is_set():
+                break
+
+            # مهلة أمان قصيرة بين المهام مجزأة لفحص الإيقاف
+            for _ in range(3):
+                if self._stop_event.is_set():
+                    break
+                await asyncio.sleep(0.5)
 
         return results
 
@@ -2065,15 +2346,10 @@ class BotManager:
     #  دوال تفاصيل كل مهمة على حدة (Individual Task Handlers)
     # ─────────────────────────────────────────────────────────────────
 
-    # [1] مهمة حصد مزارع المدينة
+    # [1] مهمة حصد مزارع المدينة (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
     async def step_1_city_harvest_task(self) -> Dict[str, Any]:
-        """فحص وحصد جميع محاصيل مزارع القمح والخشب والحديد والألماس داخل المدينة."""
-        h_cfg = self.config.get("city_harvest", {})
-        if not bool(h_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي حصد مزارع المدينة بناءً على رغبة المستخدم (city_harvest.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
-
+        """فحص وحصد جميع محاصيل مزارع القمح والخشب والحديد والألماس داخل المدينة (تنفذ دائماً وبشكل إلزامي)."""
+        h_cfg = self.config.get("city_harvest", {}) if isinstance(self.config.get("city_harvest"), dict) else {}
         log.info("🌾 بدء حصد كافة مزارع ومناجم المدينة وتعبئة مخازن القلعة بالموارد...")
         task_cfg = {
             "enabled": True,
@@ -2246,7 +2522,12 @@ class BotManager:
         }
 
         pet_task = PetPatrolTask(self.conn, task_pet_cfg)
-        res_pet = await pet_task.run()
+        _safe_bind_task_logger(pet_task, self._log_callback, level=logging.INFO)
+
+        try:
+            res_pet = await pet_task.run()
+        finally:
+            _safe_unbind_task_logger(pet_task)
 
         if res_pet.success:
             log.info(f"🎉 نتيجة دورية الحيوان: {res_pet.message}")
@@ -2309,20 +2590,67 @@ class BotManager:
 
     # [9] مهمة استخدام جرعات وشراء الطاقة
     async def step_9_stamina_task(self) -> Dict[str, Any]:
-        """استهلاك جرعات الطاقة المجانية من الحقيبة وتنفيذ شراء الطاقة بالذهب بعدد المرات المحدد من المستخدم."""
+        """استهلاك جرعات الطاقة المجانية من الحقيبة وتنفيذ شراء الطاقة بالذهب بعدد المرات المحدد من المستخدم بناءً على معطيات الاستعلام الشامل."""
         stamina_cfg = self.config.get("stamina", {})
         if not bool(stamina_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي مهمة الطاقة بناءً على رغبة المستخدم (stamina.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
+        ctx = self.context
+        potions = getattr(ctx, "stamina_potions", {}) or {}
+        total_potions = sum(potions.values()) if isinstance(potions, dict) else 0
+
+        # بيانات تبديل الطاقة بالذهب المستخرجة من الاستعلام الشامل
+        bs_ctrl = self.conn.init_data.get("buyStaminaCtrl", {}) if (self.conn and hasattr(self.conn, "init_data")) else {}
+        current_price = getattr(ctx, "stamina_gold_cost", 0) or int(bs_ctrl.get("price", 0))
+        buy_times = getattr(ctx, "stamina_buy_times", 0) if getattr(ctx, "stamina_buy_times", 0) > 0 else int(bs_ctrl.get("buyTimes", 0))
+        limit_times = getattr(ctx, "stamina_limit_times", 0) or int(bs_ctrl.get("limitTimes", 30))
+
         gold_buys = int(stamina_cfg.get("gold_buys", stamina_cfg.get("gold", 0)))
-        log.info(f"⚡ بدء مهمة الطاقة (استهلاك الجرعات المجانية + شراء بالذهب: {gold_buys} مرة)...")
+        max_price = int(stamina_cfg.get("max_price", stamina_cfg.get("price_limit", stamina_cfg.get("max_exchange_price", stamina_cfg.get("gold_limit", 0)))))
+
+        # 1. إذا كانت هناك جرعات طاقة في الحقيبة، تُنفّذ المهمة دائماً لاستهلاكها
+        if total_potions > 0:
+            remaining_buys = max(0, gold_buys - buy_times) if gold_buys > 0 else 0
+            if max_price > 0 and current_price > max_price:
+                remaining_buys = 0  # حماية: السعر الحالي بالقلعة تجاوز الحد الأقصى للمستخدم، نستهلك الجرعات فقط
+            log.info(f"⚡ بدء مهمة الطاقة: توفر {total_potions} جرعة بالحقيبة (سعر التبديل بالقلعة: {current_price} ذهب | الشراء بالذهب المتبقي: {remaining_buys} مرة [تم {buy_times}/{gold_buys}])...")
+        else:
+            # 2. الحقيبة خالية من الجرعات -> التحقق من شروط تبديل الطاقة بالذهب
+            if gold_buys <= 0 and max_price <= 0:
+                msg = "⏭️ تم تخطي مهمة الطاقة: الحقيبة خالية من الجرعات ولم يتم تفعيل الشراء بالذهب (gold_buys = 0)."
+                log.info(msg)
+                return {"skipped": True, "message": msg}
+
+            if limit_times > 0 and buy_times >= limit_times:
+                msg = f"⏭️ تم تخطي مهمة الطاقة: تم استنفاد الحد الأقصى اليومي لتبديل الطاقة بالذهب ({buy_times}/{limit_times} مرة) والحقيبة خالية."
+                log.iَnfo(msg)
+                return {"skipped": True, "message": msg}
+
+            if max_price > 0 and current_price > max_price:
+                msg = f"⏭️ تم تخطي مهمة الطاقة: سعر تبديل الطاقة الحالي بالقلعة ({current_price} ذهب) يتجاوز الحد الأقصى المحدد ({max_price} ذهب) والحقيبة خالية."
+                log.info(msg)
+                return {"skipped": True, "message": msg}
+
+            if gold_buys > 0 and buy_times >= gold_buys and max_price <= 0:
+                msg = f"⏭️ تم تخطي مهمة الطاقة: تم استيفاء عدد مرات الشراء بالذهب المحددة ({buy_times}/{gold_buys} مرة) وسعر التبديل الحالي {current_price} ذهب، والحقيبة خالية."
+                log.info(msg)
+                return {"skipped": True, "message": msg}
+
+            remaining_buys = max(0, gold_buys - buy_times) if gold_buys > 0 else (1 if max_price > 0 and current_price <= max_price else 0)
+            if remaining_buys <= 0:
+                msg = f"⏭️ تم تخطي مهمة الطاقة: لا توجد عمليات شراء متبقية مطلوبة ({buy_times}/{gold_buys}) والحقيبة خالية."
+                log.info(msg)
+                return {"skipped": True, "message": msg}
+
+            log.info(f"⚡ بدء مهمة الطاقة: الحقيبة خالية، وسعر التبديل الحالي بالقلعة ({current_price} ذهب) متاح للشراء (المتبقي: {remaining_buys} مرة [تم {buy_times}/{gold_buys}])...")
 
         task = StaminaTask(self.conn, {
             "use_free": True,
-            "gold_buys": gold_buys,
-            "gold": gold_buys
+            "gold_buys": remaining_buys,
+            "gold": remaining_buys,
+            "max_price": max_price
         })
         res = await task.run()
 
@@ -2381,6 +2709,96 @@ class BotManager:
             log.info(f"🎉 نتيجة تجنيد الأبطال: {res.message}")
         else:
             log.warning(f"⚠️ تنبيه في تجنيد الأبطال: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11b] مهمة استكشاف جناح الكنز المجاني (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11b_treasure_pavilion_task(self) -> Dict[str, Any]:
+        """فحص واستكشاف جناح الكنز المجاني تلقائياً في كل دورة (تنفذ دائماً وبشكل إلزامي مثل city_harvest) مع التحقق الصارم لحماية الذهب."""
+        tp_cfg = self.config.get("treasure_pavilion", {}) if isinstance(self.config.get("treasure_pavilion"), dict) else {}
+        log.info("💎 بدء مهمة استكشاف جناح الكنز (Treasure Pavilion)...")
+        task = TreasurePavilionTask(self.conn, tp_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة جناح الكنز: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في جناح الكنز: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11c] مهمة صقل معمل الحدادة المجاني (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11c_blacksmith_forge_task(self) -> Dict[str, Any]:
+        """فحص وصقل معمل الحدادة المجاني تلقائياً في كل دورة (تنفذ دائماً وبشكل إلزامي مثل city_harvest و treasure_pavilion) مع التحقق الصارم لحماية الذهب."""
+        bf_cfg = self.config.get("blacksmith_forge", {}) if isinstance(self.config.get("blacksmith_forge"), dict) else {}
+        log.info("🔨 بدء مهمة معمل الحدادة وصقل الرون (Blacksmith Forge)...")
+        task = BlacksmithForgeTask(self.conn, bf_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة معمل الحدادة: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في معمل الحدادة: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11d] مهمة الضريح الإمبراطوري المجاني (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11d_imperial_mausoleum_task(self) -> Dict[str, Any]:
+        """فحص وتنفيذ الضريح الإمبراطوري المجاني تلقائياً في كل دورة (تنفذ دائماً وبشكل إلزامي مثل city_harvest و treasure_pavilion و blacksmith_forge) مع التحقق الصارم لحماية الذهب والنحاس."""
+        im_cfg = self.config.get("imperial_mausoleum", {}) if isinstance(self.config.get("imperial_mausoleum"), dict) else {}
+        log.info("🏛️ بدء مهمة الضريح الإمبراطوري (Imperial Mausoleum)...")
+        task = ImperialMausoleumTask(self.conn, im_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة الضريح الإمبراطوري: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في الضريح الإمبراطوري: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11e] مهمة صندوق التحالف المجاني (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11e_alliance_treasure_task(self) -> Dict[str, Any]:
+        """فحص واستلام/حفر صندوق التحالف المجاني تلقائياً في كل دورة مع التحقق الصارم لحماية الذهب."""
+        at_cfg = self.config.get("alliance_treasure", {}) if isinstance(self.config.get("alliance_treasure"), dict) else {}
+        log.info("📦 بدء مهمة صندوق التحالف (Alliance Treasure)...")
+        task = AllianceTreasureTask(self.conn, at_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة صندوق التحالف: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في صندوق التحالف: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11f] مهمة الهدية الفاخرة اليومية (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11f_daily_luxury_gift_task(self) -> Dict[str, Any]:
+        """فحص وجمع كافة هدايا الهدية الفاخرة اليومية المتاحة تلقائياً في كل دورة."""
+        dlg_cfg = self.config.get("daily_luxury_gift", {}) if isinstance(self.config.get("daily_luxury_gift"), dict) else {}
+        log.info("🎁 بدء مهمة الهدية الفاخرة اليومية (Daily Luxury Gift)...")
+        task = DailyLuxuryGiftTask(self.conn, dlg_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة الهدية الفاخرة: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في الهدية الفاخرة: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [11g] مهمة صندوق الـ VIP اليومي المجاني (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
+    async def step_11g_vip_gift_task(self) -> Dict[str, Any]:
+        """فحص واستلام صندوق الـ VIP اليومي المجاني تلقائياً بأمان في كل دورة."""
+        vg_cfg = self.config.get("vip_gift", {}) if isinstance(self.config.get("vip_gift"), dict) else {}
+        log.info("👑 بدء مهمة صندوق الـ VIP اليومي المجاني (VIP Daily Gift)...")
+        task = VipGiftTask(self.conn, vg_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة صندوق VIP: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في صندوق VIP: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
@@ -2449,23 +2867,33 @@ class BotManager:
 
         res_list = fountain_cfg.get("resources", ["food", "wood", "iron", "diamond"])
         gold_times = int(fountain_cfg.get("gold_times", 0))
-        allow_gold = bool(fountain_cfg.get("allow_gold", fountain_cfg.get("use_gold", False))) and gold_times > 0
+        raw_allow_gold = bool(fountain_cfg.get("allow_gold", False))
+        allow_gold = raw_allow_gold and gold_times > 0
         if not allow_gold:
             gold_times = 0
 
+        castle_lv = getattr(self.context, "castle_level", 0) or 0
         res_display = "، ".join(res_list) if isinstance(res_list, list) else str(res_list)
-        log.info(f"⛲ بدء مهمة نافورة الأمنيات (الموارد: [{res_display}] | السماح بالشراء بالذهب: {'نعم' if allow_gold else 'لا'} | عدد مرات الذهب: {gold_times})...")
+        log.info(f"⛲ بدء مهمة نافورة الأمنيات (الموارد: [{res_display}] | قلعة لفل: {castle_lv} | السماح بالشراء بالذهب: {'نعم' if allow_gold else 'لا'} | عدد مرات الذهب: {gold_times})...")
 
         task_cfg = {
             "resources": res_list,
             "use_gold": allow_gold,
             "allow_gold": allow_gold,
             "gold_times": gold_times,
-            "max_gold": fountain_cfg.get("max_gold", 200)
+            "max_gold": fountain_cfg.get("max_gold", 200),
+            "castle_level": castle_lv,
         }
 
         task = FountainTask(self.conn, task_cfg)
-        res = await task.run()
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        if self._log_callback:
+            self._log_callback(f"⛲ {res.message}")
 
         if res.success:
             log.info(f"🎉 نتيجة نافورة الأمنيات: {res.message}")
@@ -2632,16 +3060,13 @@ class BotManager:
 
     async def step_22_prestige_task(self) -> Dict[str, Any]:
         """
-        تنفيذ مهمة مهام الهيبة اليومية (Daily Prestige Quests):
-          - متجر المهربين بالموارد العادية فقط بدون ذهب.
-          - قتال الغزاة حتى الحد الأقصى للمستوى الذي حدده المستخدم (invaders_max_lv).
-          - مهاجمة المعاقل / الملاجئ.
-          - جمع الموارد الأربعة خارج القلعة بحمولة 25,000 مورد.
+        تنفيذ مهمة مهام الهيبة اليومية داخل القلعة (Daily Prestige Quests):
+          - متجر المهربين بالموارد العادية فقط بدون ذهب (10 مشتريات).
           - الساقية وتفعيل جميع مباني إنتاج الموارد.
           - تدريب الجنود (250 من كل نوع مستوى 1).
           - حصن الحرب وتدريب الفخاخ.
-        تتيح للمستخدم تحديد كل مهمة فرعية على حدة (subtasks) والحد الأقصى لمستوى الغزاة.
-        مجدولة افتراضياً للعمل مرة واحدة يومياً الساعة 3 فجراً (schedule: {"hours": [3]}).
+        ملاحظة: مهام المسيرات الخارجية (غزاة الهيبة، معقل الهيبة، جمع موارد الهيبة)
+        نُقلت بالكامل لتُدار مركزياً وذكياً ضمن منسق الفيالق (march_manager).
         """
         p_cfg = self.config.get("prestige", {})
         if not bool(p_cfg.get("enabled", True)):
@@ -2663,6 +3088,88 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
 
+    async def step_22c_prestige_box_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة استلام صناديق النشاط اليومي لمهام الهيبة (Prestige Box Task):
+          - تتبع تلقائياً تفعيل مهمة مهام الهيبة (prestige.enabled).
+          - إذا كانت prestige.enabled غير مفعلة (False)، لا يتم تنفيذ استلام الصناديق.
+          - استعلام مسبق عن نقاط النشاط والصناديق المستلمة (1013/1).
+          - إنهاء المهمة فوراً إذا لم تكن هناك صناديق جاهزة.
+          - استلام الصناديق المستحقة تباعاً (CMD 3105 / SUB 2).
+        """
+        # 1. التحقق من تفعيل مهمة مهام الهيبة الرئيسية (التحكم المباشر من prestige.enabled)
+        p_cfg = self.config.get("prestige", {})
+        prestige_enabled = bool(p_cfg.get("enabled", True)) if isinstance(p_cfg, dict) else bool(p_cfg)
+
+        if not prestige_enabled:
+            msg = "⏭️ تم تخطي مهمة استلام صناديق الهيبة نظراً لتعطيل مهمة مهام الهيبة (prestige.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        # 2. فحص إعداد مهمة الصناديق إن وُجد
+        cfg = self.config.get("prestige_box", self.config.get("alliance_box", {}))
+        if isinstance(cfg, bool):
+            cfg = {"enabled": cfg}
+        elif not isinstance(cfg, dict):
+            cfg = {"enabled": True}
+
+        if not bool(cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة استلام صناديق الهيبة (prestige_box.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        log.info("🎁 بدء مهمة استلام صناديق مهام الهيبة والنشاط اليومي...")
+        task = PrestigeBoxTask(self.conn, cfg)
+        await task.on_start()
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة استلام صناديق الهيبة: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في صناديق الهيبة: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
+    async def step_22b_hospital_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة فحص ومعالجة الجنود الجرحى في المشفى (Hospital Cure Task):
+          - التحقق من وجود مبنى المشفى (bid: 206) ومستواه في القلعة.
+          - فحص طابور العلاج (queueCtrl['1202']) والتأكد من إتاحته.
+          - استعلام أحدث بيانات الجيش (1005/1) لتحديد كافة الجنود الجرحى.
+          - إرسال طلب العلاج العادي (1005/4 mode: 0) بكافة الأعداد المصابة.
+        """
+        hosp_cfg = self.config.get("hospital", {})
+        if isinstance(hosp_cfg, bool):
+            hosp_cfg = {"enabled": hosp_cfg}
+        elif not isinstance(hosp_cfg, dict):
+            hosp_cfg = {"enabled": True}
+
+        if not hosp_cfg.get("enabled", True):
+            msg = "⏭️ تم تخطي مهمة علاج الجرحى بالمشفى (hospital.enabled = False)."
+            log.info(msg)
+            return {"success": True, "message": msg, "skipped": True}
+
+        task = HospitalTask(self.conn, hosp_cfg)
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
+        if self._log_callback:
+            self._log_callback(f"🏥 {res.message}")
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة المشفى: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة المشفى: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
     async def step_23_march_manager_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator):
@@ -2674,41 +3181,8 @@ class BotManager:
           - جمع الذهب في أراضي التحالفات (Gold Gather) بأولوية تسبق جمع الموارد العامة.
           - جمع الموارد بالفيالق الشاغرة المتبقية بحسابات حمولة رياضية دقيقة مطابقة للعبة.
         """
-        mm_cfg = copy.deepcopy(self.config.get("march_manager", {}))
-        if not bool(mm_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة منسق الفيالق بناءً على رغبة المستخدم (march_manager.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
+        return {"skipped": True, "message": "مهمة منسق الفيالق قيد التطوير"}
 
-        # دمج إعدادات gold_gather المحفوظة من واجهة المستخدم (في جذر config أو داخل march_manager)
-        if "gold_gather" in self.config and isinstance(self.config["gold_gather"], dict):
-            root_gg = self.config["gold_gather"]
-            if "gold_gather" not in mm_cfg or not isinstance(mm_cfg["gold_gather"], dict):
-                mm_cfg["gold_gather"] = copy.deepcopy(root_gg)
-            else:
-                mm_cfg["gold_gather"].update(copy.deepcopy(root_gg))
-
-        # تمرير إعدادات مهام الهيبة للربط والتنسيق التكتيكي الذكي
-        mm_cfg["_prestige_config"] = copy.deepcopy(self.config.get("prestige", {}))
-
-        # تمرير إشارة الإيقاف الخارجية والمدة المحددة ومسار الـ logs (افتراضياً 20 دقيقة ككل)
-        mm_cfg["_external_stop_event"] = self._stop_event
-        mm_cfg["_log_callback"] = self._log_callback
-        if "duration_minutes" not in mm_cfg:
-            mm_cfg["duration_minutes"] = 20
-
-        log.info("🎖️ بدء مهمة منسق الفيالق والمسيرات الذكي (March Orchestrator)...")
-        task_cfg = mm_cfg
-        task = MarchManagerTask(self.conn, task_cfg)
-        await task.on_start()
-        res = await task.run()
-
-        if res.success:
-            log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
-        else:
-            log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
-
-        return {"success": res.success, "message": res.message, "data": res.data}
 
 
     # ─────────────────────────────────────────────────────────────────
@@ -2717,13 +3191,20 @@ class BotManager:
     async def run_once(self) -> Dict[str, Any]:
         """
         تشغيل دورة واحدة كاملة:
-          0. التحقق من صلاحية الاشتراك وحظر الحساب.
+          0. استعلام أحدث إعدادات المهام من قاعدة البيانات المحلية في بداية كل دورة.
+          0.5 التحقق من صلاحية الاشتراك وحظر الحساب.
           1. تسجيل الدخول.
           2. الاستعلام الشامل (مع إعادة المحاولة عند انقطاع الاتصال).
           3. تنفيذ سلسلة المهام بالترتيب مع فحص الجدول الزمني لكل مهمة.
           4. إغلاق الاتصال بأمان وإعادة النتائج.
         """
-        # 0. التحقق من صلاحية الاشتراك وحظر الحساب
+        # 0. استعلام وتحديث إعدادات المهام للقلعة من قاعدة البيانات المحلية للدورة الحالية
+        self.reload_config_from_db()
+
+        # 0.5 التحقق من طلب الإيقاف وصلاحية الاشتراك وحظر الحساب
+        if self._stop_event.is_set():
+            return {"success": False, "error": "تم طلب إيقاف البوت"}
+
         valid, reason = self.check_subscription_validity()
         if not valid:
             log.warning(f"🛑 [إيقاف التشغيل] {reason} — لن يتم تشغيل البوت للحساب {self.email}!")
@@ -2732,11 +3213,17 @@ class BotManager:
 
         try:
             # 1. تسجيل الدخول
+            if self._stop_event.is_set():
+                return {"success": False, "error": "تم طلب إيقاف البوت"}
+
             connected = await self.login_and_connect()
-            if not connected:
-                return {"success": False, "error": "فشل الاتصال والمصادقة"}
+            if not connected or self._stop_event.is_set():
+                return {"success": False, "error": "فشل الاتصال والمصادقة أو تم الإيقاف"}
 
             # 2. الاستعلام الشامل
+            if self._stop_event.is_set():
+                return {"success": False, "error": "تم طلب إيقاف البوت"}
+
             try:
                 await self.perform_comprehensive_query()
             except Exception as e:
@@ -2748,6 +3235,9 @@ class BotManager:
                 else:
                     log.warning(f"⚠️ تنبيه أثناء الاستعلام الشامل: {e}")
 
+            if self._stop_event.is_set():
+                return {"success": False, "error": "تم طلب إيقاف البوت"}
+
             # 2.5 تحديث بيانات وموارد القلعة في بداية الدورة مباشرة
             try:
                 self.sync_castle_resources()
@@ -2755,6 +3245,9 @@ class BotManager:
                 log.warning(f"⚠️ تنبيه أثناء تحديث موارد القلعة في بداية الدورة: {e}")
 
             # 3. تنفيذ سلسلة المهام
+            if self._stop_event.is_set():
+                return {"success": False, "error": "تم طلب إيقاف البوت"}
+
             pipeline_results = await self.execute_task_pipeline()
 
             # 4. تحديث الموارد في نهاية الدورة أيضاً (لحفظ نواتج الحصاد والجمع)
@@ -2814,7 +3307,6 @@ class BotManager:
         interval_secs = loop_interval_minutes * 60
 
         log.info(f"🔁 وضع التشغيل المستمر نشط — دورة كل {loop_interval_minutes} دقيقة")
-        log.info(self.scheduler.summary())
 
         while not self._stop_event.is_set():
             iteration += 1
@@ -2835,9 +3327,6 @@ class BotManager:
                 await self.run_once()
             except Exception as e:
                 log.error(f"💥 خطأ في الدورة #{iteration}: {e}", exc_info=True)
-            finally:
-                # حفظ حالة الجدول بعد كل دورة (ملف صغير < 1KB)
-                self.scheduler.save_state()
 
             # إذا طُلب الإيقاف خلال الدورة — اخرج فوراً
             if self._stop_event.is_set():
@@ -2878,6 +3367,14 @@ class BotManager:
             else:
                 self._update_bot_conn_state("connected", f"بدء الدورة التالية فوراً (#{iteration + 1})")
 
+        # إغلاق الاتصال بأمان وتحديث الحالة إلى idle عند الخروج من حلقة التشغيل
+        if self.conn:
+            try:
+                await self.conn.close()
+            except Exception:
+                pass
+        self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -2886,6 +3383,7 @@ class BotManager:
 
 if __name__ == "__main__":
     import argparse
+    from core.database import get_castle
 
     parser = argparse.ArgumentParser(
         description="Empire Bot Manager — مدير البوت ومنسق المهام الشامل"
@@ -2897,21 +3395,19 @@ if __name__ == "__main__":
         default=None,
         help="مسار ملف JSON يحتوي على إعدادات المستخدم من Firebase (يتجاوز جميع خيارات الإعدادات الأخرى)"
     )
-    parser.add_argument("--firebase-user-id",    dest="firebase_user_id",    default=None, help="معرف المستخدم في Firebase (للإبلاغ عن الحالة)")
-    parser.add_argument("--firebase-castle-id",  dest="firebase_castle_id",  default=None, help="معرف القلعة في Firebase (للإبلاغ عن الحالة)")
+    parser.add_argument("--firebase-user-id",   dest="firebase_user_id",   default=None, help="معرف المستخدم في Firebase")
+    parser.add_argument("--firebase-castle-id", dest="firebase_castle_id", default=None, help="معرف القلعة في Firebase")
     parser.add_argument(
         "--reconnect-wait",
         type=int,
         default=60,
-        help="مدة الانتظار بالثواني عند انقطاع الاتصال بسبب دخول شخص آخر للحساب [افتراضي: 60 ثانية (دقيقة واحدة)]"
+        help="مدة الانتظار بالثواني عند انقطاع الاتصال بسبب دخول شخص آخر للحساب [افتراضي: 60 ثانية]"
     )
-
-    # ── خيارات وضع التشغيل المستمر (Loop Mode) ─────────────────────
     parser.add_argument(
         "--loop",
         action="store_true",
         default=False,
-        help="تشغيل البوت في حلقة مستمرة لا تنتهي — ينفذ دورة كاملة ثم ينتظر المدة المحددة [افتراضي: معطل]"
+        help="تشغيل البوت في حلقة مستمرة لا تنتهي [افتراضي: معطل]"
     )
     parser.add_argument(
         "--loop-interval",
@@ -2921,315 +3417,11 @@ if __name__ == "__main__":
         metavar="MINUTES",
         help="المدة بين الدورات بالدقائق في وضع الحلقة الدائمة [افتراضي: 60 دقيقة]"
     )
-
-    # خيارات مهمة حصد مزارع المدينة
-    parser.add_argument("--harvest", dest="harvest", action="store_true", default=True, help="تفعيل حصد جميع مزارع موارد المدينة [افتراضي: تفعيل]")
-    parser.add_argument("--no-harvest", dest="harvest", action="store_false", help="تعطيل حصد مزارع المدينة")
-    parser.add_argument("--harvest-types", default="all", help="أنواع المزارع المطلوب حصدها (مثال: 'قمح,حديد' أو 'all') [افتراضي: الكل]")
-
-    # خيارات مهمة أبحاث الأكاديمية والعلوم
-    parser.add_argument("--research", dest="research", action="store_true", default=True, help="تفعيل مهمة أبحاث الأكاديمية [افتراضي: تفعيل]")
-    parser.add_argument("--no-research", dest="research", action="store_false", help="تعطيل مهمة أبحاث الأكاديمية")
     parser.add_argument(
-        "--research-tree",
-        default="defense",
-        choices=["defense", "military", "resources", "city", "advanced", "war", "all"],
-        help="شجرة الأبحاث المستهدفة (defense, military, resources, city, all) [افتراضي: defense]"
-    )
-    parser.add_argument(
-        "--tech-id",
-        default=None,
-        help="معرف بحث محدد يدوياً (مثال: 23016) [افتراضي: البحث الموصى به تلقائياً]"
-    )
-    parser.add_argument(
-        "--research-check-only",
-        action="store_true",
-        help="فحص وعرض البحث الموصى به فقط دون بدء البحث فعلياً"
-    )
-
-    # خيارات مهمة التحالف ومساعدة الأعضاء وتبرعات العلوم
-    parser.add_argument("--alliance", dest="alliance", action="store_true", default=True, help="تفعيل مهمة التحالف (المساعدة والتبرع) [افتراضي: تفعيل]")
-    parser.add_argument("--no-alliance", dest="alliance", action="store_false", help="تعطيل مهمة التحالف")
-    parser.add_argument("--alliance-sciid", default=None, help="معرف تقنية تحالف محددة للتبرع [افتراضي: التقنية الموصى بها تلقائياً]")
-    parser.add_argument("--alliance-gold", type=int, default=0, help="عدد مرات التبرع بالذهب للتحالف [افتراضي: 0 - مجاني فقط]")
-
-    # خيارات مهمة الميناء
-    parser.add_argument("--port", dest="port", action="store_true", default=True, help="تفعيل مهمة الميناء [افتراضي: تفعيل]")
-    parser.add_argument("--no-port", dest="port", action="store_false", help="تعطيل مهمة الميناء")
-
-    # خيارات مهمة تدريب الجنود
-    parser.add_argument("--train", dest="train", action="store_true", default=True, help="تفعيل مهمة تدريب الجنود [افتراضي: تفعيل]")
-    parser.add_argument("--no-train", dest="train", action="store_false", help="تعطيل مهمة تدريب الجنود")
-    parser.add_argument(
-        "--barracks", "-b",
-        default="all",
-        help="الثكنات المراد تدريبها مفصولة بفاصلة (مثال: 'مشاة,خيالة' أو 'infantry,cavalry,archers') [افتراضي: الكل]"
-    )
-    parser.add_argument(
-        "--troop-level", "-l",
-        type=int,
-        default=10,
-        help="المستوى المستهدف للجنود في الثكنات (مثال: 10 أو 8) [افتراضي: 10 أو أعلى مستوى متاح]"
-    )
-    parser.add_argument(
-        "--troop-levels",
-        help="تخصيص فردي لكل ثكنة (مثال: 'infantry:10,archers:8,cavalry:9')"
-    )
-
-    # خيارات مهمة دورية الحيوانات الأليفة
-    parser.add_argument("--pet-patrol", dest="pet_patrol", action="store_true", default=True, help="تفعيل مهمة دورية الحيوان الأليف [افتراضي: تفعيل]")
-    parser.add_argument("--no-pet-patrol", dest="pet_patrol", action="store_false", help="تعطيل مهمة دورية الحيوان الأليف")
-    parser.add_argument(
-        "--pet", "-p",
-        default="غزال",
-        help="الحيوان المطلوب تدريبه/إرساله للدورية بالاسم أو المعرف (مثال: 'غزال', 'صقر', 'اسد', 'ذئب', 1261, 1263) [افتراضي: غزال]"
-    )
-    parser.add_argument(
-        "--dest", "--destination",
-        dest="destination",
-        type=int,
-        default=DEFAULT_DESTINATION,
-        help="معرف الحيوان المستهدف (وجهة الدورية) [افتراضي: 1262 الأسد]"
-    )
-
-    # خيارات مهمة جمع جوائز التوسع الإقليمي
-    parser.add_argument("--territory", dest="territory", action="store_true", default=True, help="تفعيل جمع جوائز التوسع الإقليمي [افتراضي: تفعيل]")
-    parser.add_argument("--no-territory", dest="territory", action="store_false", help="تعطيل جمع جوائز التوسع الإقليمي")
-
-    # خيارات مهمة درع السلام التلقائي وحماية القلعة
-    parser.add_argument("--shield", dest="shield", action="store_true", default=True, help="تفعيل درع السلام لحماية القلعة [افتراضي: تفعيل]")
-    parser.add_argument("--no-shield", dest="shield", action="store_false", help="تعطيل درع السلام لحماية القلعة")
-    parser.add_argument(
-        "--shield-duration", "-sd",
-        default="8h",
-        choices=["8h", "24h", "3d", "8", "24", "72"],
-        help="مدة درع السلام: 8h (8 ساعات) أو 24h (24 ساعة) أو 3d (3 أيام) [افتراضي: 8h]"
-    )
-    parser.add_argument(
-        "--shield-allow-gold",
-        dest="shield_allow_gold",
+        "--ignore-schedule",
         action="store_true",
         default=False,
-        help="السماح بشراء الدرع بالذهب عند نفاد دروع الحقيبة المجانية [افتراضي: معطل لمنع استهلاك الذهب]"
-    )
-
-    # خيارات مهمة استخدام وشراء الطاقة
-    parser.add_argument("--stamina", dest="stamina", action="store_true", default=True, help="تفعيل مهمة استخدام وشراء الطاقة [افتراضي: تفعيل]")
-    parser.add_argument("--no-stamina", dest="stamina", action="store_false", help="تعطيل مهمة استخدام وشراء الطاقة")
-    parser.add_argument(
-        "--stamina-gold",
-        type=int,
-        default=0,
-        help="عدد مرات شراء الطاقة بالذهب [افتراضي: 0 = مجاني فقط بدون شراء بالذهب]"
-    )
-
-    # خيارات مهمة تفعيل المهارات التلقائية
-    parser.add_argument("--skills", dest="skills", action="store_true", default=True, help="تفعيل مهمة تفعيل المهارات التلقائية [افتراضي: تفعيل]")
-    parser.add_argument("--no-skills", dest="skills", action="store_false", help="تعطيل مهمة تفعيل المهارات التلقائية")
-    parser.add_argument(
-        "--target-skills", "--skill-list",
-        dest="target_skills",
-        default="all",
-        help="المهارات المطلوب تفعيلها مفصولة بفاصلة (مثال: 'harvest,gather' أو 'الحصاد الوافر,الجمع السريع' أو 'all') [افتراضي: الكل]"
-    )
-
-    # خيارات مهمة تجنيد الأبطال وسحب الصناديق اليومية
-    parser.add_argument("--hero-draw", dest="hero_draw", action="store_true", default=True, help="تفعيل سحب وتجنيد الأبطال وبحث المهارات المجاني تلقائياً [افتراضي: تفعيل]")
-    parser.add_argument("--no-hero-draw", dest="hero_draw", action="store_false", help="تعطيل سحب وتجنيد الأبطال المجاني")
-
-    # خيارات مهمة قاعة الاستراتيجيات وتطوير التكتيكات
-    parser.add_argument("--tactics-hall", dest="tactics_hall", action="store_true", default=True, help="تفعيل مهمة قاعة الاستراتيجيات وتطوير التكتيكات [افتراضي: تفعيل]")
-    parser.add_argument("--no-tactics-hall", dest="tactics_hall", action="store_false", help="تعطيل مهمة قاعة الاستراتيجيات")
-    parser.add_argument(
-        "--tactic", "--tactic-name",
-        dest="tactic",
-        default="القلعة الفارغة",
-        help="البحث المستهدف في قاعة الاستراتيجيات بالاسم أو المعرف (مثال: 'القلعة الفارغة', 'قمة الاتقان', 'البحث الكامل', 91010000) [افتراضي: القلعة الفارغة]"
-    )
-
-    # خيارات مهمة طاحونة الماء وزيادة إنتاج الموارد
-    parser.add_argument("--watermill", dest="watermill", action="store_true", default=True, help="تفعيل مهمة طاحونة الماء وزيادة إنتاج الموارد [افتراضي: تفعيل]")
-    parser.add_argument("--no-watermill", dest="watermill", action="store_false", help="تعطيل مهمة طاحونة الماء")
-    parser.add_argument(
-        "--watermill-types", "--watermill-res",
-        dest="watermill_types",
-        default="all",
-        help="الموارد المراد تعزيز إنتاجها (all, food, wood, iron, silver أو بالعربية: قمح,خشب,حديد,فضة) [افتراضي: all]"
-    )
-    parser.add_argument(
-        "--watermill-buy",
-        dest="watermill_buy",
-        action="store_true",
-        default=True,
-        help="السماح بالشراء التلقائي لأدوات التعزيز الناقصة من متجر التحالف [افتراضي: تفعيل]"
-    )
-    parser.add_argument(
-        "--no-watermill-buy",
-        dest="watermill_buy",
-        action="store_false",
-        help="تعطيل الشراء من متجر التحالف والاعتماد حصراً على أدوات الحقيبة"
-    )
-
-    # خيارات مهمة نافورة الأمنيات الملكية وبئر الحظ
-    parser.add_argument("--fountain", dest="fountain", action="store_true", default=True, help="تفعيل مهمة نافورة الأمنيات الملكية وبئر الحظ [افتراضي: تفعيل]")
-    parser.add_argument("--no-fountain", dest="fountain", action="store_false", help="تعطيل مهمة نافورة الأمنيات")
-    parser.add_argument(
-        "--fountain-res", "--fountain-resources",
-        dest="fountain_resources",
-        default="food,wood,iron,diamond",
-        help="الموارد المطلوب التمني بها مفصولة بفاصلة (food, wood, iron, coal, diamond أو قمح,خشب,حديد,الماس أو all) [افتراضي: food,wood,iron,diamond]"
-    )
-    parser.add_argument(
-        "--fountain-gold",
-        dest="fountain_gold",
-        action="store_true",
-        default=False,
-        help="السماح بالشراء بالذهب بعد انتهاء المرات المجانية [افتراضي: معطل لمنع استهلاك الذهب]"
-    )
-    parser.add_argument(
-        "--fountain-gold-times",
-        dest="fountain_gold_times",
-        type=int,
-        default=0,
-        help="عدد مرات الشراء بالذهب لكل مورد عند تفعيل الشراء بالذهب [افتراضي: 0]"
-    )
-
-    # خيارات مهمة ورشة المواد وصناعة خامات العتاد
-    parser.add_argument("--workshop", dest="workshop", action="store_true", default=True, help="تفعيل مهمة ورشة المواد وإنتاج خامات العتاد [افتراضي: تفعيل]")
-    parser.add_argument("--no-workshop", dest="workshop", action="store_false", help="تعطيل مهمة ورشة المواد")
-    parser.add_argument(
-        "--materials", "-m",
-        dest="materials",
-        default="all",
-        help="الخامات المراد إنتاجها مفصولة بفاصلة (fang, fur, metal, coal أو ناب,فرو,معدن,فحم أو all) [افتراضي: all]"
-    )
-
-    # خيارات مهمة القافلة التجارية وحراسة الكنز
-    parser.add_argument("--caravan", dest="caravan", action="store_true", default=True, help="تفعيل مهمة القافلة التجارية وحراسة الكنز [افتراضي: تفعيل]")
-    parser.add_argument("--no-caravan", dest="caravan", action="store_false", help="تعطيل مهمة القافلة التجارية")
-
-    # خيارات مهمة التاجر المتجول والمقايضة التلقائية
-    parser.add_argument("--merchant", dest="merchant", action="store_true", default=True, help="تفعيل مهمة التاجر المتجول والمقايضة بالموارد تلقائياً [افتراضي: تفعيل]")
-    parser.add_argument("--no-merchant", dest="merchant", action="store_false", help="تعطيل مهمة التاجر المتجول")
-
-    # خيارات مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة
-    parser.add_argument("--port-delegate", dest="port_delegate", action="store_true", default=True, help="تفعيل مهمة الميناء العسكري وتفويض السفن ومتجر الجزيرة [افتراضي: تفعيل]")
-    parser.add_argument("--no-port-delegate", dest="port_delegate", action="store_false", help="تعطيل مهمة الميناء العسكري")
-    parser.add_argument(
-        "--island-item", "--island-goods",
-        dest="island_item",
-        default="7",
-        help="المنتج المطلوب شراؤه بالكامل من متجر الجزيرة (1:معنوية, 2:قيصر, 3:تجنيد, 4:صندوق موارد, 5:خبرة, 6:حجر تقنية, 7:حجر تقوية, أو all) [افتراضي: 7]"
-    )
-
-    # خيارات مهمة دار الادخار وبنك التوفير
-    parser.add_argument("--savings", dest="savings", action="store_true", default=True, help="تفعيل مهمة دار الادخار واستثمار الذهب [افتراضي: تفعيل]")
-    parser.add_argument("--no-savings", dest="savings", action="store_false", help="تعطيل مهمة دار الادخار")
-    parser.add_argument(
-        "--savings-days", "-sdays",
-        dest="savings_days",
-        choices=["7", "15", "30", 7, 15, 30],
-        default="7",
-        help="مدة استثمار الذهب في دار الادخار: 7 (أسبوعي) أو 15 (نصف شهري) أو 30 (شهري) [افتراضي: 7]"
-    )
-
-    # خيارات مهمة ترقية القلعة ومباني الموارد والمعسكرات والتسريع
-    parser.add_argument("--building", dest="building", action="store_true", default=True, help="تفعيل مهمة ترقية المباني والقلعة [افتراضي: تفعيل]")
-    parser.add_argument("--no-building", dest="building", action="store_false", help="تعطيل مهمة ترقية المباني والقلعة")
-    parser.add_argument("--upgrade-castle", "--castle", dest="upgrade_castle", action="store_true", default=True, help="ترقية القلعة ومتطلباتها المسبقة [افتراضي: True]")
-    parser.add_argument("--no-upgrade-castle", "--no-castle", dest="upgrade_castle", action="store_false", help="تعطيل ترقية القلعة")
-    parser.add_argument("--speedup-castle", "--speedup", dest="speedup_castle", action="store_true", default=False, help="استخدام التسريع لترقية القلعة بالأدوات المجانية والحقيبة [افتراضي: False]")
-    parser.add_argument("--no-speedup-castle", "--no-speedup", dest="speedup_castle", action="store_false", help="تعطيل تسريع القلعة")
-    parser.add_argument("--upgrade-support", "--upgrade-buildings", "--buildings", dest="upgrade_support", action="store_true", default=True, help="ترقية المعسكرات والمراكز الطبية والمزارع وخيم العسكرية [افتراضي: True]")
-    parser.add_argument("--no-upgrade-support", "--no-upgrade-buildings", "--no-buildings", dest="upgrade_support", action="store_false", help="تعطيل ترقية المعسكرات والمراكز الطبية والمزارع وخيم العسكرية")
-
-    # خيارات مهمة تدريب فخاخ حصن الحرب
-    parser.add_argument("--fortress", dest="fortress", action="store_true", default=True, help="تفعيل تدريب فخاخ حصن الحرب تلقائياً لأعلى مستوى متاح [افتراضي: تفعيل]")
-    parser.add_argument("--no-fortress", dest="fortress", action="store_false", help="تعطيل تدريب فخاخ حصن الحرب")
-
-    # خيارات مهمة مهام الهيبة اليومية (Prestige Quests)
-    parser.add_argument("--prestige", dest="prestige", action="store_true", default=True, help="تفعيل مهمة مهام الهيبة اليومية (تعمل الساعة 3 فجراً) [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige", dest="prestige", action="store_false", help="تعطيل مهمة مهام الهيبة")
-    parser.add_argument(
-        "--prestige-invaders-max-lv", "--prestige-max-lv",
-        dest="prestige_invaders_max_lv",
-        type=int,
-        default=30,
-        help="الحد الأقصى لمستوى الغزاة المطلوب قتالهم في مهام الهيبة [افتراضي: 30]"
-    )
-    parser.add_argument(
-        "--prestige-subtasks",
-        dest="prestige_subtasks",
-        default="all",
-        help="المهام الفرعية المطلوب تشغيلها من مهام الهيبة مفصولة بفاصلة (smuggler,invaders,stronghold,gather,watermill,train,fortress أو all) [افتراضي: الكل]"
-    )
-    # خيارات تشغيل كل مهمة من مهام الهيبة على حدة
-    parser.add_argument("--prestige-smuggler", dest="prestige_smuggler", action="store_true", default=True, help="تفعيل متجر المهربين في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-smuggler", dest="prestige_smuggler", action="store_false", help="تعطيل متجر المهربين في مهام الهيبة")
-    parser.add_argument("--prestige-invaders", dest="prestige_invaders", action="store_true", default=True, help="تفعيل قتال الغزاة في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-invaders", dest="prestige_invaders", action="store_false", help="تعطيل قتال الغزاة في مهام الهيبة")
-    parser.add_argument("--prestige-stronghold", dest="prestige_stronghold", action="store_true", default=True, help="تفعيل قتال المعاقل في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-stronghold", dest="prestige_stronghold", action="store_false", help="تعطيل قتال المعاقل في مهام الهيبة")
-    parser.add_argument("--prestige-gather", dest="prestige_gather", action="store_true", default=True, help="تفعيل جمع الموارد الأربعة في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-gather", dest="prestige_gather", action="store_false", help="تعطيل جمع الموارد في مهام الهيبة")
-    parser.add_argument("--prestige-watermill", dest="prestige_watermill", action="store_true", default=True, help="تفعيل الساقية في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-watermill", dest="prestige_watermill", action="store_false", help="تعطيل الساقية في مهام الهيبة")
-    parser.add_argument("--prestige-train", dest="prestige_train", action="store_true", default=True, help="تفعيل تدريب الجنود في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-train", dest="prestige_train", action="store_false", help="تعطيل تدريب الجنود في مهام الهيبة")
-    parser.add_argument("--prestige-fortress", dest="prestige_fortress", action="store_true", default=True, help="تفعيل حصن الحرب في مهام الهيبة [افتراضي: تفعيل]")
-    parser.add_argument("--no-prestige-fortress", dest="prestige_fortress", action="store_false", help="تعطيل حصن الحرب في مهام الهيبة")
-
-    # خيارات مهمة منسق الفيالق والمسيرات (March Orchestrator)
-    parser.add_argument("--march-manager", "--march", dest="march_manager", action="store_true", default=True, help="تفعيل مهمة منسق الفيالق والمسيرات الذكي [افتراضي: تفعيل]")
-    parser.add_argument("--no-march-manager", "--no-march", dest="march_manager", action="store_false", help="تعطيل مهمة منسق الفيالق والمسيرات")
-    parser.add_argument("--march-priorities", dest="march_priorities", default=None, help="قائمة الأولويات مفصولة بفاصلة (مثال: 'transport,ruins,combat,stronghold,gather' أو 'elf' فقط)")
-    parser.add_argument("--march-max-queues", dest="march_max_queues", type=int, default=6, help="الحد الأقصى لطوابير فيالق القلعة (5 أو 6) [افتراضي: 6]")
-    parser.add_argument("--march-duration", dest="march_duration", type=int, default=20, help="المدة الإجمالية لتشغيل منسق الفيالق بالدقائق (ثلث ساعة = 20 دقيقة) [افتراضي: 20]")
-
-    # مساعدة الموارد
-    parser.add_argument("--march-transport", dest="march_transport", action="store_true", default=None, help="تفعيل مساعدة الموارد في منسق الفيالق")
-    parser.add_argument("--no-march-transport", dest="march_transport", action="store_false", help="تعطيل مساعدة الموارد في منسق الفيالق")
-    parser.add_argument("--march-transport-coords", dest="march_transport_coords", default=None, help="إحداثيات القلعة الهدف للمساعدة بصيغة X,Y (مثال: '344,447')")
-
-    # الأطلال
-    parser.add_argument("--march-ruins", dest="march_ruins", action="store_true", default=None, help="تفعيل استكشاف الأطلال (مسيرة واحدة حصراً) [افتراضي: تفعيل]")
-    parser.add_argument("--no-march-ruins", dest="march_ruins", action="store_false", help="تعطيل استكشاف الأطلال")
-    parser.add_argument("--march-ruins-time", dest="march_ruins_time", type=int, default=900, help="مدة استكشاف الأطلال بالثواني [افتراضي: 900]")
-    parser.add_argument("--march-ruins-formation", dest="march_ruins_formation", type=int, default=1, help="تشكيلة استكشاف الأطلال (1-5) [افتراضي: 1]")
-
-    # القتال الحصري (عفريت / غزاة / متمردين)
-    parser.add_argument("--march-combat-choice", dest="march_combat_choice", choices=["elf", "invaders", "rebels", "عفريت", "غزاة", "متمردين"], default="elf", help="الهدف القتالي المختار: elf أو invaders أو rebels [افتراضي: elf]")
-    parser.add_argument("--march-elf", dest="march_elf", action="store_true", default=None, help="تفعيل قتال نخبة العفريت")
-    parser.add_argument("--no-march-elf", dest="march_elf", action="store_false", help="تعطيل قتال نخبة العفريت")
-    parser.add_argument("--march-invaders", dest="march_invaders", action="store_true", default=None, help="تفعيل قتال الغزاة")
-    parser.add_argument("--no-march-invaders", dest="march_invaders", action="store_false", help="تعطيل قتال الغزاة")
-    parser.add_argument("--march-rebels", dest="march_rebels", action="store_true", default=None, help="تفعيل قتال المتمردين")
-    parser.add_argument("--no-march-rebels", dest="march_rebels", action="store_false", help="تعطيل قتال المتمردين")
-    parser.add_argument("--march-combat-level", dest="march_combat_level", type=int, default=30, help="مستوى الهدف القتالي (غزاة/متمردين) [افتراضي: 30]")
-    parser.add_argument("--march-combat-count", dest="march_combat_count", type=int, default=1, help="عدد الهجمات القتالية [افتراضي: 1]")
-    parser.add_argument("--march-combat-formation", dest="march_combat_formation", type=int, default=1, help="تشكيلة القتال (1-5) [افتراضي: 1]")
-
-    # المعاقل والملاجئ
-    parser.add_argument("--march-stronghold", dest="march_stronghold", action="store_true", default=None, help="تفعيل الهجوم على الملاجئ")
-    parser.add_argument("--no-march-stronghold", dest="march_stronghold", action="store_false", help="تعطيل الهجوم على الملاجئ")
-    parser.add_argument("--march-stronghold-level", dest="march_stronghold_level", type=int, default=30, help="مستوى الملجأ المستهدف [افتراضي: 30]")
-    parser.add_argument("--march-stronghold-count", dest="march_stronghold_count", type=int, default=2, help="عدد الملاجئ المستهدفة [افتراضي: 2]")
-    parser.add_argument("--march-stronghold-formation", dest="march_stronghold_formation", type=int, default=1, help="تشكيلة مهاجمة الملجأ [افتراضي: 1]")
-
-    # جمع الموارد
-    parser.add_argument("--march-gather", dest="march_gather", action="store_true", default=None, help="تفعيل جمع الموارد بالفيالق الشاغرة [افتراضي: تفعيل]")
-    parser.add_argument("--no-march-gather", dest="march_gather", action="store_false", help="تعطيل جمع الموارد")
-    parser.add_argument("--march-gather-res", dest="march_gather_res", default="1", help="نوع المورد المطلوب جمعه (1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس أو بالاسم) [افتراضي: 1]")
-    parser.add_argument("--march-gather-level", dest="march_gather_level", type=int, default=5, help="مستوى حقل المورد للجمع [افتراضي: 5]")
-    parser.add_argument("--march-gather-range", dest="march_gather_range", type=int, default=100, help="أقصى نطاق بحث لحقول الموارد [افتراضي: 100]")
-
-    # خيار تجاوز فحص مواعيد الجدول الزمني للتجربة الفورية
-    parser.add_argument(
-        "--ignore-schedule", "--now",
-        dest="ignore_schedule",
-        action="store_true",
-        default=False,
-        help="تجاوز فحص مواعيد الجدول وتشغيل كافة المهام المفعلة فوراً في هذه الدورة [افتراضي: معطل]"
+        help="تجاهل الجدولة الزمنية للمهام وتشغيلها فورياً"
     )
 
     args = parser.parse_args()
@@ -3246,279 +3438,45 @@ if __name__ == "__main__":
         print(f"❌ الحساب {target_email} غير موجود في session_cache.json!")
         sys.exit(1)
 
-    # تجهيز مستويات التدريب لكل نوع من القوات
-    custom_lvls = {}
-    if args.troop_levels:
-        for item in args.troop_levels.replace("،", ",").split(","):
-            if ":" in item:
-                k, v = item.split(":", 1)
-                custom_lvls[k.strip()] = int(v.strip())
-    elif args.barracks.strip().lower() not in ("all", "الكل", "all_types"):
-        for b in args.barracks.replace("،", ",").split(","):
-            b = b.strip()
-            if b:
-                custom_lvls[b] = args.troop_level
-    else:
-        custom_lvls = {
-            "infantry": args.troop_level,
-            "cavalry": args.troop_level,
-            "archers": args.troop_level,
-            "chariots": args.troop_level,
-        }
+    cfg = {}
+    ignore_sched = args.ignore_schedule
+    user_id = args.firebase_user_id
+    castle_id = args.firebase_castle_id
 
-    # ── إذا مُرِّر ملف إعدادات Firebase، استخدمه مباشرة ─────────────────────────────────
+    # 1. إذا تم تمرير ملف إعدادات Firebase
     if args.firebase_config and os.path.exists(args.firebase_config):
         try:
             with open(args.firebase_config, "r", encoding="utf-8") as _fc:
                 cfg = json.load(_fc)
             log.info(f"✅ تم تحميل إعدادات Firebase من: {args.firebase_config}")
-            # إنشاء مدير البوت مباشرة بدون المرور بـ argparse config builder
-            manager = BotManager(
-                target_email,
-                cfg,
-                reconnect_wait_seconds=args.reconnect_wait,
-                ignore_schedule=True,  # Firebase دائماً يتجاهل الجدول الزمني ويعمل فورياً حسب خيارات المستخدم
-                user_id=getattr(args, "firebase_user_id", None),
-                castle_id=getattr(args, "firebase_castle_id", None),
-            )
-            if args.loop:
-                asyncio.run(manager.run_loop(loop_interval_minutes=args.loop_interval))
-            else:
-                asyncio.run(manager.run_once())
-            sys.exit(0)
+            ignore_sched = True
         except Exception as _fe:
             log.error(f"❌ خطأ في قراءة ملف إعدادات Firebase: {_fe}")
             sys.exit(1)
+    else:
+        # 2. استرجاع أحدث إعدادات من قاعدة البيانات المحلية إن وجدت
+        try:
+            c = get_castle(target_email)
+            if c:
+                cfg_raw = c.get("config")
+                if isinstance(cfg_raw, str) and cfg_raw:
+                    cfg = json.loads(cfg_raw)
+                elif isinstance(cfg_raw, dict):
+                    cfg = cfg_raw
+                user_id = user_id or c.get("user_id")
+                castle_id = castle_id or c.get("id") or c.get("castle_id")
+        except Exception as _dbe:
+            log.debug(f"تنبيه أثناء قراءة إعدادات القلعة من قاعدة البيانات: {_dbe}")
 
-    # بناء قاموس الإعدادات المطابق للمخطط الجديد (من argparse)
-    cfg = {
-        "city_harvest": {
-            "enabled": args.harvest,
-        },
-        "research": {
-            "enabled": args.research,
-        },
-        "alliance": {
-            "enabled": args.alliance,
-            "auto_help": True,
-            "gold_donations": args.alliance_gold,
-        },
-        "port": {
-            "enabled": args.port,
-        },
-        "train": {
-            "enabled": args.train,
-            "levels": custom_lvls,
-        },
-        "pet_patrol": {
-            "enabled": args.pet_patrol,
-            "pet": args.pet,
-        },
-        "territory_expansion": {
-            "enabled": args.territory,
-        },
-        "shield": {
-            "enabled": args.shield,
-            "duration": args.shield_duration,
-            "allow_gold": args.shield_allow_gold,
-        },
-        "stamina": {
-            "enabled": args.stamina,
-            "gold_buys": args.stamina_gold,
-        },
-        "skills": {
-            "enabled": args.skills,
-            "target_skills": resolve_target_skills(args.target_skills),
-        },
-        "hero_draw": {
-            "enabled": args.hero_draw,
-        },
-        "tactics_hall": {
-            "enabled": args.tactics_hall,
-            "tactic": args.tactic,
-        },
-        "watermill": {
-            "enabled": args.watermill,
-            "types": args.watermill_types,
-            "allow_shop_buy": args.watermill_buy,
-        },
-        "fountain": {
-            "enabled": args.fountain,
-            "resources": [r.strip() for r in args.fountain_resources.replace("،", ",").split(",") if r.strip()],
-            "allow_gold": args.fountain_gold,
-            "gold_times": args.fountain_gold_times,
-        },
-        "material_workshop": {
-            "enabled": args.workshop,
-            "materials": [m.strip() for m in args.materials.replace("،", ",").split(",") if m.strip()] if args.materials != "all" else "all",
-        },
-        "caravan": {
-            "enabled": args.caravan,
-        },
-        "merchant": {
-            "enabled": args.merchant,
-        },
-        "port_delegate": {
-            "enabled": args.port_delegate,
-            "shop_item": args.island_item,
-        },
-        "savings_bank": {
-            "enabled": args.savings,
-            "days": parse_savings_days(args.savings_days),
-        },
-        "building": {
-            "enabled": args.building,
-            "upgrade_castle": args.upgrade_castle,
-            "speedup_castle": args.speedup_castle,
-            "upgrade_support_buildings": args.upgrade_support,
-        },
-        "fortress": {
-            "enabled": args.fortress,
-        },
-        "prestige": {
-            "enabled": args.prestige,
-            "schedule": {
-                "hours": [3],
-            },
-            "invaders_max_lv": args.prestige_invaders_max_lv,
-            "subtasks": {
-                "smuggler": args.prestige_smuggler,
-                "invaders": args.prestige_invaders,
-                "stronghold": args.prestige_stronghold,
-                "gather": args.prestige_gather,
-                "watermill": args.prestige_watermill,
-                "train": args.prestige_train,
-                "fortress": args.prestige_fortress,
-            },
-        },
-        "march_manager": {
-            "enabled": args.march_manager,
-            "schedule": {"times_per_day": 4},
-            "duration_minutes": args.march_duration,
-            "max_queues": args.march_max_queues,
-            "priority_order": (
-                [p.strip() for p in args.march_priorities.replace("،", ",").split(",") if p.strip()]
-                if args.march_priorities
-                else ["transport", "ruins", "combat", "stronghold", "gather"]
-            ),
-            "transport": {
-                "enabled": bool(args.march_transport) if args.march_transport is not None else False,
-                "target_x": (
-                    int(args.march_transport_coords.split(",")[0].strip())
-                    if args.march_transport_coords and "," in args.march_transport_coords
-                    else None
-                ),
-                "target_y": (
-                    int(args.march_transport_coords.split(",")[1].strip())
-                    if args.march_transport_coords and "," in args.march_transport_coords
-                    else None
-                ),
-                "resource_ids": [1002, 1003, 1004, 1005],
-            },
-            "ruins": {
-                "enabled": bool(args.march_ruins) if args.march_ruins is not None else True,
-                "explore_time": args.march_ruins_time,
-                "formation_id": args.march_ruins_formation,
-            },
-            "combat": {
-                "enabled": (
-                    bool(args.march_elf or args.march_invaders or args.march_rebels)
-                    if (args.march_elf is not None or args.march_invaders is not None or args.march_rebels is not None)
-                    else True
-                ),
-                "choice": (
-                    "elf" if args.march_elf else (
-                        "invaders" if args.march_invaders else (
-                            "rebels" if args.march_rebels else (
-                                "elf" if args.march_combat_choice in ("elf", "عفريت") else (
-                                    "invaders" if args.march_combat_choice in ("invaders", "غزاة") else "rebels"
-                                )
-                            )
-                        )
-                    )
-                ),
-                "level": args.march_combat_level,
-                "formation_id": args.march_combat_formation,
-                "count": args.march_combat_count,
-            },
-            "elf": {
-                "enabled": (
-                    bool(args.march_elf)
-                    if args.march_elf is not None
-                    else (args.march_combat_choice in ("elf", "عفريت") and not args.march_invaders and not args.march_rebels)
-                ),
-                "formation_id": args.march_combat_formation,
-            },
-            "invaders": {
-                "enabled": (
-                    bool(args.march_invaders)
-                    if args.march_invaders is not None
-                    else (args.march_combat_choice in ("invaders", "غزاة") and not args.march_elf and not args.march_rebels)
-                ),
-                "level": args.march_combat_level,
-                "formation_id": args.march_combat_formation,
-                "count": args.march_combat_count,
-            },
-            "rebels": {
-                "enabled": (
-                    bool(args.march_rebels)
-                    if args.march_rebels is not None
-                    else (args.march_combat_choice in ("rebels", "متمردين") and not args.march_elf and not args.march_invaders)
-                ),
-                "level": args.march_combat_level,
-                "formation_id": args.march_combat_formation,
-                "count": args.march_combat_count,
-            },
-            "stronghold": {
-                "enabled": bool(args.march_stronghold) if args.march_stronghold is not None else False,
-                "level": args.march_stronghold_level,
-                "count": args.march_stronghold_count,
-                "formation_id": args.march_stronghold_formation,
-            },
-            "gather": {
-                "enabled": bool(args.march_gather) if args.march_gather is not None else True,
-                "res_type": args.march_gather_res,
-                "level": args.march_gather_level,
-                "search_range": args.march_gather_range,
-            },
-        }
-    }
-
-    # تخصيص المهام الفرعية لمهام الهيبة إن تم تمرير قائمة محددة
-    if args.prestige_subtasks and args.prestige_subtasks.strip().lower() not in ("all", "الكل"):
-        chosen_subtasks = [s.strip() for s in args.prestige_subtasks.replace("،", ",").split(",") if s.strip()]
-        for k in cfg["prestige"]["subtasks"]:
-            cfg["prestige"]["subtasks"][k] = False
-        for s in chosen_subtasks:
-            res_key = PRESTIGE_SUBTASK_ALIASES.get(s.lower(), s.lower())
-            if res_key in cfg["prestige"]["subtasks"]:
-                cfg["prestige"]["subtasks"][res_key] = True
-
-    # تمرير أي خيارات تجريبية إضافية إن حُددت من سطر الأوامر صراحة
-    if args.harvest_types != "all":
-        cfg["city_harvest"]["types"] = args.harvest_types
-    if args.research_tree != "defense":
-        cfg["research"]["tree"] = args.research_tree
-    if args.tech_id:
-        cfg["research"]["tech_id"] = args.tech_id
-    if args.research_check_only:
-        cfg["research"]["check_only"] = True
-    if args.alliance_sciid:
-        cfg["alliance"]["sciid"] = args.alliance_sciid
-    if args.destination != 1389:
-        cfg["pet_patrol"]["destination"] = args.destination
-
-    # إنشاء مدير البوت
     manager = BotManager(
         target_email,
         cfg,
         reconnect_wait_seconds=args.reconnect_wait,
-        ignore_schedule=args.ignore_schedule,
-        user_id=getattr(args, "firebase_user_id", None),
-        castle_id=getattr(args, "firebase_castle_id", None),
+        ignore_schedule=ignore_sched,
+        user_id=user_id,
+        castle_id=castle_id,
     )
 
-    # اختيار وضع التشغيل
     if args.loop:
         print(f"\n{'═'*72}")
         print(f"🔁 وضع التشغيل المستمر (Loop Mode) — دورة كل {args.loop_interval} دقيقة")

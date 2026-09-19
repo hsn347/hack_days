@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, UserPlus } from 'lucide-react'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../lib/firebase'
+import { auth } from '../lib/firebase'
+import { registerUser } from '../lib/botApi'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 
@@ -27,24 +27,11 @@ export function RegisterPage() {
     setLoading(true)
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password)
-      // إنشاء وثيقة المستخدم في Firestore
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid:        cred.user.uid,
-        username:   username.trim() || email.split('@')[0],
-        email:      email.toLowerCase(),
-        role:       'user',
-        is_banned:  false,
-        created_at: new Date().toISOString(),
-        subscription: {
-          plan_id:                'free',
-          plan_name:              'مجاني',
-          status:                 'active',
-          started_at:             new Date().toISOString(),
-          expires_at:             new Date(Date.now() + 7 * 86400000).toISOString(),
-          days_remaining:         7,
-          max_castles_allowed:    1,
-          current_castles_count:  0,
-        },
+      // تسجيل المستخدم في قاعدة بيانات SQLite المحلية عبر REST API
+      await registerUser({
+        uid:      cred.user.uid,
+        email:    email.toLowerCase(),
+        username: username.trim() || email.split('@')[0],
       })
       toast.success(t('register.success'))
       navigate('/dashboard')

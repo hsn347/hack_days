@@ -29,7 +29,7 @@
     "invalidEmail": "Invalid email address",
     "passwordMismatch": "Passwords do not match",
     "passwordTooShort": "Password must be at least 6 characters",
-    "freePlanNotice": "Free plan includes 1 castle for 7 days",
+    "freePlanNotice": "Free plan includes 10 castles for 3 days",
     "createError": "An error occurred while creating the account"
   },
   "nav": {
@@ -83,11 +83,21 @@
     "superAdminFull": "Super Admin (Full Access)",
     "superAdminUnlimited": "Super Admin (Unlimited ∞)",
     "superAdminLifetime": "Lifetime Access • Unlimited Subscription ∞",
-    "unlimited": "Unlimited ∞"
+    "unlimited": "Unlimited ∞",
+    "pendingApprovalTitle": "Welcome! Account awaiting admin approval",
+    "pendingApprovalDesc": "Your registration request was received successfully. Admin will review your account and activate your trial package (10 accounts for 3 days) soon.",
+    "pendingApprovalBadge": "Pending Activation",
+    "pendingApprovalStatus": "Awaiting Admin Approval",
+    "pendingApprovalNote": "10 accounts for 3 days will be activated upon admin approval",
+    "underReview": "Under Review"
   },
   "accounts": {
     "title": "Accounts",
     "addAccount": "New Account",
+    "pendingApprovalNotice": "Your account is currently under admin review. Once approved, you can add up to 10 accounts and run them for 3 days.",
+    "pendingApprovalToast": "Your account is awaiting admin approval first to activate the 10 accounts package",
+    "pendingApprovalRunToast": "Your account is awaiting admin approval to activate the trial package",
+    "lockedPending": "Pending Approval",
     "search": "Search accounts...",
     "searchPlaceholder": "Search by email or castle name...",
     "clearSearch": "Clear search",
@@ -140,7 +150,12 @@
     "bannedBanner": "Your account is currently banned by admin. Bot operations are stopped. You can view castles and settings in read-only mode.",
     "expiredBanner": "Your subscription has expired. Bot operations are stopped for all castles. Please contact admin to renew.",
     "lockedBanned": "Banned",
-    "lockedExpired": "Expired"
+    "lockedExpired": "Expired",
+    "fixedPreset": "Default Preset",
+    "fixedPresetTooltip": "Apply fixed preset task settings to this castle",
+    "confirmFixedPreset": "Apply fixed preset settings to this castle? The 12 specified tasks will be enabled and all other tasks disabled.",
+    "fixedPresetSuccess": "Fixed preset settings applied successfully!",
+    "applyingPreset": "Applying..."
   },
   "modals": {
     "addCastleTitle": "Add New Account",
@@ -172,7 +187,27 @@
     "loggingOut": "Signing out...",
     "cancel": "Cancel",
     "cancelDismiss": "Dismiss / Cancel",
-    "close": "Close"
+    "close": "Close",
+    "presetModalSingleTitle": "Apply Default Preset to Castle",
+    "presetModalBatchTitle": "Apply Default Preset to Group",
+    "presetModalSingleDesc": "Enable the 12 specified tasks for this castle",
+    "presetModalBatchDesc": "Preset settings will be applied to ({{count}}) selected accounts",
+    "presetTasksHeading": "The 12 tasks that will be enabled:",
+    "confirmApplyPreset": "Confirm Apply",
+    "presetTasks": {
+      "gatherIron": "Gather Resources (Iron)",
+      "watermillAll": "Watermill Reward (All + Shop Buy)",
+      "caravan": "Loot Caravan",
+      "alliance": "Alliance Tasks & Donations",
+      "petPatrol": "Pet Patrol (Kangal Dog)",
+      "tacticsHall": "Tactics Study (Empty Castle)",
+      "fountain": "Wishing Fountain (All Resources Free)",
+      "materialWorkshop": "Material Workshop (All Materials)",
+      "quickGatherSkill": "Rapid Gather Skill",
+      "harvestSkill": "Harvest Skill",
+      "basicDungeon": "Basic Dungeon (All Items)",
+      "territoryExpansion": "Territory Expansion"
+    }
   },
   "tabs": {
     "all": "All Tasks",
@@ -200,6 +235,7 @@
     "stamina": "Stamina Management",
     "skills": "Auto Skills",
     "hero_draw": "Hero Recruitment",
+    "treasure_pavilion": "Treasure Pavilion",
     "tactics_hall": "Tactics Hall",
     "watermill": "Watermill",
     "fountain": "Royal Fountain",
@@ -257,6 +293,7 @@
     "invadersMaxLv": "Invaders Max Level",
     "lootCaravan": "Loot Caravan",
     "heroDraw": "Royal Insignia",
+    "treasurePavilion": "Treasure Pavilion",
     "allianceTasks": "Alliance Tasks",
     "allianceDonation": "Alliance Donation",
     "goldDonation": "Gold Donation",
@@ -278,6 +315,9 @@
     "allowGoldPurchase": "Allow Gold Purchase",
     "goldPerResource": "{{count}} times per resource",
     "noGold": "No Gold (0)",
+    "goldBadge": "Gold Purchase",
+    "goldWarningNotice": "Warning: Enabling this option will spend castle gold after free wishes are exhausted.",
+    "goldDisabledNotice": "Gold purchase is completely disabled. Only free wishes are consumed without spending gold.",
     "materialWorkshop": "Material Workshop",
     "peaceShield": "Peace Shield",
     "hours24": "24 Hours",
@@ -351,7 +391,9 @@
     "petHydra": "Hydra",
     "petRunner": "Patrolling Pet (Fixed)",
     "targetAnimal": "Target Animal (Destination)",
-    "staminaOption": "{{count}} time(s), total {{gold}} gold"
+    "staminaOption": "{{count}} time(s), total {{gold}} gold",
+    "blacksmith_forge": "Blacksmith Forge",
+    "imperial_mausoleum": "Imperial Mausoleum"
   },
   "resources": {
     "food": "Food",
@@ -425,7 +467,18 @@
     "confirmBan": "Ban this user?",
     "confirmDelete": "Delete this user? This cannot be undone.",
     "systemLogs": "System Logs",
-    "botStats": "Bot Stats"
+    "botStats": "Bot Stats",
+    "pendingApproval": "Pending Approval",
+    "pendingUsersStat": "Pending Approval",
+    "quickApproveBtn": "Approve (10 Castles / 3 Days)",
+    "quickApproveConfirm": "Are you sure you want to approve user ({{name}}) and grant 10 accounts for 3 days?",
+    "quickApproveSuccess": "User {{name}} approved and 10 castles activated for 3 days!",
+    "approveAllBtn": "Approve All ({{count}})",
+    "approveAllConfirm": "Are you sure you want to approve all pending users ({{count}}) and activate 10 castles for 3 days for each?",
+    "approveAllSuccess": "Successfully approved and activated trial package for {{count}} users!",
+    "approvingAll": "Approving...",
+    "modalPendingNotice": "Awaiting trial package approval",
+    "modalActivateBtn": "Activate 10 Castles / 3 Days"
   },
   "common": {
     "save": "Save",

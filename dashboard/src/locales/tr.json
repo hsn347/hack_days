@@ -29,7 +29,7 @@
     "invalidEmail": "Geçersiz e-posta adresi",
     "passwordMismatch": "Şifreler eşleşmiyor",
     "passwordTooShort": "Şifre en az 6 karakter olmalıdır",
-    "freePlanNotice": "Ücretsiz plan 7 gün boyunca 1 kale içerir",
+    "freePlanNotice": "Ücretsiz plan 10 gün boyunca 3 kale içerir",
     "createError": "Hesap oluşturulurken bir hata oluştu"
   },
   "nav": {
@@ -83,11 +83,21 @@
     "superAdminFull": "Süper Yönetici (Tam Yetki)",
     "superAdminUnlimited": "Süper Yönetici (Sınırsız ∞)",
     "superAdminLifetime": "Ömür Boyu Erişim • Sınırsız Abonelik ∞",
-    "unlimited": "Sınırsız ∞"
+    "unlimited": "Sınırsız ∞",
+    "pendingApprovalTitle": "Hoş Geldiniz! Hesap yönetici onayı bekliyor",
+    "pendingApprovalDesc": "Kayıt talebiniz başarıyla alındı. Yönetici hesabınızı inceleyecek ve deneme paketinizi (3 gün boyunca 10 hesap) yakında etkinleştirecektir.",
+    "pendingApprovalBadge": "Onay Bekliyor",
+    "pendingApprovalStatus": "Yönetici Onayı Bekliyor",
+    "pendingApprovalNote": "Yönetici onayından sonra 3 gün boyunca 10 hesap etkinleştirilecektir",
+    "underReview": "İnceleniyor"
   },
   "accounts": {
     "title": "Hesaplar",
     "addAccount": "Yeni Hesap",
+    "pendingApprovalNotice": "Hesabınız şu anda yönetici incelemesindedir. Onaylandıktan sonra 10 hesaba kadar ekleyebilir ve 3 gün boyunca çalıştırabilirsiniz.",
+    "pendingApprovalToast": "10 hesap paketini etkinleştirmek için önce yönetici onayı bekleniyor",
+    "pendingApprovalRunToast": "Deneme paketini etkinleştirmek için hesabınız yönetici onayı bekliyor",
+    "lockedPending": "Onay Bekliyor",
     "search": "Hesap ara...",
     "searchPlaceholder": "E-posta veya kale adıyla ara...",
     "clearSearch": "Aramayı temizle",
@@ -140,7 +150,12 @@
     "bannedBanner": "Hesabınız şu anda yönetici tarafından yasaklanmıştır. Bot işlemleri durdurulmuştur. Kalelerinizi ve ayarlarınızı salt okunur modda görüntüleyebilirsiniz.",
     "expiredBanner": "Abonelik süreniz doldu. Tüm kaleler için bot işlemleri durduruldu. Yenilemek için lütfen yöneticiyle iletişime geçin.",
     "lockedBanned": "Yasaklı",
-    "lockedExpired": "Süresi Doldu"
+    "lockedExpired": "Süresi Doldu",
+    "fixedPreset": "Sabit Ayarlar",
+    "fixedPresetTooltip": "Bu kale için sabit görev ayarlarını uygula",
+    "confirmFixedPreset": "Bu kale için sabit ayarlar uygulansın mı? Belirtilen 12 görev etkinleştirilecek ve diğer tüm görevler devre dışı bırakılacak.",
+    "fixedPresetSuccess": "Sabit ayarlar başarıyla uygulandı!",
+    "applyingPreset": "Uygulanıyor..."
   },
   "modals": {
     "addCastleTitle": "Yeni Hesap Ekle",
@@ -172,7 +187,27 @@
     "loggingOut": "Çıkış yapılıyor...",
     "cancel": "İptal",
     "cancelDismiss": "Vazgeç / İptal",
-    "close": "Kapat"
+    "close": "Kapat",
+    "presetModalSingleTitle": "Kaleye Sabit Ayarları Uygula",
+    "presetModalBatchTitle": "Grup Sabit Ayarlarını Uygula",
+    "presetModalSingleDesc": "Bu kale için belirlenen 12 görev etkinleştirilecek",
+    "presetModalBatchDesc": "Seçilen ({{count}}) hesaba sabit ayarlar uygulanacak",
+    "presetTasksHeading": "Etkinleştirilecek 12 görev:",
+    "confirmApplyPreset": "Uygulamayı Onayla",
+    "presetTasks": {
+      "gatherIron": "Kaynak Toplama (Demir)",
+      "watermillAll": "Su Değirmeni Ödülü (Tümü + Mağaza)",
+      "caravan": "Ganimet Kervanı",
+      "alliance": "İttifak Görevleri ve Bağış",
+      "petPatrol": "Evcil Hayvan Devriyesi (Kangal Köpeği)",
+      "tacticsHall": "Taktik Araştırması (Boş Kale)",
+      "fountain": "Dilek Çeşmesi (Tüm Kaynaklar Ücretsiz)",
+      "materialWorkshop": "Malzeme Atölyesi (Tüm Malzemeler)",
+      "quickGatherSkill": "Hızlı Toplama Becerisi",
+      "harvestSkill": "Hasat Becerisi",
+      "basicDungeon": "Temel Zindan (Tüm Öğeler)",
+      "territoryExpansion": "Bölgesel Genişleme"
+    }
   },
   "tabs": {
     "all": "Tüm Görevler",
@@ -200,6 +235,7 @@
     "stamina": "Dayanıklılık Yönetimi",
     "skills": "Otomatik Beceriler",
     "hero_draw": "Kahraman İstihdamı",
+    "treasure_pavilion": "Hazine Köşkü",
     "tactics_hall": "Taktik Salonu",
     "watermill": "Su Değirmeni",
     "fountain": "Kraliyet Çeşmesi",
@@ -257,6 +293,7 @@
     "invadersMaxLv": "Maksimum İstilacı Seviyesi",
     "lootCaravan": "Ganimet Kervanı",
     "heroDraw": "Kraliyet Nişanları",
+    "treasurePavilion": "Hazine Köşkü",
     "allianceTasks": "İttifak Görevleri",
     "allianceDonation": "İttifak Bağışı",
     "goldDonation": "Altın Bağışı",
@@ -276,8 +313,11 @@
     "selectedResources": "Seçilen Kaynaklar",
     "countOfTotalResources": "{{active}} / {{total}} kaynak",
     "allowGoldPurchase": "Altın ile Satın Almaya İzin Ver",
-    "goldPerResource": "Her kaynak için {{count}} kez",
-    "noGold": "Altın Yasak (0)",
+    "goldPerResource": "Kaynak başına {{count}} kez",
+    "noGold": "Altın Yok (0)",
+    "goldBadge": "Altınla Satın Alma",
+    "goldWarningNotice": "Uyarı: Bu seçeneği etkinleştirmek, ücretsiz dilekler bittikten sonra kale altınını harcar.",
+    "goldDisabledNotice": "Altınla satın alma tamamen devre dışı. Altın harcamadan yalnızca ücretsiz dilekler kullanılır.",
     "materialWorkshop": "Malzeme Atölyesi",
     "peaceShield": "Otomatik Kalkan",
     "hours24": "24 Saat",
@@ -351,7 +391,9 @@
     "petHydra": "Hidra",
     "petRunner": "Devriye Gezen Hayvan (Sabit)",
     "targetAnimal": "Hedef Hayvan (Devriye Hedefi)",
-    "staminaOption": "{{count}} kez, toplam {{gold}} altın"
+    "staminaOption": "{{count}} kez, toplam {{gold}} altın",
+    "blacksmith_forge": "Demirci Ocağı",
+    "imperial_mausoleum": "İmparatorluk Mozolesi"
   },
   "resources": {
     "food": "Tahıl",
@@ -425,7 +467,18 @@
     "confirmBan": "Bu kullanıcı yasaklansın mı?",
     "confirmDelete": "Bu kullanıcı silinsin mi? Bu işlem geri alınamaz.",
     "systemLogs": "Sistem Günlükleri",
-    "botStats": "Bot İstatistikleri"
+    "botStats": "Bot İstatistikleri",
+    "pendingApproval": "Onay Bekliyor",
+    "pendingUsersStat": "Onay Bekliyor",
+    "quickApproveBtn": "Onayla (10 Kale / 3 Gün)",
+    "quickApproveConfirm": "({{name}}) kullanıcısını onaylayıp 3 gün boyunca 10 hesap tanımlamak istiyor musunuz?",
+    "quickApproveSuccess": "{{name}} için 10 kale 3 gün süreyle başarıyla onaylandı ve etkinleştirildi!",
+    "approveAllBtn": "Tümünü Onayla ({{count}})",
+    "approveAllConfirm": "Bekleyen tüm kullanıcıları ({{count}}) onaylayıp her biri için 10 kale 3 gün deneme paketini etkinleştirmek istediğinize emin misiniz?",
+    "approveAllSuccess": "{{count}} kullanıcı başarıyla onaylandı ve deneme paketi tanımlandı!",
+    "approvingAll": "Onaylanıyor...",
+    "modalPendingNotice": "Deneme paketi onayı bekleniyor",
+    "modalActivateBtn": "10 Kale / 3 Gün Etkinleştir"
   },
   "common": {
     "save": "Kaydet",

@@ -178,6 +178,118 @@ def _pick_combat_heroes(heroes: list, max_count: int = 2, busy: Set[int] = None)
 
 
 # ════════════════════════════════════════════════════════════════════
+#  حساب القوة الموصى بها وسعة الجيش الذكية (Recommended Power & Smart Troops)
+# ════════════════════════════════════════════════════════════════════
+
+def get_monster_recommended_power(target_type: str, level: int) -> int:
+    """
+    حساب / إرجاع القوة الموصى بها (Recommended Power) المعروضة في واجهة اللعبة للهدف:
+    - نخبة المتمردين (Rebels): من لفل 1 إلى 5 (لفل 5 = 7,518,000 بالضبط كما باللعبة).
+    - الغزاة (Invaders): من لفل 1 إلى 35.
+    - المعاقل (Stronghold): من لفل 1 إلى 30.
+    """
+    m_type = str(target_type).lower().strip()
+    lv = max(1, int(level))
+    if m_type in ("rebels", "متمردين", "35"):
+        table = {
+            1: 1200000,
+            2: 2500000,
+            3: 3900000,
+            4: 5500000,
+            5: 7518000,   # القيمة الدقيقة الرسمية في اللعبة لنخبة المتمردين لفل 5
+        }
+        if lv in table:
+            return table[lv]
+        return int(7518000 * (1 + (lv - 5) * 0.25))
+    elif m_type in ("invaders", "غزاة", "6"):
+        if lv <= 5:
+            return lv * 50000
+        elif lv <= 12:
+            return 250000 + (lv - 5) * 125000
+        elif lv <= 20:
+            return 1125000 + (lv - 12) * 265000
+        elif lv <= 28:
+            return 3245000 + (lv - 20) * 450000
+        else:
+            return 6845000 + (lv - 28) * 800000
+    elif m_type in ("stronghold", "معقل", "ملاجئ", "26"):
+        if lv <= 10:
+            return 500000 + lv * 150000
+        elif lv <= 20:
+            return 2000000 + (lv - 10) * 250000
+        else:
+            return 4500000 + (lv - 20) * 350000
+    return 0
+
+
+def calculate_smart_combat_troops(
+    target_type: str,
+    target_level: int,
+    castle_power: int = 0,
+    user_troops_cfg: Optional[int] = None,
+    max_safe_march: int = 170000
+) -> Tuple[int, int, str]:
+    """
+    دالة ذكية ومرنة لحساب عدد جنود المسيرة الأمثل وفحص القوة الموصى بها:
+    1. تستعلم القوة الموصى بها للهدف.
+    2. تفحص قوة القلعة الحالية ومستوى الأمان ونسبة الجاهزية.
+    3. تحسب عدد الجنود المطلوب بدقة لضمان النصر الحاسم بصفر خسائر ودون تجاوز سعة مسيرة اللورد.
+    """
+    m_type = str(target_type).lower().strip()
+    lv = max(1, int(target_level))
+    rec_power = get_monster_recommended_power(m_type, lv)
+
+    # حساب نسبة الجاهزية والأمان
+    status_desc = "جاهزية تامة"
+    if castle_power > 0 and rec_power > 0:
+        ratio = castle_power / float(rec_power)
+        pct = int(ratio * 100)
+        if ratio >= 1.25:
+            status_desc = f"جاهزية ساحقة وتفوق كامل ({pct}%)"
+        elif ratio >= 1.0:
+            status_desc = f"مؤهل بنجاح ({pct}%)"
+        elif ratio >= 0.75:
+            status_desc = f"متكافئ مع الهدف ({pct}%)"
+        else:
+            status_desc = f"قوة القلعة أقل من الموصى بها ({pct}%)"
+
+    # إذا حدد المستخدم رقماً مخصصاً صريحاً في الإعدادات (وليس القيمة الافتراضية 30 ألف القديمة)
+    if user_troops_cfg and user_troops_cfg not in (0, 30000):
+        troops = min(max_safe_march, max(5000, user_troops_cfg))
+        return troops, rec_power, status_desc
+
+    # الحساب الديناميكي المرن لعدد الجنود حسب نوع الهدف ومستواه لضمان سحق الهدف دون تجاوز سعة اللورد
+    if m_type in ("rebels", "متمردين", "35"):
+        # نخبة المتمردين: حشد يحتاج جيشاً متدرجاً قوياً لسحق الهدف بصفر خسائر
+        base_troops_map = {1: 50000, 2: 75000, 3: 110000, 4: 140000, 5: 165000}
+        needed = base_troops_map.get(lv, min(max_safe_march, 165000))
+    elif m_type in ("invaders", "غزاة", "6"):
+        # الغزاة: هجوم فردي يتدرج من 30 ألف حتى 165 ألف
+        if lv <= 5:
+            needed = 30000
+        elif lv <= 12:
+            needed = 60000
+        elif lv <= 20:
+            needed = 95000
+        elif lv <= 28:
+            needed = 130000
+        else:
+            needed = min(max_safe_march, 165000)
+    elif m_type in ("stronghold", "معقل", "ملاجئ", "26"):
+        if lv <= 10:
+            needed = 60000
+        elif lv <= 20:
+            needed = 110000
+        else:
+            needed = min(max_safe_march, 165000)
+    else:
+        needed = 120000
+
+    optimal_troops = min(max_safe_march, max(5000, int(needed)))
+    return optimal_troops, rec_power, status_desc
+
+
+# ════════════════════════════════════════════════════════════════════
 #  اختيار جيش القتال التلقائي المتوازن (Balanced Combat Army Selection)
 # ════════════════════════════════════════════════════════════════════
 
@@ -428,7 +540,7 @@ class MonsterTask(BaseTask):
 
         sent_count = 0
         consecutive_errors = 0
-        self._busy      = set()
+        self._busy      = set(cfg.get('busy_heroes', cfg.get('busy', [])))
         self._used_army = {}
         self._used_pets = set()
 
@@ -436,11 +548,13 @@ class MonsterTask(BaseTask):
         wait_interval  = float(cfg.get('wait_interval', 15.0))
         max_wait_cycles = int(cfg.get('max_wait_cycles', 35))
         wait_cycles = 0
+        last_result = None
 
         while sent_count < max_marches:
             current_target_idx = sent_count + 1
             self.log.info(f"🚀 محاولة إرسال مسيرة الهجوم رقم ({current_target_idx}/{max_marches})...")
             result_code = await self._send_one_attack(map_type, sub_type, min_lv, max_lv, search_range, formation_id, troops_cfg)
+            last_result = result_code
 
             if result_code == "SUCCESS":
                 sent_count += 1
@@ -462,6 +576,9 @@ class MonsterTask(BaseTask):
                 else:
                     self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.")
                     break
+            elif result_code == "STAMINA_EMPTY":
+                self.log.warning("🛑 نفدت طاقة اللورد بالكامل — إنهاء المهمة.")
+                break
             elif result_code in ("HERO_BUSY", "NO_HEROES"):
                 # إذا كان البطل مشغولاً وتوجد أبطال قتال بديلة متاحة: تجربة البطل التالي فوراً
                 avail_combat_heroes = [h for h in self._heroes if isinstance(h, dict) and h.get('id') not in self._busy and str(h.get('id', '')).startswith('5501')]
@@ -505,13 +622,31 @@ class MonsterTask(BaseTask):
 
         self.log.info(f"🏁 إجمالي مسيرات الهجوم المُرسَلة: {sent_count}/{max_marches}")
         if sent_count > 0:
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة هجوم على {type_name}", sent=sent_count)
-        return TaskResult.fail(f"لم يتم إرسال أي مسيرة هجوم على {type_name}", retry_after=120)
+            return TaskResult.ok(
+                f"✅ تم إرسال {sent_count} مسيرة هجوم على {type_name}",
+                sent=sent_count,
+                queue_full=(last_result == "QUEUE_FULL"),
+                stop_reason=last_result
+            )
+        if last_result == "QUEUE_FULL":
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True, stop_reason="QUEUE_FULL")
+        if last_result == "STAMINA_EMPTY":
+            return TaskResult.fail("🛑 نفدت طاقة اللورد بالكامل", stop_reason="STAMINA_EMPTY")
+        if last_result == "NO_ARMY":
+            return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة", stop_reason="NO_ARMY")
+        if last_result in ("NO_HEROES", "HERO_BUSY"):
+            return TaskResult.fail("🛑 لا يتوفر أبطال متاحون بالقلعة", stop_reason="NO_HEROES")
+        if last_result in ("NO_TARGET", "TARGET_OCCUPIED"):
+            return TaskResult.fail(f"⚠️ لم يتم العثور على أهداف متاحة لـ {type_name} في النطاق المحدد", stop_reason="NO_TARGET")
+        return TaskResult.fail(f"لم يتم إرسال أي مسيرة هجوم على {type_name}", retry_after=120, stop_reason=str(last_result))
 
     # ── إرسال مسيرة هجوم واحدة ──────────────────────────────────
 
     async def _send_one_attack(self, map_type: int, sub_type: int, min_lv: int, max_lv: int, search_range: int, formation_id: int, troops_cfg: int) -> str:
         uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
+        target_type_str = str(self.config.get('monster_type', 'rebels' if map_type == 35 else 'invaders')).lower().strip()
+        target_info = MONSTER_TYPES.get(target_type_str, MONSTER_TYPES.get("rebels", {}))
+        type_name = target_info.get("name", "متمردين" if map_type == 35 else "غزاة")
 
         # 1. جلب إحداثيات البحث (موقع المنطقة المحددة أو موقع القلعة تلقائياً)
         cx = self.config.get('center_x') or self.config.get('x')
@@ -627,21 +762,71 @@ class MonsterTask(BaseTask):
             self.log.info(f"⚔️ أبطال الحرب المختارون: {chosen_heroes}")
 
         # 7. تكوين جيش المسيرة الذكي (التشكيلة مع الإكمال التلقائي للنقص بالجنود المناسبين)
-        army_list = []
-        needed_target = troops_cfg or DEFAULT_TROOPS_COUNT
+        # جلب قوة القلعة الإجمالية من بيانات الجلسة لفحص القوة الموصى بها
+        castle_power = 0
+        try:
+            fc_info = self.conn.init_data.get("lordInfoCtrl", {}).get("fcInfo", {})
+            castle_power = int(fc_info.get("totalFc", 0))
+            if not castle_power:
+                castle_power = int(self.conn.init_data.get("charInfo", {}).get("power", 0))
+        except Exception:
+            pass
 
-        if form_army_dict:
+        target_lv = int(candidates[0].get('level', max_lv)) if candidates else max_lv
+        smart_troops, rec_power, power_status = calculate_smart_combat_troops(
+            target_type=target_type_str,
+            target_level=target_lv,
+            castle_power=castle_power,
+            user_troops_cfg=troops_cfg
+        )
+
+        army_list = []
+        max_safe_capacity = 170000  # سقف أمان سعة مسيرة اللورد القصوى لمنع خطأ 8035
+
+        if form_army_dict and formation_id > 0:
+            # حساب إجمالي القوات المطلوبة في التشكيلة المحفوظة باللعبة (مع استبعاد فخاخ الجدار 800-899)
+            total_form_req = sum(
+                int(v) for k, v in form_army_dict.items()
+                if str(k).isdigit() and str(v).isdigit() and not (800 <= int(k) < 900)
+            )
+
+            # اعتماد التشكيلة المحفوظة بالكامل كما هي دون تقليصها إلى 30 ألف
+            scale = 1.0
+            if total_form_req > max_safe_capacity:
+                scale = float(max_safe_capacity) / float(total_form_req)
+                needed_target = max_safe_capacity
+                self.log.info(
+                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] إجمالي جنودها المسجل باللعبة ({total_form_req:,}) يتجاوز سعة مسيرة اللورد — "
+                    f"تم ضبطها لـ {needed_target:,} جندي بأعلى نسبة أمان لمنع خطأ 8035"
+                )
+            else:
+                needed_target = total_form_req
+                self.log.info(
+                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] اعتماد كامل جنود التشكيلة المسجلة باللعبة ({needed_target:,} جندي) دون أي تقليص"
+                )
+
             for k, v in form_army_dict.items():
                 if str(k).isdigit() and str(v).isdigit():
                     tid = int(k)
                     if 800 <= tid < 900:
                         continue
                     req = int(v)
+                    scaled_req = max(1, int(req * scale)) if scale < 1.0 else req
                     avail = available.get(tid, 0)
-                    take = min(req, avail)
+                    take = min(scaled_req, avail)
                     if take > 0:
                         army_list.append({"id": tid, "num": take})
                         available[tid] -= take
+        else:
+            needed_target = smart_troops
+            if rec_power > 0:
+                self.log.info(
+                    f"🎯 [فحص القوة الذكي] الهدف: {type_name} (لفل {target_lv}) | "
+                    f"القوة الموصى بها: {rec_power:,} | قوة قلعتك: {castle_power:,} | الحالة: {power_status}"
+                )
+                self.log.info(
+                    f"⚔️ [حساب الجيش الذكي] تم احتساب سعة المسيرة ديناميكياً: {needed_target:,} جندي (وفق فحص الهدف وسعة اللورد)"
+                )
 
         form_troops_count = sum(item['num'] for item in army_list)
 
@@ -652,7 +837,7 @@ class MonsterTask(BaseTask):
         elif form_troops_count < needed_target:
             deficit = needed_target - form_troops_count
             self.log.info(
-                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين ({form_troops_count:,}/{needed_target:,} جندي) — "
+                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين بالقلعة ({form_troops_count:,}/{needed_target:,} جندي) — "
                 f"جاري إكمال النقص ({deficit:,} جندي) تلقائياً بأفضل قوات قتالية متوازنة..."
             )
             extra_army = select_combat_army(available, needed_count=deficit)
@@ -663,6 +848,17 @@ class MonsterTask(BaseTask):
                 for item in extra_army:
                     army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
                 army_list = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
+        elif form_troops_count > needed_target:
+            # ضبط الزيادة الناتجة عن التقريب لضمان عدم تجاوز الحد الأقصى للمسيرة
+            excess = form_troops_count - needed_target
+            for item in sorted(army_list, key=lambda x: x['num'], reverse=True):
+                if excess <= 0:
+                    break
+                trim = min(excess, item['num'] - 1)
+                if trim > 0:
+                    item['num'] -= trim
+                    available[item['id']] = available.get(item['id'], 0) + trim
+                    excess -= trim
 
         if not army_list:
             self.log.warning("⚠️ لا توجد قوات قتالية متوفرة بالقلعة لإرسال المسيرة!")
@@ -776,16 +972,39 @@ class MonsterTask(BaseTask):
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
                 return "NO_ARMY"
+            elif err in ('10002', '10003'):
+                self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
+                return "STAMINA_EMPTY"
             elif err == '9007020':
                 for hid in chosen_heroes:
                     self._busy.add(hid)
                 return "HERO_BUSY"
-            elif err in ('8062', '8063', '8060', '8013', '9007062'):
-                self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو سبق استهدافه (كود {err}) — فحص هدف بديل فوراً...")
+            elif err == '8035':
+                current_total = sum(item['num'] for item in army_list)
+                if current_total > 5000:
+                    reduced_troops = max(1000, int(current_total * 0.88))
+                    self.log.warning(f"⚠️ خطأ 8035 (تجاوز سعة مسيرة اللورد) | إعادة المحاولة فوراً بضبط القوات ({reduced_troops:,} جندي)...")
+                    scale_down = reduced_troops / float(current_total)
+                    for itm in army_list:
+                        itm['num'] = max(1, int(itm['num'] * scale_down))
+                    total_troops = sum(itm['num'] for itm in army_list)
+                    attack_payload['data']['army'] = army_list
+                    r_retry = await self.conn.query('1007', '2', attack_payload)
+                    if r_retry and str(r_retry.get('err', '0')) == '0':
+                        self.log.info(f"✅ هجوم ناجح بعد ضبط القوات! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                        for hid in chosen_heroes:
+                            self._busy.add(hid)
+                        for item in army_list:
+                            self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
+                        return "SUCCESS"
+                self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
+                continue
+            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.startswith('80') and err not in ('8004', '8009')):
+                self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
                 continue
             else:
-                self.log.error(f"❌ خطأ غير معروف: {err} | الهدف={target_id}")
-                return "ERROR"
+                self.log.warning(f"⚠️ تعذر استهداف {target_id} (كود {err}) — تجربة هدف بديل...")
+                continue
 
         return "TARGET_OCCUPIED"
 

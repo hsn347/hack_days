@@ -355,7 +355,7 @@ class GateClient:
                 fut = self._cmd_pending.pop((cmd, ''))
             else:
                 for (p_cmd, p_sub), p_fut in list(self._cmd_pending.items()):
-                    if p_cmd == cmd and not p_fut.done():
+                    if p_cmd == cmd and (not p_sub or p_sub == subcmd) and not p_fut.done():
                         fut = self._cmd_pending.pop((p_cmd, p_sub))
                         break
 

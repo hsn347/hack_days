@@ -158,24 +158,20 @@ class SessionManager:
         self.save_session(email, uid, sid, source="sdk_login")
         return AccountSession(email=email, user_id=uid, session_id=sid)
 
-    def _fetch_password_from_firestore(self, user_id: str, castle_id: str) -> Optional[str]:
-        """محاولة استرجاع كلمة المرور المحفوظة للقلعة من Firestore عند الحاجة."""
+    def _fetch_password_from_db(self, castle_id: Optional[str] = None, email: Optional[str] = None) -> Optional[str]:
+        """استرجاع كلمة المرور المحفوظة للقلعة من قاعدة البيانات المحلية SQLite."""
         try:
-            import firebase_admin
-            from firebase_admin import credentials, firestore as fb_fs
-            if not firebase_admin._apps:
-                sak = os.path.join(_ROOT, "firebase_service_account.json")
-                if os.path.exists(sak):
-                    firebase_admin.initialize_app(credentials.Certificate(sak))
-            if firebase_admin._apps:
-                db = fb_fs.client()
-                c_snap = db.collection("users").document(user_id).collection("castles").document(castle_id).get()
-                if c_snap.exists:
-                    pwd = (c_snap.to_dict() or {}).get("password", "")
-                    if pwd:
-                        return str(pwd).strip()
+            from core.database import get_castle_password, get_castle
+            if castle_id:
+                pwd = get_castle_password(castle_id)
+                if pwd:
+                    return pwd
+            if email:
+                c = get_castle(email)
+                if c and c.get("password"):
+                    return str(c["password"]).strip()
         except Exception as e:
-            log.debug(f"تعذر جلب كلمة المرور من Firestore: {e}")
+            log.debug(f"تعذر جلب كلمة المرور من SQLite: {e}")
         return None
 
     def get_or_login(
@@ -187,7 +183,7 @@ class SessionManager:
     ) -> Optional[AccountSession]:
         """
         1. البحث في session_cache.json أولاً.
-        2. إذا لم تكن موجودة، يتم جلب كلمة المرور (سواء الممررة أو من Firestore).
+        2. إذا لم تكن موجودة، يتم جلب كلمة المرور (سواء الممررة أو من SQLite).
         3. تسجيل الدخول وحفظ الجلسة في session_cache.json تلقائياً ثم إعادتها.
         """
         # 1. البحث في الكاش أولاً
@@ -195,10 +191,10 @@ class SessionManager:
         if email in sessions:
             return sessions[email]
 
-        # 2. غير موجودة في الكاش — جلب كلمة المرور
+        # 2. غير موجودة في الكاش — جلب كلمة المرور من SQLite
         pwd = password
-        if not pwd and user_id and castle_id:
-            pwd = self._fetch_password_from_firestore(user_id, castle_id)
+        if not pwd:
+            pwd = self._fetch_password_from_db(castle_id=castle_id, email=email)
 
         # 3. تسجيل الدخول وحفظ الجلسة في الكاش
         if pwd:
@@ -217,8 +213,8 @@ class SessionManager:
     ) -> Optional[AccountSession]:
         """تجديد إجباري للجلسة بكلمة المرور وتحديث session_cache.json."""
         pwd = password
-        if not pwd and user_id and castle_id:
-            pwd = self._fetch_password_from_firestore(user_id, castle_id)
+        if not pwd:
+            pwd = self._fetch_password_from_db(castle_id=castle_id, email=email)
 
         if pwd:
             log.info(f"🔄 [{email}] تجديد الجلسة بكلمة المرور وتحديث session_cache.json...")

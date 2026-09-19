@@ -245,11 +245,11 @@ const TaskAccordionContext = React.createContext<TaskAccordionContextValue>({
 
 /** صف مهمة مع toggle وقائمة منسدلة للخيارات الفرعية بسهم مميز */
 function TaskRow({
-  id, img, emoji, label, enabled, onToggle, children, comingSoon,
+  id, img, emoji, label, enabled, onToggle, children, comingSoon, badge,
 }: {
   id?: string; img?: string; emoji?: string; label: string;
   enabled: boolean; onToggle: (v: boolean) => void;
-  children?: React.ReactNode; comingSoon?: boolean;
+  children?: React.ReactNode; comingSoon?: boolean; badge?: React.ReactNode;
 }) {
   const { expandedTaskId, toggleTask } = React.useContext(TaskAccordionContext)
   const taskId = id || label
@@ -334,10 +334,11 @@ function TaskRow({
           ) : emoji ? (
             <span style={{ fontSize: '18px', flexShrink: 0 }}>{emoji}</span>
           ) : null}
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <div className="task-row-label" style={{ color: comingSoon ? '#6b7280' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
               {label}
             </div>
+            {badge}
           </div>
         </div>
 
@@ -450,15 +451,15 @@ const BARRACKS_TYPES = [
 ]
 
 export const PET_TARGETS = [
-  { id: 1262, name: 'الأسد',                labelKey: 'tasks.petLion',              emoji: '🦁' },
-  { id: 1263, name: 'الصقر',                labelKey: 'tasks.petFalcon',            emoji: '🦅' },
-  { id: 1264, name: 'الذئب',                labelKey: 'tasks.petWolf',              emoji: '🐺' },
-  { id: 1265, name: 'الفهد',                labelKey: 'tasks.petLeopard',           emoji: '🐆' },
-  { id: 1266, name: 'الدب',                 labelKey: 'tasks.petBear',              emoji: '🐻' },
-  { id: 1267, name: 'الفيل',                labelKey: 'tasks.petElephant',          emoji: '🐘' },
-  { id: 1268, name: 'الثور البري',          labelKey: 'tasks.petWildBull',          emoji: '🐂' },
-  { id: 1269, name: 'كلب الكنغال',          labelKey: 'tasks.petKangal',            emoji: '🐕' },
-  { id: 1270, name: 'النمر السيفي',         labelKey: 'tasks.petSabertooth',        emoji: '🐅' },
+  { id: 1350, name: 'الأسد',                labelKey: 'tasks.petLion',              emoji: '🦁' },
+  { id: 1353, name: 'الصقر',                labelKey: 'tasks.petFalcon',            emoji: '🦅' },
+  { id: 1360, name: 'الذئب',                labelKey: 'tasks.petWolf',              emoji: '🐺' },
+  { id: 1357, name: 'الفهد',                labelKey: 'tasks.petLeopard',           emoji: '🐆' },
+  { id: 1362, name: 'الدب',                 labelKey: 'tasks.petBear',              emoji: '🐻' },
+  { id: 1365, name: 'الفيل',                labelKey: 'tasks.petElephant',          emoji: '🐘' },
+  { id: 1368, name: 'الثور البري',          labelKey: 'tasks.petWildBull',          emoji: '🐂' },
+  { id: 1371, name: 'كلب الكنغال',          labelKey: 'tasks.petKangal',            emoji: '🐕' },
+  { id: 1374, name: 'النمر السيفي',         labelKey: 'tasks.petSabertooth',        emoji: '🐅' },
   { id: 1377, name: 'وحيد القرن',           labelKey: 'tasks.petRhino',             emoji: '🦏' },
   { id: 1380, name: 'عنقاء العاصفة الرملية', labelKey: 'tasks.petSandstormPhoenix', emoji: '🔥' },
   { id: 1383, name: 'النمر الثائر',         labelKey: 'tasks.petRagingTiger',       emoji: '🐯' },
@@ -794,7 +795,7 @@ export function TaskTabContent({
       return
     }
 
-    updateConfig.mutate(changedSections, {
+    updateConfig.mutate(draftConfig, {
       onSuccess: () => {
         const updated = JSON.parse(JSON.stringify(draftConfig))
         lastSavedConfigRef.current = updated
@@ -1496,32 +1497,59 @@ export function TaskTabContent({
   // ─────────────────────────────────────────────────────────────────────────
   if (tab === 'prestige') {
     const pr = cfg.prestige
+    const mm = cfg.march_manager
     const subtaskDefs = [
-      { key: 'smuggler',   img: '/images/prestige/kacakci.png',        labelKey: 'tasks.smuggler' },
-      { key: 'gather',     img: '/images/prestige/uretimtahil (1).png', labelKey: 'tasks.gatherResources' },
-      { key: 'watermill',  img: '/images/development/tamponhasat.png',  labelKey: 'tasks.watermillBonus' },
-      { key: 'train',      img: '/images/prestige/asker_egit.png',      labelKey: 'tasks.train' },
-      { key: 'invaders',   img: '/images/prestige/yagmaci (1).png',     labelKey: 'tasks.invaders' },
-      { key: 'stronghold', img: '/images/prestige/siginak (1).png',     labelKey: 'tasks.stronghold' },
+      { key: 'smuggler',   type: 'prestige', img: '/images/prestige/kacakci.png',        labelKey: 'tasks.smuggler' },
+      { key: 'gather',     type: 'march',    img: '/images/prestige/uretimtahil (1).png', labelKey: 'tasks.gatherResources', mmKey: 'prestige_gather' as const },
+      { key: 'watermill',  type: 'prestige', img: '/images/development/tamponhasat.png',  labelKey: 'tasks.watermillBonus' },
+      { key: 'train',      type: 'prestige', img: '/images/prestige/asker_egit.png',      labelKey: 'tasks.train' },
+      { key: 'invaders',   type: 'march',    img: '/images/prestige/yagmaci (1).png',     labelKey: 'tasks.invaders', mmKey: 'prestige_invaders' as const },
+      { key: 'stronghold', type: 'march',    img: '/images/prestige/siginak (1).png',     labelKey: 'tasks.stronghold', mmKey: 'prestige_stronghold' as const },
     ] as const
 
-    const activeCount = subtaskDefs.filter(st => pr.subtasks[st.key]).length
-
-    const setAllSubtasks = (val: boolean) => {
-      const updated: Record<string, boolean> = { fortress: val }
-      for (const st of subtaskDefs) {
-        updated[st.key] = val
+    const isSubtaskActive = (def: typeof subtaskDefs[number]) => {
+      if (def.type === 'march') {
+        return Boolean(mm?.[def.mmKey]?.enabled)
       }
-      update('prestige', { subtasks: { ...pr.subtasks, ...updated } } as Partial<typeof pr>)
+      return Boolean(pr.subtasks[def.key])
     }
 
-    const handleToggleSubtask = (stKey: string, nextVal: boolean) => {
-      const updated = { ...pr.subtasks, [stKey]: nextVal }
-      // تفعيل وتعطيل حصن الحرب تلقائياً مع تدريب الجنود
-      if (stKey === 'train') {
-        updated.fortress = nextVal
+    const activeCount = subtaskDefs.filter(isSubtaskActive).length
+
+    const setAllSubtasks = (val: boolean) => {
+      setDraftConfig(prev => ({
+        ...prev,
+        prestige: {
+          ...prev.prestige,
+          subtasks: {
+            smuggler: val,
+            watermill: val,
+            train: val,
+            fortress: val,
+          },
+        },
+        march_manager: {
+          ...prev.march_manager,
+          prestige_invaders: { enabled: val },
+          prestige_stronghold: { enabled: val },
+          prestige_gather: { enabled: val },
+        },
+      }))
+    }
+
+    const handleToggleSubtask = (def: typeof subtaskDefs[number], nextVal: boolean) => {
+      if (def.type === 'march') {
+        update('march_manager', {
+          [def.mmKey]: { enabled: nextVal }
+        } as Partial<typeof mm>)
+      } else {
+        const updated = { ...pr.subtasks, [def.key]: nextVal }
+        // تفعيل وتعطيل حصن الحرب تلقائياً مع تدريب الجنود
+        if (def.key === 'train') {
+          updated.fortress = nextVal
+        }
+        update('prestige', { subtasks: updated as typeof pr.subtasks } as Partial<typeof pr>)
       }
-      update('prestige', { subtasks: updated as typeof pr.subtasks } as Partial<typeof pr>)
     }
 
     return (
@@ -1559,8 +1587,7 @@ export function TaskTabContent({
               <div style={{ minWidth: 0 }}>
                 <div className="task-row-label" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
                   {t('tasks.prestigeTasks')}
-                
-              </div>
+                </div>
               </div>
             </div>
 
@@ -1610,13 +1637,12 @@ export function TaskTabContent({
 
             {/* List of subtasks */}
             {subtaskDefs.map(st => {
-              const isSubEnabled = Boolean(pr.subtasks[st.key])
-              const isInvaders = st.key === 'invaders'
+              const isSubEnabled = isSubtaskActive(st)
 
               return (
                 <div
                   key={st.key}
-                  onClick={() => handleToggleSubtask(st.key, !isSubEnabled)}
+                  onClick={() => handleToggleSubtask(st, !isSubEnabled)}
                   className={clsx('task-subtask-row', isSubEnabled ? 'enabled' : 'disabled')}
                   style={{
                     background: isSubEnabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.025)',
@@ -1647,38 +1673,10 @@ export function TaskTabContent({
 
                     <Toggle
                       value={isSubEnabled}
-                      onChange={v => handleToggleSubtask(st.key, v)}
+                      onChange={v => handleToggleSubtask(st, v)}
                       size="sm"
                     />
                   </div>
-
-                  {/* إذا كان الغزاة مفعّلاً: يظهر تحديد المستوى مباشرة داخل بطاقة الغزاة */}
-                  {isInvaders && isSubEnabled && (
-                    <div
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        marginTop: '12px',
-                        paddingTop: '10px',
-                        borderTop: '1px solid rgba(255,255,255,0.08)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '10px',
-                        flexWrap: 'wrap',
-                        cursor: 'default',
-                      }}
-                    >
-                      <div>
-                        <div style={{ color: '#a7f3d0', fontSize: '12px', fontWeight: 600 }}>{t('tasks.invadersMaxLv')}</div>
-                      </div>
-                      <Stepper
-                        value={pr.invaders_max_lv}
-                        min={1}
-                        max={35}
-                        onChange={v => update('prestige', { invaders_max_lv: v } as Partial<typeof pr>)}
-                      />
-                    </div>
-                  )}
                 </div>
               )
             })}
@@ -1786,7 +1784,7 @@ export function TaskTabContent({
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {PET_TARGETS.map(p => {
                   const isSelected = (cfg.pet_patrol.destination === p.id) ||
-                                     (!cfg.pet_patrol.destination && (cfg.pet_patrol.pet === p.name || p.id === 1262))
+                                     (!cfg.pet_patrol.destination && (cfg.pet_patrol.pet === p.name || (p.id as number) === 1262))
                   return (
                     <button key={p.id} type="button"
                       className={clsx('task-pet-btn', isSelected ? 'selected' : 'unselected')}
@@ -2035,12 +2033,33 @@ export function TaskTabContent({
             update('fountain', { resources: [] })
           }
 
+          const isGoldAllowed = Boolean(ft.allow_gold) && (Number(ft.gold_times) || 0) > 0
+          const currentGoldTimes = isGoldAllowed ? (Number(ft.gold_times) || 0) : 0
+
           return (
             <TaskRow
               img="/images/fountain/fountain.png"
               label={t('tasks.fountainOfWishes')}
               enabled={ft.enabled}
               onToggle={toggle('fountain')}
+              badge={
+                isGoldAllowed ? (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '1px 8px',
+                    borderRadius: '9999px',
+                    background: 'rgba(234,179,8,0.18)',
+                    border: '1px solid rgba(234,179,8,0.40)',
+                    color: '#fef08a',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                  }}>
+                    💰 {t('tasks.goldBadge')} ({currentGoldTimes}x)
+                  </span>
+                ) : null
+              }
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '4px' }}>
                 {/* ── قسم اختيار الموارد الخمسة للتمني ── */}
@@ -2184,72 +2203,124 @@ export function TaskTabContent({
 
                 {/* ── قسم الشراء بالذهب ── */}
                 {(() => {
-                  const currentGoldTimes = ft.allow_gold === false ? 0 : Math.max(0, Number(ft.gold_times) || 0)
-                  const isGoldAllowed = currentGoldTimes > 0
+                  const handleToggleGold = (enabled: boolean) => {
+                    if (enabled) {
+                      update('fountain', {
+                        allow_gold: true,
+                        use_gold: true,
+                        gold_times: Math.max(1, Number(ft.gold_times) || 1),
+                      })
+                    } else {
+                      update('fountain', {
+                        allow_gold: false,
+                        use_gold: false,
+                        gold_times: 0,
+                      })
+                    }
+                  }
 
                   const setGoldCount = (val: number) => {
                     const count = Math.max(0, val)
                     update('fountain', {
                       gold_times: count,
                       allow_gold: count > 0,
+                      use_gold: count > 0,
                     })
                   }
 
                   return (
                     <div style={{
                       background: isGoldAllowed ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.03)',
-                      border: isGoldAllowed ? '1px solid rgba(234,179,8,0.28)' : '1px solid rgba(255,255,255,0.08)',
+                      border: isGoldAllowed ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(255,255,255,0.08)',
                       borderRadius: '12px',
                       padding: '12px 14px',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                      flexWrap: 'wrap',
+                      flexDirection: 'column',
+                      gap: '10px',
                       transition: 'all 0.2s ease',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <img
-                          src="/images/fountain/gold.png"
-                          alt="Gold"
-                          style={{
-                            width: '28px',
-                            height: '28px',
-                            objectFit: 'contain',
-                            filter: isGoldAllowed ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(40%) opacity(0.7)',
-                          }}
-                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                        />
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: isGoldAllowed ? '#fbbf24' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
-                              {t('tasks.allowGoldPurchase')}
-                            </span>
-                            <span style={{
-                              padding: '1px 8px',
-                              borderRadius: '9999px',
-                              background: isGoldAllowed ? 'rgba(234,179,8,0.18)' : 'rgba(255,255,255,0.06)',
-                              border: isGoldAllowed ? '1px solid rgba(234,179,8,0.40)' : '1px solid rgba(255,255,255,0.10)',
-                              color: isGoldAllowed ? '#fef08a' : '#9ca3af',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                            }}>
-                              {isGoldAllowed ? t('tasks.goldPerResource', { count: currentGoldTimes }) : t('tasks.noGold')}
-                            </span>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <img
+                            src="/images/fountain/gold.png"
+                            alt="Gold"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              objectFit: 'contain',
+                              filter: isGoldAllowed ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(60%) opacity(0.6)',
+                            }}
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: isGoldAllowed ? '#fbbf24' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
+                                {t('tasks.allowGoldPurchase')}
+                              </span>
+                              <span style={{
+                                padding: '1px 8px',
+                                borderRadius: '9999px',
+                                background: isGoldAllowed ? 'rgba(234,179,8,0.18)' : 'rgba(255,255,255,0.06)',
+                                border: isGoldAllowed ? '1px solid rgba(234,179,8,0.40)' : '1px solid rgba(255,255,255,0.10)',
+                                color: isGoldAllowed ? '#fef08a' : '#9ca3af',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                              }}>
+                                {isGoldAllowed ? t('tasks.goldPerResource', { count: currentGoldTimes }) : t('tasks.noGold')}
+                              </span>
+                            </div>
                           </div>
+                        </div>
 
+                        {/* مفتاح التفعيل الصريح (Toggle) وأداة التحكم بالأرقام (+ / -) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {isGoldAllowed && (
+                            <Stepper
+                              value={currentGoldTimes}
+                              min={1}
+                              max={50}
+                              onChange={setGoldCount}
+                            />
+                          )}
+                          <Toggle
+                            value={isGoldAllowed}
+                            onChange={handleToggleGold}
+                            size="sm"
+                          />
                         </div>
                       </div>
 
-                      {/* محدد الزيادة والنقصان (+ / -) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Stepper
-                          value={currentGoldTimes}
-                          min={0}
-                          max={50}
-                          onChange={setGoldCount}
-                        />
-                      </div>
+                      {/* رسالة توضيحية للأمان */}
+                      {isGoldAllowed ? (
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#fde047',
+                          background: 'rgba(234,179,8,0.12)',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(234,179,8,0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}>
+                          <span>⚠️</span>
+                          <span>{t('tasks.goldWarningNotice')}</span>
+                        </div>
+                      ) : (
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#9ca3af',
+                          paddingLeft: '4px',
+                        }}>
+                          {t('tasks.goldDisabledNotice')}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}

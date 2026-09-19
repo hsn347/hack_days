@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { User, Lock, Eye, EyeOff, Check, Sparkles, ShieldCheck } from 'lucide-react'
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, updateProfile } from 'firebase/auth'
-import { doc, updateDoc } from 'firebase/firestore'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Layout } from '../components/layout/Layout'
 import { useAuth } from '../hooks/useAuth'
-import { auth, db } from '../lib/firebase'
+import { auth } from '../lib/firebase'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -47,10 +46,7 @@ export function SettingsPage() {
     setSavedSuccess(true)
 
     try {
-      // 2. تحديث قاعدة البيانات في Firestore
-      await updateDoc(doc(db, 'users', user.uid), { username: trimmed })
-
-      // 3. تحديث الاسم التعريفي في Firebase Auth
+      // 2. تحديث الاسم التعريفي في Firebase Auth
       if (firebaseUser) {
         try {
           await updateProfile(firebaseUser, { displayName: trimmed })

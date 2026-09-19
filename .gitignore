@@ -12,6 +12,7 @@ split_install.apk
 base_temp.apk
 split_arm64.apk
 dumps/
+lua_src/
 *.log
 *.log.*
 
@@ -56,3 +57,7 @@ castle_prereqs.json
 # AI / Antigravity local config
 .agents/
 GEMINI.md
+scratch/
+*.bak
+*_dump.txt
+comprehensive_query_example.txt

@@ -5,8 +5,8 @@ import {
   signOut,
   type User as FirebaseUser,
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore'
-import { auth, db } from '../lib/firebase'
+import { auth } from '../lib/firebase'
+import { getUserProfile, updateUserProfileApi } from '../lib/botApi'
 import type { User } from '../types'
 
 interface AuthContextType {
@@ -19,7 +19,6 @@ interface AuthContextType {
   updateUserProfile: (data: Partial<User>) => void
 }
 
-// We export this for use in createContext below
 export const AuthContext = createContext<AuthContextType | null>(null)
 
 export function useAuth(): AuthContextType {
@@ -34,24 +33,18 @@ export function useAuthProvider(): AuthContextType {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let unsubUserDoc: (() => void) | null = null
-
-    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+    const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser)
-      if (unsubUserDoc) {
-        unsubUserDoc()
-        unsubUserDoc = null
-      }
       if (fbUser) {
         const userEmail = (fbUser.email || '').trim().toLowerCase()
         const isSuperAdminEmail = userEmail === 'ibraboths@gmail.com'
 
-        unsubUserDoc = onSnapshot(doc(db, 'users', fbUser.uid), async (snap) => {
-          if (snap.exists()) {
-            const data = snap.data()
-            if (data?.role === 'admin' || isSuperAdminEmail) {
-              data.subscription = {
-                ...(data.subscription || {}),
+        try {
+          const profile = await getUserProfile()
+          if (profile) {
+            if (profile.role === 'admin' || isSuperAdminEmail) {
+              profile.subscription = {
+                ...(profile.subscription || {}),
                 plan_id: 'super_admin_unlimited',
                 plan_name: 'باقة المشرف الأعلى (غير محدود)',
                 status: 'active',
@@ -60,48 +53,40 @@ export function useAuthProvider(): AuthContextType {
                 days_remaining: 99999,
               }
             }
-            setUser({ uid: fbUser.uid, ...data } as User)
-          } else if (isSuperAdminEmail) {
-            const superAdminDoc = {
+            setUser(profile)
+          } else {
+            // مستخدم مبدئي إذا تعذر الاتصال بالـ API مؤقتاً
+            setUser({
               uid: fbUser.uid,
               email: userEmail,
-              username: 'المشرف الأعلى (SuperAdmin)',
-              role: 'admin',
+              username: fbUser.displayName || userEmail.split('@')[0],
+              role: isSuperAdminEmail ? 'admin' : 'user',
               is_banned: false,
               created_at: new Date().toISOString(),
               subscription: {
-                plan_id: 'super_admin_unlimited',
-                plan_name: 'باقة المشرف الأعلى (غير محدود)',
+                plan_id: isSuperAdminEmail ? 'super_admin_unlimited' : 'free',
+                plan_name: isSuperAdminEmail ? 'المشرف الأعلى' : 'مجاني',
                 status: 'active',
-                max_castles_allowed: 999999,
+                max_castles_allowed: isSuperAdminEmail ? 999999 : 1,
                 current_castles_count: 0,
                 started_at: new Date().toISOString(),
                 expires_at: '2099-01-01T00:00:00Z',
                 days_remaining: 99999,
               }
-            }
-            try {
-              await setDoc(doc(db, 'users', fbUser.uid), superAdminDoc, { merge: true })
-              setUser(superAdminDoc as unknown as User)
-            } catch {}
-          } else {
-            setUser(null)
+            } as User)
           }
-          setLoading(false)
-        }, () => {
+        } catch {
           setUser(null)
+        } finally {
           setLoading(false)
-        })
+        }
       } else {
         setUser(null)
         setLoading(false)
       }
     })
 
-    return () => {
-      unsubAuth()
-      if (unsubUserDoc) unsubUserDoc()
-    }
+    return () => unsubAuth()
   }, [])
 
   const login = async (email: string, password: string): Promise<{ isAdmin: boolean }> => {
@@ -112,13 +97,10 @@ export function useAuthProvider(): AuthContextType {
 
     let isAdmin = isSuperAdminEmail
     try {
-      const snap = await getDoc(doc(db, 'users', uid))
-      if (snap.exists()) {
-        const uData = snap.data()
-        if (uData?.role === 'admin') isAdmin = true
-      }
+      const profile = await getUserProfile()
+      if (profile && profile.role === 'admin') isAdmin = true
     } catch (e) {
-      console.warn('User doc check error:', e)
+      console.warn('Profile check error:', e)
     }
 
     if (isAdmin) {
@@ -144,6 +126,7 @@ export function useAuthProvider(): AuthContextType {
 
   const updateUserProfile = (data: Partial<User>) => {
     setUser(prev => prev ? { ...prev, ...data } : null)
+    updateUserProfileApi({ username: data.username, phone: data.phone }).catch(() => {})
   }
 
   const isUserAdmin = user?.role === 'admin' ||

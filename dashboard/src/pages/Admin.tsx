@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Search, Shield, Trash2, Edit, Ban, CheckCircle, Clock, X,
   Layers, Calendar, Plus, Minus, AlertTriangle, Users,
-  Infinity, PauseCircle, RotateCcw,
+  Infinity, PauseCircle, RotateCcw, UserCheck, CheckCheck,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AdminLayout } from '../components/layout/AdminLayout'
@@ -14,8 +14,7 @@ import {
 } from '../hooks/useUsers'
 import { useCastles, useDeleteCastle } from '../hooks/useCastles'
 import { useQueryClient } from '@tanstack/react-query'
-import { doc, updateDoc, collection, getDocs } from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { updateAdminSubscription, banAdminUser, approveAdminUser, approveAllPendingAdminUsers } from '../lib/botApi'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import type { User, Subscription, Castle } from '../types'
@@ -194,15 +193,19 @@ function QuickChips({ options, value, onSelect, color = 'emerald' }: {
 
 // Modal 1: Edit User Subscription & Status
 function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [saving, setSaving] = useState(false)
-  const [castles, setCastles] = useState<number>(Number(user.subscription?.max_castles_allowed ?? 1))
+  const isPendingApproval = user.subscription?.status === 'pending_approval'
+  const [castles, setCastles] = useState<number>(
+    isPendingApproval ? 10 : Number(user.subscription?.max_castles_allowed ?? 1)
+  )
   const [isBanned, setIsBanned] = useState<boolean>(Boolean(user.is_banned))
 
   const now = new Date()
   const currentExp = user.subscription?.expires_at ? new Date(user.subscription.expires_at) : null
   const isCurrentValid = currentExp && currentExp.getTime() > now.getTime()
-  const initialBase = isCurrentValid ? currentExp : now
+  const initialBase = isCurrentValid ? currentExp : (isPendingApproval ? new Date(now.getTime() + 3 * 86400000) : now)
 
   // targetDate starts from current valid expiration date, or from now if expired
   const [targetDate, setTargetDate] = useState<Date>(initialBase)
@@ -223,6 +226,21 @@ function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
     setTargetDate(now)
   }
 
+  const handleDirectApprove = async () => {
+    setSaving(true)
+    try {
+      await approveAdminUser(user.uid, 3, 10)
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      toast.success(t('admin.quickApproveSuccess', { name: user.username || user.email }))
+      onClose()
+    } catch {
+      toast.error(t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -231,25 +249,17 @@ function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
       const finalStatus = isZeroed ? 'expired' : 'active'
       const finalExpiresAt = isZeroed ? now.toISOString() : targetDate.toISOString()
 
-      // Fetch real castles count to ensure it is never wiped or desynced
-      const castlesSnap = await getDocs(collection(db, 'users', user.uid, 'castles'))
-      const actualCastles = castlesSnap.docs.map(d => d.data() as Castle)
-      const activeCastlesCount = actualCastles.filter(c => c.bot_status?.state !== 'pending' && c.is_active !== false).length
-      const pendingCastlesCount = actualCastles.filter(c => c.bot_status?.state === 'pending').length
-
-      await updateDoc(doc(db, 'users', user.uid), {
-        'subscription.plan_id': `${castles}_castles_${finalDays}d`,
-        'subscription.plan_name': isZeroed ? `${castles} حساب (منتهي)` : `${castles} حساب (${finalDays} يوم)`,
-        'subscription.started_at': user.subscription?.started_at || now.toISOString(),
-        'subscription.expires_at': finalExpiresAt,
-        'subscription.days_remaining': finalDays,
-        'subscription.months_duration': Math.max(1, Math.round(finalDays / 30)),
-        'subscription.max_castles_allowed': castles,
-        'subscription.status': finalStatus,
-        'subscription.current_castles_count': activeCastlesCount,
-        'subscription.pending_castles_count': pendingCastlesCount,
-        is_banned: isBanned,
+      await updateAdminSubscription(user.uid, {
+        plan_id: `${castles}_castles_${finalDays}d`,
+        plan_name: isZeroed ? `${castles} حساب (منتهي)` : `${castles} حساب (${finalDays} يوم)`,
+        subscription_status: finalStatus,
+        expires_at: finalExpiresAt,
+        max_castles_allowed: castles,
       })
+
+      if (isBanned !== user.is_banned) {
+        await banAdminUser(user.uid, { is_banned: isBanned })
+      }
 
       qc.invalidateQueries({ queryKey: ['admin_users'] })
       qc.invalidateQueries({ queryKey: ['admin_stats'] })
@@ -302,6 +312,27 @@ function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
               <X size={16} />
             </button>
           </div>
+
+          {/* Pending Approval Banner */}
+          {isPendingApproval && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Clock className="text-amber-500 shrink-0 animate-pulse" size={16} />
+                <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 truncate">
+                  {t('admin.modalPendingNotice')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDirectApprove}
+                disabled={saving}
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow-xs transition shrink-0 cursor-pointer"
+              >
+                <UserCheck size={13} />
+                <span>{t('admin.modalActivateBtn')}</span>
+              </button>
+            </div>
+          )}
 
           {/* Section 1: Castles Quota */}
           <div className="space-y-2.5 bg-gray-50 dark:bg-white/[0.03] p-3 sm:p-3.5 border border-gray-200 dark:border-white/8 rounded-xl">
@@ -448,8 +479,8 @@ function UserCastlesModal({ user, onClose }: { user: User; onClose: () => void }
   const approveCastle = useApproveCastle()
   const rejectCastle = useRejectCastle()
   const deleteCastle = useDeleteCastle(user.uid)
-  const pending = castlesList.filter((c: Castle) => c.bot_status?.state === 'pending')
-  const active = castlesList.filter((c: Castle) => c.bot_status?.state !== 'pending')
+  const pending = castlesList.filter((c: Castle) => !c.is_active || c.bot_status?.state === 'pending')
+  const active = castlesList.filter((c: Castle) => c.is_active && c.bot_status?.state !== 'pending')
 
   return createPortal(
     <div className="z-[100] fixed inset-0 flex justify-center items-center p-3 sm:p-4 overflow-y-auto" onClick={onClose}>
@@ -577,6 +608,9 @@ export function AdminPage() {
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [sortByLeastDays, setSortByLeastDays] = useState(false)
+  const [filterPending, setFilterPending] = useState(false)
+  const [approvingAll, setApprovingAll] = useState(false)
+  const qc = useQueryClient()
   const { data: users = [], isLoading } = useAllUsers()
   const { data: stats } = useAdminStats()
   const banUser = useBanUser()
@@ -606,16 +640,60 @@ export function AdminPage() {
 
   // فلترة قائمة المستخدمين لعرض العملاء والمشتركين فقط واستبعاد حساب المشرف الأعلى نهائياً
   const clientUsers = users.filter(u => !isSuperAdminUser(u))
-  const filtered = (search
+  const pendingUsersCount = clientUsers.filter(u => u.subscription?.status === 'pending_approval').length
+
+  let baseList = search
     ? clientUsers.filter(u => u.email.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()) || u.uid.includes(search))
     : clientUsers
-  ).slice().sort((a, b) => {
+
+  if (filterPending) {
+    baseList = baseList.filter(u => u.subscription?.status === 'pending_approval')
+  }
+
+  const filtered = baseList.slice().sort((a, b) => {
+    if (!sortByLeastDays) {
+      const aPending = a.subscription?.status === 'pending_approval' ? 1 : 0
+      const bPending = b.subscription?.status === 'pending_approval' ? 1 : 0
+      if (aPending !== bPending) return bPending - aPending
+    }
     if (sortByLeastDays) {
       const diff = getDaysRemaining(a) - getDaysRemaining(b)
       if (diff !== 0) return diff
     }
     return (b.subscription?.current_castles_count || 0) - (a.subscription?.current_castles_count || 0)
   })
+
+  const handleQuickApprove = async (u: User) => {
+    if (!confirm(t('admin.quickApproveConfirm', { name: u.username || u.email }))) {
+      return
+    }
+    try {
+      await approveAdminUser(u.uid, 3, 10)
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      toast.success(t('admin.quickApproveSuccess', { name: u.username || u.email }))
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
+  const handleApproveAllPending = async () => {
+    if (pendingUsersCount === 0) return
+    if (!confirm(t('admin.approveAllConfirm', { count: pendingUsersCount }))) {
+      return
+    }
+    setApprovingAll(true)
+    try {
+      const res = await approveAllPendingAdminUsers(3, 10)
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      toast.success(t('admin.approveAllSuccess', { count: res.approved_count ?? pendingUsersCount }))
+    } catch (err: any) {
+      toast.error(err?.message || t('common.error'))
+    } finally {
+      setApprovingAll(false)
+    }
+  }
 
   const handleBan = (u: User) => {
     if (isSuperAdminUser(u)) {
@@ -694,13 +772,13 @@ export function AdminPage() {
               iconBg: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
             },
             {
-              label: 'في الانتظار',
-              value: users.reduce((acc, u) => acc + (u.subscription?.pending_castles_count || 0), 0),
+              label: t('admin.pendingUsersStat'),
+              value: pendingUsersCount,
               icon: '⏳',
-              color: 'text-purple-600 dark:text-purple-400',
+              color: 'text-amber-600 dark:text-amber-400',
               bg: 'bg-white dark:bg-white/[0.03]',
               border: 'border-slate-200/80 dark:border-white/8',
-              iconBg: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
             },
           ].map((s, i) => (
             <motion.div
@@ -734,8 +812,8 @@ export function AdminPage() {
                 {filtered.length}
               </span>
             </h2>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial min-w-[140px]">
                 <Search size={15} className="top-1/2 z-10 absolute text-slate-400 -translate-y-1/2 pointer-events-none start-3" />
                 <input
                   id="admin-search"
@@ -747,6 +825,35 @@ export function AdminPage() {
                   style={{ paddingInlineStart: '2.4rem' }}
                 />
               </div>
+              {pendingUsersCount > 0 && (
+                <>
+                  <button
+                    type="button"
+                    id="admin-approve-all-pending"
+                    onClick={handleApproveAllPending}
+                    disabled={approvingAll}
+                    title={t('admin.approveAllBtn', { count: pendingUsersCount })}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-xs border border-emerald-600/80 transition-all shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CheckCheck size={16} className={approvingAll ? 'animate-spin' : ''} />
+                    <span>{approvingAll ? t('admin.approvingAll') : t('admin.approveAllBtn', { count: pendingUsersCount })}</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="admin-filter-pending"
+                    onClick={() => setFilterPending(!filterPending)}
+                    title={filterPending ? t('common.all') : t('admin.pendingApproval')}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all shrink-0 cursor-pointer ${
+                      filterPending
+                        ? 'bg-amber-500 border-amber-600 text-white shadow-xs ring-1 ring-amber-500/40'
+                        : 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 animate-pulse'
+                    }`}
+                  >
+                    <Clock size={15} />
+                    <span>{t('admin.pendingApproval')} ({pendingUsersCount})</span>
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 id="admin-sort-least-days"
@@ -855,6 +962,11 @@ export function AdminPage() {
                           <td className="px-3 py-3.5">
                             {u.is_banned ? <span className="badge badge-red">{t('dashboard.bannedBadge', 'محظور')}</span>
                              : isSuspended ? <span className="badge badge-yellow">مجمّد</span>
+                             : u.subscription?.status === 'pending_approval' ? (
+                               <span className="badge badge-yellow animate-pulse flex items-center gap-1 font-bold">
+                                 <Clock size={11} /> {t('admin.pendingApproval')}
+                               </span>
+                             )
                              : isLifetime ? <span className="flex items-center gap-1 badge badge-green"><Infinity size={11} /> دائم</span>
                              : isExpired ? <span className="badge badge-red">{t('dashboard.expiredBadge', 'منتهي')}</span>
                              : u.subscription?.status==='active' ? <span className="badge badge-green">نشط</span>
@@ -862,6 +974,16 @@ export function AdminPage() {
                           </td>
                           <td className="px-5 py-3.5">
                             <div className="flex justify-end items-center gap-1.5">
+                              {u.subscription?.status === 'pending_approval' && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleQuickApprove(u) }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-xs hover:shadow transition-all cursor-pointer"
+                                  title={t('admin.quickApproveBtn')}
+                                >
+                                  <UserCheck size={14} />
+                                  <span>{t('admin.quickApproveBtn')}</span>
+                                </button>
+                              )}
                               <button onClick={e=>{e.stopPropagation();setManageCastlesUser(u)}} className="hover:bg-primary-50 dark:hover:bg-primary-600/20 p-2 rounded-xl text-primary-600 hover:text-primary-800 dark:hover:text-white dark:text-primary-400 transition-colors cursor-pointer" title="إدارة القلاع"><Layers size={15}/></button>
                               <button onClick={e=>{e.stopPropagation();setEditUser(u)}} className="hover:bg-slate-100 dark:hover:bg-white/8 p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:hover:text-white dark:text-gray-300 transition-colors cursor-pointer" title="تعديل الاشتراك"><Edit size={14}/></button>
                               <button onClick={e=>{e.stopPropagation();handleBan(u)}} className={`p-2 rounded-xl transition-colors cursor-pointer ${u.is_banned?'text-emerald-700 dark:text-green-400 hover:bg-emerald-50 dark:hover:bg-green-600/10':'text-amber-700 dark:text-yellow-400 hover:bg-amber-50 dark:hover:bg-yellow-600/10'}`} title={u.is_banned?t('admin.unbanUser'):t('admin.banUser')}>
@@ -913,6 +1035,10 @@ export function AdminPage() {
                             <span className="py-0.5 text-[10px] badge badge-red">محظور</span>
                           ) : isSuspended ? (
                             <span className="py-0.5 text-[10px] badge badge-yellow">مجمّد</span>
+                          ) : u.subscription?.status === 'pending_approval' ? (
+                            <span className="py-0.5 text-[10px] badge badge-yellow animate-pulse font-bold flex items-center gap-1">
+                              <Clock size={10} /> {t('admin.pendingApproval')}
+                            </span>
                           ) : isLifetime ? (
                             <span className="flex items-center gap-1 py-0.5 text-[10px] badge badge-green">
                               <Infinity size={10} /> دائم
@@ -968,6 +1094,18 @@ export function AdminPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Quick Approve Button for Pending Users (Mobile) */}
+                      {u.subscription?.status === 'pending_approval' && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleQuickApprove(u); }}
+                          className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                        >
+                          <UserCheck size={14} />
+                          <span>{t('admin.quickApproveBtn')}</span>
+                        </button>
+                      )}
 
                       {/* Action buttons (Mobile single row) */}
                       <div className="flex justify-between items-center gap-1.5 pt-1" onClick={e => e.stopPropagation()}>

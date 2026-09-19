@@ -106,6 +106,15 @@ SUPPORTED_RESOURCES: Dict[str, Dict[str, Any]] = {
     }
 }
 
+# مستويات فتح الموارد في القلعة لضمان عدم طلب مورد غير متاح في المزارع
+RESOURCE_MIN_CASTLE_LEVEL: Dict[str, int] = {
+    "food": 1,
+    "wood": 1,
+    "iron": 10,
+    "coal": 15,
+    "diamond": 23,
+}
+
 # خريطة المعرفات الرقمية وأسماء الموارد
 ID_TO_RESOURCE_KEY: Dict[int, str] = {v["id"]: k for k, v in SUPPORTED_RESOURCES.items()}
 
@@ -147,25 +156,22 @@ def parse_resource_selection(raw: Optional[Any]) -> Tuple[List[str], Dict[str, O
         else:
             name_part = token.strip().lower()
 
-        # فحص إذا كان المعرف رقمياً
-        matched_key = None
-        if name_part.isdigit():
-            rid = int(name_part)
-            if rid in ID_TO_RESOURCE_KEY:
-                matched_key = ID_TO_RESOURCE_KEY[rid]
+        matched_key: Optional[str] = None
+        if name_part.isdigit() and int(name_part) in ID_TO_RESOURCE_KEY:
+            matched_key = ID_TO_RESOURCE_KEY[int(name_part)]
         else:
-            for key, info in SUPPORTED_RESOURCES.items():
-                if name_part == key or name_part in info["aliases"]:
-                    matched_key = key
+            for k, meta in SUPPORTED_RESOURCES.items():
+                if name_part == k or name_part in meta["aliases"] or name_part == meta["name"]:
+                    matched_key = k
                     break
 
-        if matched_key:
-            if matched_key not in selected:
-                selected.append(matched_key)
+        if matched_key and matched_key not in selected:
+            selected.append(matched_key)
             quotas[matched_key] = count_limit
 
     if not selected:
-        return list(SUPPORTED_RESOURCES.keys()), {k: None for k in SUPPORTED_RESOURCES}
+        selected = list(SUPPORTED_RESOURCES.keys())
+        quotas = {k: None for k in selected}
 
     return selected, quotas
 
@@ -180,9 +186,19 @@ class FountainTask(BaseTask):
         super().__init__(conn, config)
 
         self.check_only: bool = self.config.get("check_only", False)
-        self.use_gold: bool = self.config.get("use_gold", False)
-        self.max_gold: int = int(self.config.get("max_gold", 200))
+        self.allow_gold: bool = bool(self.config.get("allow_gold", False))
         self.gold_times_per_res: int = int(self.config.get("gold_times", 0))
+
+        # 🛡️ قفل صارم: لا يُسمح بالشراء بالذهب إلا إذا كان allow_gold صريحاً وكان gold_times > 0
+        raw_use_gold = bool(self.config.get("use_gold", False))
+        if self.allow_gold and self.gold_times_per_res > 0 and (raw_use_gold or self.allow_gold):
+            self.use_gold = True
+        else:
+            self.use_gold = False
+            self.allow_gold = False
+            self.gold_times_per_res = 0
+
+        self.max_gold: int = int(self.config.get("max_gold", 200))
 
         # تحليل الموارد المستهدفة وحصصها
         self.target_resources, self.target_quotas = parse_resource_selection(self.config.get("resources"))
@@ -194,6 +210,70 @@ class FountainTask(BaseTask):
         else:
             self.gold_resources = list(self.target_resources)
             self.gold_quotas = {k: (self.gold_times_per_res if self.gold_times_per_res > 0 else None) for k in self.gold_resources}
+
+        # تصفية الموارد حسب مستوى القلعة لحماية المزارع والحسابات الصغيرة
+        self._filter_resources_by_castle_level(self._get_castle_level())
+
+    def _get_castle_level(self) -> int:
+        """استخراج مستوى القلعة (bid 101) من بيانات الاتصال أو الإعدادات."""
+        cfg_lv = self.config.get("castle_level")
+        if cfg_lv:
+            try:
+                lv = int(cfg_lv)
+                if lv > 0:
+                    return lv
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            blist = self.conn.init_data.get("cityCtrl", {}).get("blist", [])
+            for b in blist:
+                binfo = b.get("binfo", {})
+                if str(binfo.get("bid", "")) == "101":
+                    return int(binfo.get("lv", 1))
+        except Exception:
+            pass
+
+        try:
+            pctrl = self.conn.init_data.get("playerCtrl", {})
+            if "level" in pctrl:
+                return int(pctrl["level"])
+        except Exception:
+            pass
+
+        try:
+            base = self.conn.init_data.get("lordInfoCtrl", {}).get("base", {})
+            if "level" in base:
+                return int(base["level"])
+        except Exception:
+            pass
+
+        return 40
+
+    def _filter_resources_by_castle_level(self, castle_lv: int) -> None:
+        """استبعاد الموارد غير المفتوحة لمستوى القلعة لمنع طلبات غير صحيحة أو سحب ذهب غير مقصود."""
+        filtered_targets = []
+        for r in self.target_resources:
+            min_lv = RESOURCE_MIN_CASTLE_LEVEL.get(r, 1)
+            if castle_lv >= min_lv:
+                filtered_targets.append(r)
+            else:
+                self.log.info(f"🔒 استبعاد {SUPPORTED_RESOURCES[r]['name']} من المجاني (يتطلب قلعة لفل {min_lv}، الحالي: {castle_lv})")
+
+        if not filtered_targets:
+            filtered_targets = ["food", "wood"]
+
+        self.target_resources = filtered_targets
+
+        if self.use_gold:
+            filtered_gold = []
+            for r in self.gold_resources:
+                min_lv = RESOURCE_MIN_CASTLE_LEVEL.get(r, 1)
+                if castle_lv >= min_lv:
+                    filtered_gold.append(r)
+                else:
+                    self.log.info(f"🔒 استبعاد {SUPPORTED_RESOURCES[r]['name']} من الشراء بالذهب (يتطلب قلعة لفل {min_lv}، الحالي: {castle_lv})")
+            self.gold_resources = filtered_gold
 
     # ──────────────────────────────────────────────────────────────────
     #  الاستعلام الذكي عن حالة النافورة (1018 / 1)
@@ -329,11 +409,15 @@ class FountainTask(BaseTask):
         """
         تنفيذ الاستعلام والشراء المجاني وشراء الذهب (إذا كان مفعلاً).
         """
-        # انتظار وصول بيانات init_data الخاصة بالحساب والذهب
+        # انتظار وصول بيانات init_data الخاصة بالحساب والذهب ومباني المدينة
         for _ in range(15):
-            if "lordInfoCtrl" in self.conn.init_data or len(self.conn.init_data) > 10:
+            if ("lordInfoCtrl" in self.conn.init_data or "cityCtrl" in self.conn.init_data) and len(self.conn.init_data) > 10:
                 break
             await asyncio.sleep(0.3)
+
+        # إعادة تصفية الموارد بدقة بعد تحميل بيانات المباني والمدينة للتأكد من فتح الموارد
+        castle_lv = self._get_castle_level()
+        self._filter_resources_by_castle_level(castle_lv)
 
         status = await self.get_fountain_status()
         if not status:
@@ -350,6 +434,12 @@ class FountainTask(BaseTask):
 
         free_wishes_left = status["free_wishes"]
         resources_dict = status["resources"]
+
+        # 🛡️ قاعدة أمان صارمة: إذا لم تكن هناك أمنيات مجانية متاحة، لا يتم عمل المهمة ولا يتم الشراء بالذهب
+        if free_wishes_left <= 0:
+            msg = "ℹ️ لا توجد مرات مجانية متاحة في نافورة الأمنيات اليوم (تم إنهاء المهمة دون استهلاك ذهب)."
+            self.log.info(msg)
+            return TaskResult.ok(msg, free_wishes=0, gold_spent=0)
 
         total_free_done = 0
         total_paid_done = 0
@@ -381,12 +471,27 @@ class FountainTask(BaseTask):
                     self.log.info(f"🛡️ انتظار أمان بشري: {jitter} ثانية...")
                     await asyncio.sleep(jitter)
 
+                # قراءة رصيد الذهب قبل إرسال الطلب المجاني
+                gold_before_wish = self._get_current_gold()
+
                 self.log.info(f"👉 طلب مجاني: {cur_meta['icon']} {cur_meta['name']} (المتبقي: {free_wishes_left})...")
                 ok, data, err_msg = await self._make_wish(cur_res_key)
 
                 if not ok:
                     self.log.warning(f"❌ فشل تنفيذ الأمنية المجانية لـ {cur_meta['name']}: {err_msg}")
                     break
+
+                # 🛡️ حراسة فورية صارمة لرصيد الذهب: إذا كان الشراء بالذهب معطلاً، نتحقق أن رصيد الذهب لم ينقص إطلاقاً
+                if not self.use_gold:
+                    gold_after_wish = self._get_current_gold()
+                    if gold_after_wish < gold_before_wish:
+                        spent_gold = gold_before_wish - gold_after_wish
+                        self.log.critical(
+                            f"🚨 طوارئ! تم رصد نقص {spent_gold} ذهب أثناء طلب أمنية مجانية لـ {cur_meta['name']} والشراء بالذهب معطل! إيقاف المهمة فوراً."
+                        )
+                        return TaskResult.fail(
+                            f"🚨 إيقاف طارئ: خصم غير مصرح به للذهب ({spent_gold} ذهب) أثناء طلب مجاني لـ {cur_meta['name']}. تم إيقاف المهمة فوراً."
+                        )
 
                 # قراءة النتيجة
                 add_res = int(data.get("addResource", 0))
@@ -404,8 +509,8 @@ class FountainTask(BaseTask):
         else:
             self.log.info("ℹ️ لا توجد مرات مجانية متاحة اليوم.")
 
-        # ── المرحلة 2: الشراء بالذهب (إذا تم تفعيله من قبل المستخدم) ──
-        if self.use_gold:
+        # ── المرحلة 2: الشراء بالذهب (إذا تم تفعيله من قبل المستخدم بشكل صريح ومؤكد) ──
+        if self.use_gold and self.allow_gold and self.gold_times_per_res > 0:
             self.log.info(f"💰 بدء الشراء بالذهب (أقصى ذهب: {self.max_gold})...")
             current_gold = self._get_current_gold()
 

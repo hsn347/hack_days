@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Play, Square, Plus, Clock, SlidersHorizontal, Users, Lock, ShieldAlert, AlertTriangle, Copy, CheckCheck } from 'lucide-react'
+import { Search, Play, Square, Plus, Clock, SlidersHorizontal, Users, Lock, ShieldAlert, AlertTriangle, Copy, CheckCheck, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Layout } from '../components/layout/Layout'
@@ -10,9 +10,10 @@ import { AddCastleModal } from '../components/accounts/AddCastleModal'
 import { EditCastleModal } from '../components/accounts/EditCastleModal'
 import { ConfirmStopModal } from '../components/accounts/ConfirmStopModal'
 import { ConfirmDeleteCastleModal } from '../components/accounts/ConfirmDeleteCastleModal'
+import { ConfirmPresetModal } from '../components/accounts/ConfirmPresetModal'
 import { useAuth } from '../hooks/useAuth'
 import { useCastles, useUpdateBotState, useBotControl, useDeleteCastle, useBatchUpdateCastleConfigs } from '../hooks/useCastles'
-import type { Castle, CastleConfig } from '../types'
+import { Castle, CastleConfig, FIXED_PRESET_CONFIG } from '../types'
 import toast from 'react-hot-toast'
 
 export function AccountsPage() {
@@ -26,6 +27,8 @@ export function AccountsPage() {
   const [deletingTarget, setDeletingTarget] = useState<{ id: string; wasActive?: boolean } | null>(null)
   const [showBatchSettings, setShowBatchSettings] = useState(false)
   const [showStopAllModal, setShowStopAllModal] = useState(false)
+  const [showBatchPresetModal, setShowBatchPresetModal] = useState(false)
+  const [expandedCastleId, setExpandedCastleId] = useState<string | null>(null)
 
   const { data, isLoading } = useCastles(uid)
   const updateBot    = useUpdateBotState(uid)  // للـ fallback وتحديث Firebase فقط
@@ -82,14 +85,19 @@ export function AccountsPage() {
   const currentCount = user?.subscription?.current_castles_count ?? activeCastles.length
 
   const isSuperAdmin = user?.role === 'admin' || user?.email?.trim().toLowerCase() === 'ibraboths@gmail.com'
+  const isPendingApproval = !isSuperAdmin && user?.subscription?.status === 'pending_approval'
   const isBanned = !isSuperAdmin && Boolean(user?.is_banned)
-  const isExpired = !isSuperAdmin && (
+  const isExpired = !isSuperAdmin && !isPendingApproval && (
     user?.subscription?.status === 'expired' ||
     (user?.subscription?.expires_at ? new Date(user.subscription.expires_at).getTime() < Date.now() : false)
   )
-  const isRunBlocked = isBanned || isExpired
+  const isRunBlocked = isBanned || isExpired || isPendingApproval
 
   const handleRunAll = () => {
+    if (isPendingApproval) {
+      toast.error(t('accounts.pendingApprovalRunToast'))
+      return
+    }
     if (isBanned) {
       toast.error(t('accounts.bannedToast'))
       return
@@ -130,6 +138,9 @@ export function AccountsPage() {
     deleteCastle.mutate({ castleId: deletingTarget.id, wasActive: deletingTarget.wasActive }, {
       onSuccess: () => {
         toast.success(t('accounts.deleteSuccess'))
+        if (expandedCastleId === deletingTarget.id) {
+          setExpandedCastleId(null)
+        }
         setDeletingTarget(null)
       },
       onError: () => {
@@ -181,6 +192,23 @@ export function AccountsPage() {
     }
   }
 
+  const handleConfirmBatchPreset = async () => {
+    if (selectedBatchIds.length === 0) {
+      toast.error(t('accounts.selectAtLeastOneBatch'))
+      return
+    }
+    try {
+      await batchUpdate.mutateAsync({
+        castleIds: selectedBatchIds,
+        config: FIXED_PRESET_CONFIG,
+      })
+      toast.success(t('accounts.fixedPresetSuccess'))
+      setShowBatchPresetModal(false)
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
   const handleSelectAllBatch = () => {
     if (selectedBatchIds.length === activeCastles.length) {
       setSelectedBatchIds([])
@@ -224,7 +252,13 @@ export function AccountsPage() {
 
           <div className="grid grid-cols-2 sm:flex items-center gap-2">
             <button
-              onClick={() => setAddModalOpen(true)}
+              onClick={() => {
+                if (isPendingApproval) {
+                  toast.error(t('accounts.pendingApprovalToast'))
+                  return
+                }
+                setAddModalOpen(true)
+              }}
               className="col-span-2 sm:col-span-1 order-first sm:order-last flex items-center justify-center gap-2 py-2.5 sm:py-2 px-4 shadow-glow text-sm font-bold btn-primary rounded-xl active:scale-[0.98] transition-all"
               id="add-account-btn"
             >
@@ -253,7 +287,7 @@ export function AccountsPage() {
               {isRunBlocked ? (
                 <>
                   <Lock size={13} className="text-rose-400 btn-lock-icon" />
-                  <span>{t('accounts.runAll')} ({isBanned ? t('accounts.lockedBanned') : t('accounts.lockedExpired')})</span>
+                  <span>{t('accounts.runAll')} ({isBanned ? t('accounts.lockedBanned') : isPendingApproval ? t('accounts.lockedPending') : t('accounts.lockedExpired')})</span>
                 </>
               ) : (
                 <>
@@ -272,6 +306,14 @@ export function AccountsPage() {
             </button>
           </div>
         </div>
+
+        {/* ── Pending Approval Notice ── */}
+        {isPendingApproval && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-300 text-xs">
+            <Clock size={20} className="text-amber-400 shrink-0 animate-pulse" />
+            <span>{t('accounts.pendingApprovalNotice')}</span>
+          </div>
+        )}
 
         {/* Banner if banned or expired */}
         {isBanned && (
@@ -410,18 +452,31 @@ export function AccountsPage() {
                       </span>
                     </div>
 
-                    {templateCastle && (
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleApplyAllTemplateSettings}
+                        onClick={() => setShowBatchPresetModal(true)}
                         disabled={batchUpdate.isPending || selectedBatchIds.length === 0}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-600 hover:bg-primary-500 active:scale-95 text-white disabled:opacity-50 transition-all cursor-pointer shadow-sm"
-                        title={t('accounts.applyAllFromTemplate')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-900 dark:text-amber-300 disabled:opacity-50 active:scale-95 transition-all cursor-pointer shadow-sm"
+                        title={t('accounts.fixedPresetTooltip')}
                       >
-                        <CheckCheck size={14} />
-                        <span>{t('accounts.applyAllFromTemplate')}</span>
+                        <Sparkles size={14} className="text-amber-700 dark:text-amber-400" />
+                        <span>{t('accounts.fixedPreset')}</span>
                       </button>
-                    )}
+
+                      {templateCastle && (
+                        <button
+                          type="button"
+                          onClick={handleApplyAllTemplateSettings}
+                          disabled={batchUpdate.isPending || selectedBatchIds.length === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-600 hover:bg-primary-500 active:scale-95 text-white disabled:opacity-50 transition-all cursor-pointer shadow-sm"
+                          title={t('accounts.applyAllFromTemplate')}
+                        >
+                          <CheckCheck size={14} />
+                          <span>{t('accounts.applyAllFromTemplate')}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
@@ -526,6 +581,8 @@ export function AccountsPage() {
                       userId={uid}
                       index={idx}
                       isPending
+                      isExpanded={expandedCastleId === castle.id}
+                      onToggleExpand={() => setExpandedCastleId(prev => prev === castle.id ? null : castle.id)}
                       onDelete={() => handleDelete(castle.id, false)}
                       onEdit={() => setEditingCastle(castle)}
                     />
@@ -548,6 +605,8 @@ export function AccountsPage() {
                       castle={castle}
                       userId={uid}
                       index={idx}
+                      isExpanded={expandedCastleId === castle.id}
+                      onToggleExpand={() => setExpandedCastleId(prev => prev === castle.id ? null : castle.id)}
                       onDelete={() => handleDelete(castle.id, true)}
                       onEdit={() => setEditingCastle(castle)}
                       onSetBatchTemplate={handleSetAsBatchTemplate}
@@ -589,6 +648,16 @@ export function AccountsPage() {
         onConfirm={handleConfirmStopAll}
         isAll={true}
         count={runningCount}
+      />
+
+      {/* Confirm Batch Preset Modal */}
+      <ConfirmPresetModal
+        isOpen={showBatchPresetModal}
+        onClose={() => setShowBatchPresetModal(false)}
+        onConfirm={handleConfirmBatchPreset}
+        isBatch={true}
+        count={selectedBatchIds.length}
+        isPending={batchUpdate.isPending}
       />
 
       {/* Confirm Delete Castle Modal */}

@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  collection, doc, onSnapshot, query, orderBy, limit,
-  startAfter, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, type QueryDocumentSnapshot,
-} from 'firebase/firestore'
-import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { db } from '../lib/firebase'
-import { startBot, stopBot, checkApiAvailable, getWsBaseUrl } from '../lib/botApi'
+  fetchCastles, fetchCastle, createCastle, updateCastle,
+  updateCastleCredentials, toggleCastleActive, deleteCastle,
+  startBot, stopBot, getWsBaseUrl
+} from '../lib/botApi'
 import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
 
-const PAGE_SIZE = 100
-
 // ─── Deep merge castle config with defaults ────────────────
-// يضمن وجود جميع حقول الـ config حتى للقلاع القديمة في Firebase
-function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfig {
+export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConfig {
   const def = DEFAULT_CASTLE_CONFIG
-  const fc = firebaseConfig || {}
+  const fc = fcConfig || {}
 
   const mergeMM = (fmm: Record<string, unknown>) => ({
     ...def.march_manager,
@@ -29,18 +25,6 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
     stronghold:  { ...def.march_manager.stronghold,  ...((fmm?.stronghold  as Record<string, unknown>) || {}) },
     gold_gather: { ...def.march_manager.gold_gather, ...((fmm?.gold_gather as Record<string, unknown>) || {}) },
     gather:      { ...def.march_manager.gather,      ...((fmm?.gather      as Record<string, unknown>) || {}) },
-    priority_order: (() => {
-      const p = (fmm?.priority_order as string[]) || def.march_manager.priority_order
-      if (Array.isArray(p) && !p.includes('gold_gather')) {
-        const gIdx = p.indexOf('gather')
-        if (gIdx !== -1) {
-          const cp = [...p]
-          cp.splice(gIdx, 0, 'gold_gather')
-          return cp
-        }
-      }
-      return p
-    })(),
   })
 
   const mergeTrain = (ft: Record<string, unknown>) => ({
@@ -75,6 +59,9 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
     stamina:            { ...def.stamina,            ...((fc.stamina            as Record<string, unknown>) || {}) },
     skills:             { ...def.skills,             ...((fc.skills             as Record<string, unknown>) || {}), target_skills: (fc.skills as Record<string, unknown>)?.target_skills as string[] || def.skills.target_skills },
     hero_draw:          { ...def.hero_draw,          ...((fc.hero_draw          as Record<string, unknown>) || {}) },
+    treasure_pavilion:  { ...def.treasure_pavilion,  ...((fc.treasure_pavilion  as Record<string, unknown>) || {}) },
+    blacksmith_forge:   { ...def.blacksmith_forge,   ...((fc.blacksmith_forge   as Record<string, unknown>) || {}) },
+    imperial_mausoleum: { ...def.imperial_mausoleum, ...((fc.imperial_mausoleum as Record<string, unknown>) || {}) },
     tactics_hall:       { ...def.tactics_hall,       ...((fc.tactics_hall       as Record<string, unknown>) || {}) },
     watermill:          { ...def.watermill,          ...((fc.watermill          as Record<string, unknown>) || {}) },
     fountain:           { ...def.fountain,           ...((fc.fountain           as Record<string, unknown>) || {}), resources: (fc.fountain as Record<string, unknown>)?.resources as string[] || def.fountain.resources },
@@ -89,31 +76,23 @@ function mergeCastleConfig(firebaseConfig: Record<string, unknown>): CastleConfi
   } as CastleConfig
 }
 
-// ─── Castles real-time list (paginated) ────────────────────
+// ─── Castles list (SQLite REST API — متوافق مع بنية pages القديمة) ──
 export function useCastles(userId: string) {
-  return useInfiniteQuery({
+  return useQuery({
     queryKey: ['castles', userId],
-    initialPageParam: null as QueryDocumentSnapshot | null,
-    queryFn: async ({ pageParam }) => {
-      const ref = collection(db, 'users', userId, 'castles')
-      let q = query(ref, orderBy('created_at', 'desc'), limit(PAGE_SIZE))
-      if (pageParam) q = query(ref, orderBy('created_at', 'desc'), startAfter(pageParam), limit(PAGE_SIZE))
-      const snap = await getDocs(q)
+    queryFn: async () => {
+      const items = await fetchCastles(userId)
+      const formatted = items.map(c => ({
+        ...c,
+        config: mergeCastleConfig((c.config as unknown as Record<string, unknown>) || {}),
+      }))
       return {
-        items: snap.docs.map(d => {
-          const data = d.data() as Record<string, unknown>
-          delete data.password
-          return {
-            id: d.id,
-            ...data,
-            config: mergeCastleConfig((data.config as Record<string, unknown>) || {}),
-          } as Castle
-        }),
-        lastDoc: snap.docs[snap.docs.length - 1] ?? null,
+        pages: [{ items: formatted }],
+        pageParams: [null],
       }
     },
-    getNextPageParam: (lastPage) => lastPage.lastDoc,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
     enabled: !!userId,
   })
 }
@@ -123,44 +102,30 @@ export function useCastle(userId: string, castleId: string) {
   return useQuery({
     queryKey: ['castle', userId, castleId],
     queryFn: async () => {
-      const snap = await getDocs(collection(db, 'users', userId, 'castles'))
-      const d = snap.docs.find(doc => doc.id === castleId)
-      if (!d) throw new Error('Castle not found')
-      const data = d.data() as Record<string, unknown>
-      delete data.password
+      const c = await fetchCastle(castleId)
       return {
-        id: d.id,
-        ...data,
-        config: mergeCastleConfig((data.config as Record<string, unknown>) || {}),
-      } as Castle
+        ...c,
+        config: mergeCastleConfig((c.config as unknown as Record<string, unknown>) || {}),
+      }
     },
-    staleTime: 30_000,
+    staleTime: 15_000,
     enabled: !!userId && !!castleId,
   })
 }
 
-// ─── Bot status real-time (lightweight) ───────────────────
+// ─── Bot status real-time (stub compatibility) ─────────────
 export function useBotStatusLive(
-  userId: string,
-  castleId: string,
-  onUpdate: (state: string) => void
+  _userId: string,
+  _castleId: string,
+  _onUpdate: (state: string) => void
 ) {
-  const ref = doc(db, 'users', userId, 'castles', castleId)
   return {
-    subscribe: () => onSnapshot(ref, (snap) => {
-      const data = snap.data()
-      if (data?.bot_status?.state) onUpdate(data.bot_status.state)
-    })
+    subscribe: () => () => {},
   }
 }
 
 // ─── Real process status via WebSocket ────────────────────
-// اتصال WebSocket دائم بـ api_server.py — لا polling، لا استهلاك موارد.
-// الخادم يُرسل الحالة فور الاتصال ثم فقط عند التغيير.
-// إذا انقطع الاتصال → يُعيد الاتصال تلقائياً بعد 3 ثوانٍ.
-
-type RealStatus = 'running' | 'starting' | 'idle' | 'disconnected' | 'reconnecting' | 'offline'
-
+type RealStatus = 'running' | 'starting' | 'idle' | 'disconnected' | 'reconnecting' | 'waiting' | 'offline'
 
 export function useRealBotStatus(castleId: string, enabled: boolean = true): {
   status: RealStatus
@@ -180,10 +145,6 @@ export function useRealBotStatus(castleId: string, enabled: boolean = true): {
       try {
         ws = new WebSocket(`${WS_BASE}/ws/status/${castleId}`)
 
-        ws.onopen = () => {
-          // الاتصال ناجح — الخادم سيُرسل الحالة الأولية فوراً
-        }
-
         ws.onmessage = (e) => {
           const s = e.data?.trim() as RealStatus
           if (s) setStatus(s)
@@ -191,7 +152,6 @@ export function useRealBotStatus(castleId: string, enabled: boolean = true): {
 
         ws.onclose = () => {
           if (!destroyed) {
-            // الخادم غير متاح أو انقطع → نُبلّغ بـ offline وننتظر 3 ثوانٍ للإعادة
             setStatus('offline')
             reconnectTimer = setTimeout(connect, 3000)
           }
@@ -218,22 +178,51 @@ export function useRealBotStatus(castleId: string, enabled: boolean = true): {
   return { status }
 }
 
-// ─── Update bot state (via API server + Firebase fallback) ─────────
+// ─── Update bot state ──────────────────────────────────────
 export function useUpdateBotState(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ castleId, state }: { castleId: string; state: BotState }) => {
-      // دائماً حدّث Firebase أولاً (للمزامنة)
-      await updateDoc(
-        doc(db, 'users', userId, 'castles', castleId),
-        { 'bot_status.state': state }
-      )
+      if (state === 'idle') {
+        await stopBot(castleId)
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['castles', userId] }),
+    onMutate: async ({ castleId, state }) => {
+      await qc.cancelQueries({ queryKey: ['castles', userId] })
+      const prevData = qc.getQueryData<any>(['castles', userId])
+      if (prevData?.pages) {
+        qc.setQueryData(['castles', userId], {
+          ...prevData,
+          pages: prevData.pages.map((page: any) => ({
+            ...page,
+            items: (page.items || []).map((c: Castle) =>
+              c.id === castleId
+                ? {
+                    ...c,
+                    bot_status: {
+                      ...c.bot_status,
+                      state: state === 'idle' ? 'idle' : state,
+                      conn_state: state === 'idle' ? 'idle' : c.bot_status?.conn_state,
+                      conn_message: state === 'idle' ? 'تم إيقاف البوت' : c.bot_status?.conn_message,
+                    }
+                  }
+                : c
+            )
+          }))
+        })
+      }
+      return { prevData }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevData) {
+        qc.setQueryData(['castles', userId], context.prevData)
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['castles', userId] }),
   })
 }
 
-// ─── Bot Control (يُشغّل/يوقف البوت عبر API + يحدّث Firebase) ─────
+// ─── Bot Control (تشغيل/إيقاف البوت عبر API السريع) ────────
 export function useBotControl(userId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -244,68 +233,59 @@ export function useBotControl(userId: string) {
       castle: Castle
       state: 'running' | 'idle'
     }) => {
-      const apiAvailable = await checkApiAvailable()
-
       if (state === 'running') {
-        if (apiAvailable) {
-          // ✅ استدعاء API مباشرة لتشغيل البوت
-          await startBot({
-            castle_id:    castle.id,
-            user_id:      userId,
-            email:        castle.email,
-            password:     (castle as Castle & { password?: string }).password,
-            config:       castle.config as unknown as Record<string, unknown>,
-            loop_interval: 55,
-          })
-        } else {
-          // ⚠️ API غير متاح — حدّث Firebase فقط (Fallback)
-          console.warn('⚠️ api_server.py غير متاح — تحديث Firebase فقط')
-          await updateDoc(
-            doc(db, 'users', userId, 'castles', castle.id),
-            {
-              'bot_status.state':            'running',
-              'bot_status.conn_state':       'connected',
-              'bot_status.conn_message':     'في انتظار خادم البوت...',
-              'bot_status.last_run_message': 'في انتظار خادم البوت...',
-              'bot_status.conn_updated':     new Date().toISOString(),
-            }
-          )
-          return
-        }
+        await startBot({
+          castle_id:    castle.id,
+          user_id:      userId,
+          email:        castle.email,
+          password:     (castle as Castle & { password?: string }).password,
+          loop_interval: 55,
+        })
       } else {
-        if (apiAvailable) {
-          // ✅ إيقاف عبر API
-          await stopBot(castle.id)
-        }
+        await stopBot(castle.id)
       }
-
-      // تحديث Firebase دائماً (لمزامنة الحالة في لوحة التحكم)
-      await updateDoc(
-        doc(db, 'users', userId, 'castles', castle.id),
-        {
-          'bot_status.state':            state,
-          'bot_status.conn_state':       state === 'running' ? 'connected' : 'idle',
-          'bot_status.conn_message':     state === 'running' ? 'البوت متصل ويعمل الآن...' : 'تم إيقاف البوت بواسطة المستخدم',
-          'bot_status.last_run_message': state === 'running' ? 'البوت يعمل الآن...' : 'تم الإيقاف',
-          'bot_status.conn_updated':     new Date().toISOString(),
-        }
-      )
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['castles', userId] }),
+    onMutate: async ({ castle, state }) => {
+      await qc.cancelQueries({ queryKey: ['castles', userId] })
+      const prevData = qc.getQueryData<any>(['castles', userId])
+      if (prevData?.pages) {
+        qc.setQueryData(['castles', userId], {
+          ...prevData,
+          pages: prevData.pages.map((page: any) => ({
+            ...page,
+            items: (page.items || []).map((c: Castle) =>
+              c.id === castle.id
+                ? {
+                    ...c,
+                    bot_status: {
+                      ...c.bot_status,
+                      state: state === 'running' ? 'starting' : 'idle',
+                      conn_state: state === 'running' ? 'starting' : 'idle',
+                      conn_message: state === 'running' ? 'جاري بدء التشغيل...' : 'تم إيقاف البوت',
+                    }
+                  }
+                : c
+            )
+          }))
+        })
+      }
+      return { prevData }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevData) {
+        qc.setQueryData(['castles', userId], context.prevData)
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['castles', userId] }),
   })
 }
-
 
 // ─── Update castle config ──────────────────────────────────
 export function useUpdateCastleConfig(userId: string, castleId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (config: Partial<CastleConfig>) => {
-      const updates: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(config)) {
-        updates[`config.${k}`] = v
-      }
-      await updateDoc(doc(db, 'users', userId, 'castles', castleId), updates)
+      await updateCastle(castleId, { config: config as Record<string, unknown> })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castle', userId, castleId] })
@@ -320,19 +300,9 @@ export function useBatchUpdateCastleConfigs(userId: string) {
   return useMutation({
     mutationFn: async ({ castleIds, config }: { castleIds: string[]; config: Partial<CastleConfig> }) => {
       if (!castleIds || castleIds.length === 0) return
-      const updates: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(config)) {
-        updates[`config.${k}`] = v
-      }
-      // Chunk by 400 to respect Firestore writeBatch limit (max 500 per batch)
-      for (let i = 0; i < castleIds.length; i += 400) {
-        const chunk = castleIds.slice(i, i + 400)
-        const batch = writeBatch(db)
-        for (const id of chunk) {
-          batch.update(doc(db, 'users', userId, 'castles', id), updates)
-        }
-        await batch.commit()
-      }
+      await Promise.all(
+        castleIds.map(id => updateCastle(id, { config: config as Record<string, unknown> }))
+      )
     },
     onSuccess: (_, { castleIds }) => {
       castleIds.forEach(id => {
@@ -348,106 +318,11 @@ export function useAddCastle(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      // 1. Fetch user to check subscription limits
-      const userRef = doc(db, 'users', userId)
-      const userSnap = await getDoc(userRef)
-      const userData = userSnap.data()
-      const isSuperAdmin = userData?.role === 'admin' || userData?.email?.toLowerCase().trim() === 'ibraboths@gmail.com'
-      const sub = userData?.subscription
-      const maxAllowed = isSuperAdmin ? 999999 : Number(sub?.max_castles_allowed ?? 1)
-
-      // Count actual current castles from subcollection
-      const existingCastlesSnap = await getDocs(collection(db, 'users', userId, 'castles'))
-      const existingCastles = existingCastlesSnap.docs.map(d => d.data())
-      const realActiveCount = existingCastles.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state !== 'pending' && c.is_active !== false).length
-      const realPendingCount = existingCastles.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state === 'pending').length
-
-      // Expiration & Active status check (for initial status message only)
-      const now = new Date()
-      const isExpired = isSuperAdmin ? false : (sub?.expires_at ? new Date(sub.expires_at).getTime() <= now.getTime() : false)
-      const isSubActive = isSuperAdmin ? true : ((sub?.status === 'active' || !sub?.status) && !isExpired)
-      const isBanned = userData?.is_banned === true
-
-      // Rule:
-      // Approval (pending queue) is STRICTLY related to exceeding the allowed castles quota (max_castles_allowed).
-      // It is completely independent of subscription expiration or ban state!
-      // If user is within quota: the castle is auto-accepted immediately (is_active: true).
-      // If the subscription is expired or user is banned, the castle is still added as active, but its state is 'idle'
-      // and locked with a status message ('متوقف بسبب انتهاء الاشتراك' / 'متوقف: تم حظر الحساب').
-      // Only when realActiveCount >= maxAllowed does the castle go to pending approval queue ('pending').
-      const isWithinQuota = isSuperAdmin || realActiveCount < maxAllowed
-      const isAutoApproved = isWithinQuota
-      const isPending = !isAutoApproved
-
-      let initialStatusMessage = 'جاهز للتشغيل'
-      if (!isAutoApproved) {
-        initialStatusMessage = 'بانتظار موافقة المسؤول (تم تجاوز عدد الحسابات المسموح بها)'
-      } else if (isBanned) {
-        initialStatusMessage = 'متوقف: تم حظر الحساب من قبل الإدارة'
-      } else if (isExpired || !isSubActive) {
-        initialStatusMessage = 'متوقف بسبب انتهاء الاشتراك'
-      }
-
-      // 2. Create new castle document
-      const castleColRef = collection(db, 'users', userId, 'castles')
-      const newCastleRef = doc(castleColRef)
-
-      const emailTrimmed = email.trim()
-      const autoName = emailTrimmed.split('@')[0] || 'قلعة'
-
-      const newCastle: Record<string, unknown> = {
-        castle_id: newCastleRef.id,
-        email: emailTrimmed,
-        password: password,
-        is_active: isAutoApproved,
-        created_at: now.toISOString(),
-        castle_info: {
-          lord_name: autoName,
-          castle_name: autoName,
-          server_id: 1,
-          castle_level: 1,
-          lord_power: 0,
-          vip_level: 0,
-          alliance_name: '',
-          coordinates: { x: 0, y: 0 },
-        },
-        resources: {
-          food: 0,
-          wood: 0,
-          iron: 0,
-          diamond: 0,
-          gold: 0,
-          stamina: 100,
-          last_updated: now.toISOString(),
-        },
-        bot_status: {
-          state: isAutoApproved ? 'idle' : 'pending',
-          last_run_time: null,
-          next_run_time: null,
-          last_run_message: initialStatusMessage,
-          active_marches: 0,
-          max_marches: 2,
-          last_error: null,
-        },
-        config: DEFAULT_CASTLE_CONFIG,
-      }
-
-      await setDoc(newCastleRef, newCastle)
-
-      // 3. Increment current active count or pending count with exact values
-      if (isAutoApproved) {
-        await updateDoc(userRef, {
-          'subscription.current_castles_count': realActiveCount + 1,
-          'subscription.pending_castles_count': realPendingCount,
-        })
-      } else {
-        await updateDoc(userRef, {
-          'subscription.current_castles_count': realActiveCount,
-          'subscription.pending_castles_count': realPendingCount + 1,
-        })
-      }
-
-      return { id: newCastleRef.id, isPending }
+      const res = await createCastle({
+        email: email.trim(),
+        password: password.trim(),
+      })
+      return { id: res.castle.id, isPending: !res.castle.is_active }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
@@ -463,14 +338,23 @@ export function useUpdateCastleCredentials(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ castleId, email, password }: { castleId: string; email: string; password?: string }) => {
-      const castleRef = doc(db, 'users', userId, 'castles', castleId)
-      const updates: Record<string, unknown> = {
+      await updateCastleCredentials(castleId, {
         email: email.trim(),
-      }
-      if (password && password.trim()) {
-        updates.password = password.trim()
-      }
-      await updateDoc(castleRef, updates)
+        password: password?.trim(),
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['castles', userId] })
+    },
+  })
+}
+
+// ─── Toggle castle active ──────────────────────────────────
+export function useToggleCastleActive(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ castleId, isActive }: { castleId: string; isActive: boolean }) => {
+      await toggleCastleActive(castleId, isActive)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
@@ -483,17 +367,7 @@ export function useDeleteCastle(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ castleId }: { castleId: string; wasActive?: boolean }) => {
-      await deleteDoc(doc(db, 'users', userId, 'castles', castleId))
-      const castlesSnap = await getDocs(collection(db, 'users', userId, 'castles'))
-      const remaining = castlesSnap.docs.map(cd => cd.data() as Record<string, unknown>)
-      const newActive = remaining.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state !== 'pending' && c.is_active !== false).length
-      const newPending = remaining.filter(c => (c.bot_status as Record<string, unknown> | undefined)?.state === 'pending').length
-
-      const userRef = doc(db, 'users', userId)
-      await updateDoc(userRef, {
-        'subscription.current_castles_count': newActive,
-        'subscription.pending_castles_count': newPending,
-      })
+      await deleteCastle(castleId)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
@@ -503,4 +377,3 @@ export function useDeleteCastle(userId: string) {
     },
   })
 }
-

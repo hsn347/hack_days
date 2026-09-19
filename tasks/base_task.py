@@ -61,6 +61,10 @@ class TaskResult:
         return cls(success=False, message=message, data=data,
                    should_retry=retry_after > 0, retry_after=retry_after)
 
+    @property
+    def error(self) -> str:
+        return "" if self.success else self.message
+
     @classmethod
     def queue_full(cls) -> "TaskResult":
         return cls(success=True, message="🛑 الطوابير ممتلئة", data={"reason": "queue_full"})

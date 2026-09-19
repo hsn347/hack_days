@@ -388,12 +388,25 @@ class RuinsTask(BaseTask):
         needed_target = troops_cfg or DEFAULT_TROOPS_COUNT
 
         if form_army_dict:
+            # حساب إجمالي القوات المطلوبة في التشكيلة (مع استبعاد فخاخ الجدار 800-899)
+            total_form_req = sum(
+                int(v) for k, v in form_army_dict.items()
+                if str(k).isdigit() and str(v).isdigit() and not (800 <= int(k) < 900)
+            )
+            # إذا كانت التشكيلة تتجاوز العدد المطلوب للاستكشاف (1000)، نوزعها بنسب متوازنة دقيقة
+            scale = 1.0
+            if total_form_req > needed_target:
+                scale = float(needed_target) / float(total_form_req)
+
             for k, v in form_army_dict.items():
                 if str(k).isdigit() and str(v).isdigit():
                     tid = int(k)
+                    if 800 <= tid < 900:
+                        continue
                     req = int(v)
+                    scaled_req = max(1, int(req * scale)) if scale < 1.0 else req
                     avail = available.get(tid, 0)
-                    take = min(req, avail)
+                    take = min(scaled_req, avail)
                     if take > 0:
                         army_list.append({"id": tid, "num": take})
                         available[tid] -= take
@@ -418,6 +431,17 @@ class RuinsTask(BaseTask):
                 for item in extra_army:
                     army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
                 army_list = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
+        elif form_troops_count > needed_target:
+            # ضبط الزيادة الناتجة عن التقريب لضمان عدم تجاوز الحد الأقصى للمسيرة
+            excess = form_troops_count - needed_target
+            for item in sorted(army_list, key=lambda x: x['num'], reverse=True):
+                if excess <= 0:
+                    break
+                trim = min(excess, item['num'] - 1)
+                if trim > 0:
+                    item['num'] -= trim
+                    available[item['id']] = available.get(item['id'], 0) + trim
+                    excess -= trim
 
         if not army_list:
             self.log.warning("⚠️ لا توجد قوات متوفرة بالقلعة لإرسال المسيرة!")
@@ -505,7 +529,7 @@ class RuinsTask(BaseTask):
             for hid in chosen_heroes:
                 self._busy.add(hid)
             return "HERO_BUSY"
-        elif err in ('8062', '8063', '8060', '9007062'):
+        elif err in ('8062', '8063', '8060', '8035', '8002', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100):
             self.log.warning(f"⚠️ الأطلال {target_id} مشغولة أو سبق استهدافها (كود {err}) — سيتم تجاوزها")
             return "TARGET_OCCUPIED"
         else:

@@ -281,55 +281,52 @@ def calculate_load_bonus(
     has_gather_hero: bool = False
 ) -> float:
     """
-    حساب بونص سعة حمولة القوات (Army Weight Plus) وفق هندسة كود اللعبة الأصلي (kingdomMapCtrl:getArmyWeightPlus):
-    1. أبحاث المعهد (Force Load 1, 2, 3) من technologyCtrl:
-       - 21007: سعة الحمولة 1 (0.05 لكل مستوى)
-       - 24006: سعة الحمولة 2 (0.07 لكل مستوى)
-       - 24106: سعة الحمولة 3 (0.075 لكل مستوى)
-    2. مهارات الأمير (Lord Info Development Skill Force Load): +20.045%
-    3. بونص بطل الجمع لموارد القمح والخشب: +17.365%
-    
-    النتيجة الدقيقة المطابقة للعبة 100%:
-    - للذهب (Gold lv 5: 75 ذهب = 75,000 حمولة): سعة عربة 701 = 59.009 -> 1,271 عربة نقل قمح تماماً!
-    - للقمح (Food lv 5: 800,000 حمولة مع بطل جمع): سعة عربة 701 = 62.482 -> 12,804 عربة نقل قمح تماماً!
+    حساب بونص سعة حمولة القوات الحقيقي من بيانات الحساب:
+    - فحص أبحاث المعهد في technologyCtrl (21007, 24006, 24106) بالأرقام والمفاتيح النصية
+    - إذا لم تكن التقنية موجودة، يكون البونص 0.0 ولا يتم افتراض أي بونص وهمي مطلقاً
+    - إضافة بونص بطل الجمع لموارد القمح والخشب (+17.36%) فقط عند وجود بطل جمع مخصص
     """
     tech_data = getattr(conn, "init_data", {}).get('technologyCtrl', {})
+    if not isinstance(tech_data, dict):
+        tech_data = {}
+
     tech_bonus = 0.0
 
-    if '21007' in tech_data:
-        v = tech_data['21007']
-        lv = int(v[1]) if isinstance(v, list) and len(v) > 1 else int(v)
-        tech_bonus += lv * 0.05
-    else:
-        tech_bonus += 0.30  # افتراضي مستوى 6 (30%)
+    def _get_tech_lv(tid_int: int) -> int:
+        for k in (str(tid_int), tid_int):
+            if k in tech_data:
+                val = tech_data[k]
+                try:
+                    if isinstance(val, list) and len(val) > 1:
+                        return int(val[1])
+                    elif isinstance(val, dict):
+                        return int(val.get('lv', val.get('level', 0)))
+                    return int(val)
+                except Exception:
+                    pass
+        return 0
 
-    if '24006' in tech_data:
-        v = tech_data['24006']
-        lv = int(v[1]) if isinstance(v, list) and len(v) > 1 else int(v)
-        tech_bonus += lv * 0.07
-    else:
-        tech_bonus += 0.70  # افتراضي مستوى 10 (70%)
+    # 21007: سعة الحمولة 1 (+5% لكل مستوى)
+    lv_21007 = _get_tech_lv(21007)
+    if lv_21007 > 0:
+        tech_bonus += lv_21007 * 0.05
 
-    if '24106' in tech_data:
-        v = tech_data['24106']
-        lv = int(v[1]) if isinstance(v, list) and len(v) > 1 else int(v)
-        tech_bonus += lv * 0.075
-    else:
-        tech_bonus += 0.75  # افتراضي مستوى 10 (75%)
+    # 24006: سعة الحمولة 2 (+7% لكل مستوى)
+    lv_24006 = _get_tech_lv(24006)
+    if lv_24006 > 0:
+        tech_bonus += lv_24006 * 0.07
 
-    # مهارات الأمير والصفات الدائمة (Lord Skill Force Load)
-    lord_bonus = 0.20045
-
-    base_bonus = tech_bonus + lord_bonus
-    if base_bonus < 0.1:
-        base_bonus = 1.95045
+    # 24106: سعة الحمولة 3 (+7.5% لكل مستوى)
+    lv_24106 = _get_tech_lv(24106)
+    if lv_24106 > 0:
+        tech_bonus += lv_24106 * 0.075
 
     hero_bonus = 0.0
     # عند جمع القمح أو الخشب مع بطل جمع متاح
     if has_gather_hero and sub_type in (2, 3):
         hero_bonus = 0.17365
 
-    return base_bonus + hero_bonus
+    return max(0.0, tech_bonus + hero_bonus)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -339,19 +336,17 @@ def calculate_load_bonus(
 def select_gathering_army(
     available: Dict[int, int],
     target_load: int,
-    load_bonus: float = 0.0
+    load_bonus: float = 0.0,
+    allow_partial: bool = False
 ) -> Tuple[List[Dict[str, int]], int]:
     """
     اختيار تشكيلة الجيش تلقائياً لجمع الموارد وفق كود اللعبة الأصلي (worldDispatchArmyView.lua):
-    1. استبعاد كامل لعربات الهجوم (الأرقام الزوجية 702, 704, 706, 708, 710, 712, 714).
-    2. استبعاد كامل لأسلحة وفخاخ الجدار (800 فما فوق).
-    3. الأولوية لعربات نقل القمح (Grain Carts):
-       - 701 (عربة نقل القمح لفل 1) أولاً كما في واجهة اللعبة تماماً (حيث يبدأ كود sortArmyListByWeight بـ: if armyID1 == 701 then return true).
+    1. الأولوية المطلقة لعربات نقل القمح (Grain Carts):
+       - 701 (عربة نقل القمح لفل 1) أولاً كما في اللعبة تماماً.
        - ثم باقي عربات نقل القمح (الأرقام الفردية 713, 711, 709, 707, 705, 703) بالأعلى حمولة.
-    4. حساب عدد الجنود المطلوب بدقة لمطابقة حمولة الحقل الهدف مع تطبيق بونص سعة الحمولة الكلي:
-       unit_weight = base_weight * (1.0 + load_bonus)
-       needed = min(avail, math.ceil(rem_load / unit_weight))
-    5. استكمال العجز (فقط عند نفاد عربات نقل القمح) من المشاة ثم الفرسان ثم الرماة.
+    2. استكمال باقي الحمولة من المشاة (4xx) ثم الفرسان (5xx) ثم الرماة (6xx) ثم عربات القتال (702..714).
+    3. تطبيق هامش أمان طفيف (+2% على الأقل 20 عربة) لضمان مسح الحقل بنسبة 100% وعدم ترك أي بقايا موارد.
+    4. منع إرسال مسيرة ناقصة أو هزيلة (أقل من 85% من سعة الحقل) إذا كانت القوات بالقلعة غير كافية لمسح الحقل بالكامل.
     """
     # 1. تجميع عربات نقل القمح المتاحة (الأرقام الفردية حصراً)
     grain_carts: List[int] = []
@@ -362,14 +357,30 @@ def select_gathering_army(
     # الترتيب المطابق لكود اللعبة: 701 أولاً، ثم باقي الرتب من الأعلى للأدنى
     grain_carts.sort(key=lambda tid: (0 if tid == 701 else 1, -UNIT_FREE_WEIGHTS.get(tid, 20), -tid))
 
-    # باقي القوات كـ fallback فقط عند نفاد عربات القمح (مشاة ثم فرسان ثم رماة)
+    # باقي القوات كـ fallback عند الحاجة
     infantry = sorted([tid for tid in available if 400 <= tid < 500], key=lambda tid: -tid)
     cavalry  = sorted([tid for tid in available if 500 <= tid < 600], key=lambda tid: -tid)
     archers  = sorted([tid for tid in available if 600 <= tid < 700], key=lambda tid: -tid)
+    chariots = sorted([tid for tid in available if 700 <= tid < 800 and tid % 2 == 0], key=lambda tid: -tid)
 
-    ordered_tids = grain_carts + infantry + cavalry + archers
+    ordered_tids = grain_carts + infantry + cavalry + archers + chariots
 
-    rem_load = float(max(1, target_load))
+    # فحص إجمالي السعة المتاحة بالقلعة
+    total_avail_cap = 0.0
+    for tid in ordered_tids:
+        cnt = available.get(tid, 0)
+        if cnt > 0:
+            bw = float(UNIT_FREE_WEIGHTS.get(tid, 10))
+            total_avail_cap += cnt * (bw * (1.0 + load_bonus))
+
+    # حماية من "الهجوم بجنود قليل": إذا كانت السعة الإجمالية بالقلعة لا تكفي لتغطية 85% من الحقل، لا نرسل مسيرة هزيلة تترك الحقل ناقصاً
+    if not allow_partial and target_load > 1000 and total_avail_cap < (target_load * 0.85):
+        return [], int(round(total_avail_cap))
+
+    # إضافة هامش أمان طفيف لضمان مسح المورد 100% دون ترك أي كسر
+    safety_buffer = max(1000.0, target_load * 0.02)
+    effective_target = float(target_load) + safety_buffer
+    rem_load = effective_target
     total_carried = 0.0
     army_list: List[Dict[str, int]] = []
 
@@ -390,8 +401,8 @@ def select_gathering_army(
             if rem_load <= 0:
                 break
 
-    # في حال لم تكن القوات كافية لتغطية الحقل بالكامل، نأخذ المتاح
-    if not army_list:
+    # في حال تفعيل allow_partial وكانت القوات المتاحة غير كافية
+    if not army_list and allow_partial:
         for tid in ordered_tids:
             avail = available.get(tid, 0)
             if avail > 0:
@@ -570,10 +581,11 @@ class GatherTask(BaseTask):
 
         sent_count = 0
         consecutive_errors = 0
-        self._busy_heroes  = set()
+        self._busy_heroes  = set(cfg.get('busy_heroes', []))
         self._used_army    = {}
         self._used_pets    = set()
         self._excluded_now = set()
+        last_status = None
 
         march_idx = 0
         while march_idx < max_marches_safety:
@@ -588,6 +600,7 @@ class GatherTask(BaseTask):
                 kingdom_id=kingdom_id,
                 search_range=search_range
             )
+            last_status = status
 
             if status == "SUCCESS":
                 sent_count += 1
@@ -621,8 +634,20 @@ class GatherTask(BaseTask):
         self.log.info("═" * 60)
 
         if sent_count > 0:
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة جمع ({res_info['name']})", sent=sent_count)
-        return TaskResult.fail("لم يتم إرسال أي مسيرة جمع", retry_after=120)
+            return TaskResult.ok(
+                f"✅ تم إرسال {sent_count} مسيرة جمع ({res_info['name']})",
+                sent=sent_count,
+                dispatched=sent_count,
+                queue_full=(last_status in ("QUEUE_FULL", "8004", "9007004")),
+                stop_reason=last_status
+            )
+        if last_status in ("QUEUE_FULL", "8004", "9007004"):
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True, stop_reason="QUEUE_FULL")
+        if last_status in ("NO_ARMY", "8009"):
+            return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة لإرسال مسيرة جمع كاملة", stop_reason="NO_ARMY")
+        if last_status == "NO_TARGET":
+            return TaskResult.fail(f"⚠️ لم يتم العثور على حقول {res_info['name']} متاحة في النطاق المحدد", stop_reason="NO_TARGET")
+        return TaskResult.fail("لم يتم إرسال أي مسيرة جمع", retry_after=120, stop_reason=str(last_status))
 
     # ── إرسال مسيرة فيلق واحدة ───────────────────────────────────
 
@@ -676,24 +701,58 @@ class GatherTask(BaseTask):
         self._excluded_now.add(str(target_id))
         _add_exclude(self.uid, target_id)
 
-        # 2. فحص حمولة الحقل الهدف ونوع المورد الفعلي (1006/15)
+        # 2. فحص حمولة الحقل الهدف ونوع المورد الفعلي (1006/22 أولاً ثم 1006/15)
         cur_res = 0
         actual_res_code = res_info["res_code"]
-        r_build = await self.conn.query('1006', '15', {
-            "x": tx, "y": ty, "kingdomId": kingdom_id, "id": target_id
-        }, timeout=5)
 
-        if r_build and 'retData' in r_build:
-            res_node = r_build['retData'].get('resource', {})
-            cur_res = int(res_node.get('currentSourceNum', 0))
-            if res_node.get('resourceType'):
-                actual_res_code = int(res_node.get('resourceType'))
+        # استعلام 1006/22 المباشر والموثوق
+        try:
+            r22 = await self.conn.query('1006', '22', {"x": tx, "y": ty, "id": str(target_id)}, timeout=3.0)
+            if r22 and isinstance(r22, dict):
+                ret22 = r22.get('retData', {})
+                c_num = int(ret22.get('currentCollectNum', 0))
+                c_spd = float(ret22.get('collectSpeed', 0))
+                if c_num > 0 or c_spd > 0:
+                    self.log.warning(f"⚠️ الحقل {target_id} يجمعه لاعب آخر حالياً (currentCollectNum={c_num})")
+                    return "TARGET_OCCUPIED"
+
+                fresh_rem = int(ret22.get('remainSourceNum', 0))
+                fresh_tot = int(ret22.get('totalSourceNum', 0))
+                if fresh_rem > 0:
+                    cur_res = fresh_rem
+                elif fresh_tot > 0:
+                    cur_res = fresh_tot
+
+                if ret22.get('resourceType'):
+                    try:
+                        actual_res_code = int(ret22.get('resourceType'))
+                    except Exception:
+                        pass
+        except Exception as e:
+            self.log.debug(f"استعلام 1006/22 لم يكتمل: {e}")
+
+        # خطة بديلة عبر 1006/15
+        if cur_res <= 0:
+            try:
+                r_build = await self.conn.query('1006', '15', {
+                    "x": tx, "y": ty, "kingdomId": kingdom_id, "id": target_id
+                }, timeout=3.0)
+                if r_build and 'retData' in r_build:
+                    res_node = r_build['retData'].get('resource', {})
+                    cur_res = int(res_node.get('currentSourceNum', 0))
+                    if res_node.get('resourceType'):
+                        try:
+                            actual_res_code = int(res_node.get('resourceType'))
+                        except Exception:
+                            pass
+            except Exception as e:
+                self.log.debug(f"استعلام 1006/15 لم يكتمل: {e}")
 
         # حساب مضاعف الحمولة وسعة النقل المطلوبة وفق كود اللعبة الأصلي (worldDispatchArmyView.lua)
         multiplier = get_resource_multiplier(actual_res_code, res_info["sub_type"])
         if cur_res > 0:
             target_load = int(cur_res * multiplier)
-            self.log.info(f"   📦 حمولة الحقل: {cur_res:,} مورد × مضاعف وزن {multiplier:g} = سعة حمولة مطلوبة: {target_load:,}")
+            self.log.info(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} مورد × مضاعف وزن {multiplier:g} = سعة حمولة مطلوبة: {target_load:,}")
         else:
             def_cap = DEFAULT_NODE_CAPACITY.get(res_info["sub_type"], {}).get(actual_found_lv, 50000)
             target_load = int(def_cap * multiplier)
@@ -727,7 +786,7 @@ class GatherTask(BaseTask):
         if pets_list:
             self.log.info(f"   🐾 الحيوان الأليف المختار: حيوان #{pets_list[0]}")
 
-        # 5. حساب بونص سعة الحمولة الكلي وتشكيل الجيش بدقة مطابقة للعبة 100%
+        # 5. حساب بونص سعة الحمولة الحقيقي وتشكيل الجيش بدقة لمسح الحقل بالكامل
         has_gather_hero = bool(chosen_hero and str(chosen_hero).startswith("5502"))
         load_bonus = calculate_load_bonus(
             self.conn,
@@ -738,10 +797,11 @@ class GatherTask(BaseTask):
         army_list, carried_load = select_gathering_army(
             available,
             target_load=target_load,
-            load_bonus=load_bonus
+            load_bonus=load_bonus,
+            allow_partial=False
         )
         if not army_list:
-            self.log.warning("⚠️ لا توجد قوات كافية متوفرة بالقلعة لإرسال مسيرة!")
+            self.log.warning(f"⚠️ القوات المتاحة بالقلعة لا تكفي لمسح حقل {res_info['name']} لفل {actual_found_lv} بالكامل (سعة متوفرة: {carried_load:,} / مطلوب: {target_load:,}) — تجنب إرسال مسيرة ناقصة.")
             return "NO_ARMY"
 
         total_troops = sum(item['num'] for item in army_list)

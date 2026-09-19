@@ -22,6 +22,15 @@ export function localizePlanName(planName?: string | null, t?: TFunction): strin
     return t('plans.superAdmin', 'باقة المشرف الأعلى')
   }
 
+  // 1b. Pending approval
+  if (
+    raw.includes('بانتظار موافقة الإدارة') ||
+    raw.includes('بانتظار الموافقة') ||
+    /pending/i.test(raw)
+  ) {
+    return t('dashboard.pendingApprovalStatus', 'بانتظار موافقة الإدارة')
+  }
+
   // 2. Standalone expired
   if (/^(منتهي|منتهي الصلاحية|expired|süresi doldu)$/i.test(raw)) {
     return t('dashboard.expiredBadge', 'منتهي')
@@ -54,7 +63,7 @@ export function localizePlanName(planName?: string | null, t?: TFunction): strin
       if (/^(منتهي|منتهي الصلاحية|expired|süresi doldu)$/i.test(suffix)) {
         return baseText
       }
-      const daysMatch = suffix.match(/^(\d+)\s*(?:يوم|days?|gün)?$/i)
+      const daysMatch = suffix.match(/^(\d+)\s*(?:يوم|أيام|ايام|days?|gün)?$/i)
       if (daysMatch) {
         const days = parseInt(daysMatch[1], 10)
         return `${baseText} (${t('dashboard.daysRemaining', { count: days })})`

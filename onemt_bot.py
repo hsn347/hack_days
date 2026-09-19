@@ -203,20 +203,23 @@ def decode_gate_response(pkt: bytes):
     raw     = pkt[:-5]
     if not ok: return {'ok': False, 'session': session}
 
-    # 1. تجربة فك الضغط المباشر (حزم التهيئة والبث المضغوطة تكون JSON نصي خالص مضغوط بـ zlib)
+    # 1. تجربة فك الضغط المباشر (سواء كان JSON غير مشفر أو مشفر بـ XOR بعد فك الضغط مثل حزمة التهيئة الكبرى)
     for w in (15, -15, 31, 32, 47):
         try:
             inflated = zlib.decompress(raw, w)
-            s_idx = inflated.find(b'{')
-            e_idx = inflated.rfind(b'}')
-            if s_idx != -1 and e_idx != -1:
-                json_bytes = inflated[s_idx:e_idx+1]
-                c = json.loads(json_bytes.decode('utf-8', errors='replace'))
-                if isinstance(c, dict):
-                    cmd = str(c.get('cmd', ''))
-                    if cmd.startswith(CMD_PREFIX):
-                        c['cmd'] = cmd[len(CMD_PREFIX):]
-                    return {'ok': True, 'content': c, 'session': session}
+            for candidate in (inflated, xor_crypt(inflated)):
+                s_idx = candidate.find(b'{')
+                e_idx = candidate.rfind(b'}')
+                if s_idx != -1 and e_idx != -1:
+                    try:
+                        c = json.loads(candidate[s_idx:e_idx+1].decode('utf-8', errors='replace'))
+                        if isinstance(c, dict):
+                            cmd = str(c.get('cmd', ''))
+                            if cmd.startswith(CMD_PREFIX):
+                                c['cmd'] = cmd[len(CMD_PREFIX):]
+                            return {'ok': True, 'content': c, 'session': session}
+                    except Exception:
+                        pass
         except Exception:
             pass
 
