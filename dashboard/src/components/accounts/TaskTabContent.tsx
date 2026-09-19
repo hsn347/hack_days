@@ -1758,6 +1758,50 @@ export function TaskTabContent({
           </div>
         </TaskRow>
 
+        {/* صندوق التحالف (Alliance Treasure) */}
+        <TaskRow
+          emoji="📦"
+          label={t('tasks.alliance_treasure')}
+          enabled={cfg.alliance_treasure?.enabled ?? true}
+          onToggle={toggle('alliance_treasure')}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* طلب مساعدة التحالف */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 12px', borderRadius: '10px',
+              background: (cfg.alliance_treasure?.auto_help ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+              border: (cfg.alliance_treasure?.auto_help ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <div>
+                <div style={{ color: '#f0fdf4', fontSize: '13px', fontWeight: 600 }}>{t('tasks.allianceTreasureAutoHelp')}</div>
+              </div>
+              <Toggle
+                value={cfg.alliance_treasure?.auto_help ?? true}
+                onChange={v => update('alliance_treasure', { auto_help: v })}
+                size="sm"
+              />
+            </div>
+
+            {/* مساعدة أعضاء التحالف */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 12px', borderRadius: '10px',
+              background: (cfg.alliance_treasure?.help_others ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+              border: (cfg.alliance_treasure?.help_others ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <div>
+                <div style={{ color: '#f0fdf4', fontSize: '13px', fontWeight: 600 }}>{t('tasks.allianceTreasureHelpOthers')}</div>
+              </div>
+              <Toggle
+                value={cfg.alliance_treasure?.help_others ?? true}
+                onChange={v => update('alliance_treasure', { help_others: v })}
+                size="sm"
+              />
+            </div>
+          </div>
+        </TaskRow>
+
         {/* دورية الحيوانات */}
         <TaskRow
           emoji="🦌" label={t('tasks.petPatrol')}

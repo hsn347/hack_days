@@ -115,7 +115,7 @@ export interface CastleConfig {
   treasure_pavilion: BaseTaskConfig
   blacksmith_forge: BaseTaskConfig
   imperial_mausoleum: BaseTaskConfig
-  alliance_treasure: BaseTaskConfig & { index?: number; auto_help?: boolean }
+  alliance_treasure: BaseTaskConfig & { index?: number; auto_help?: boolean; help_others?: boolean }
   daily_luxury_gift: BaseTaskConfig
   vip_gift: BaseTaskConfig
   tactics_hall: BaseTaskConfig & { tactic: string }
@@ -167,7 +167,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   treasure_pavilion: { enabled: true },
   blacksmith_forge: { enabled: true },
   imperial_mausoleum: { enabled: true },
-  alliance_treasure: { enabled: true, index: 1, auto_help: true },
+  alliance_treasure: { enabled: true, index: 1, auto_help: true, help_others: true },
   daily_luxury_gift: { enabled: true },
   vip_gift: { enabled: true },
   tactics_hall: { enabled: false, tactic: 'القلعة الفارغة' },
@@ -260,7 +260,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
   treasure_pavilion: { enabled: true },
   blacksmith_forge: { enabled: true },
   imperial_mausoleum: { enabled: true },
-  alliance_treasure: { enabled: true, index: 1, auto_help: true },
+  alliance_treasure: { enabled: true, index: 1, auto_help: true, help_others: true },
   daily_luxury_gift: { enabled: true },
   vip_gift: { enabled: true },
   savings_bank: { enabled: false, days: 7 },

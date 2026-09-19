@@ -49,8 +49,10 @@ class AllianceTreasureTask(BaseTask):
 
     CMD_ALLIANCE_TREASURE = "2015"
     REQ_INIT = "1"
+    REQ_MANUAL_REFRESH = "2"
     REQ_DIG = "3"
     REQ_CALL_HELP = "4"
+    REQ_HELP_OTHER = "5"
     REQ_RECEIVE = "6"
 
     def __init__(self, conn: GameConnection, config: Optional[Dict[str, Any]] = None):
@@ -136,11 +138,31 @@ class AllianceTreasureTask(BaseTask):
         is_digging = len(active_digs) > 0
         dig_remain = max(0, active_digs[0].get("endtime", 0) - now_ts) if is_digging else 0
 
-        # فحص إمكانية الحفر المجاني
+        # فحص قائمة الأعضاء الذين يمكن مساعدتهم (canHelpList)
+        can_help_raw = data.get("canHelpList", {})
+        can_help_list: List[Dict[str, Any]] = []
+        if isinstance(can_help_raw, dict):
+            u_list = can_help_raw.get("uid", [])
+            if isinstance(u_list, list):
+                can_help_list = [x for x in u_list if isinstance(x, dict)]
+            else:
+                for v in can_help_raw.values():
+                    if isinstance(v, list):
+                        can_help_list.extend([x for x in v if isinstance(x, dict)])
+                    elif isinstance(v, dict):
+                        can_help_list.append(v)
+        elif isinstance(can_help_raw, list):
+            can_help_list = [x for x in can_help_raw if isinstance(x, dict)]
+
+        # فحص إمكانية الحفر المجاني والمساعدات
         dig_count = int(other_info.get("digCount", 0))
         max_dig_count = int(other_info.get("maxDigCount", 8))
         next_free_dig_time = int(other_info.get("nextFreeDigTime", 0))
         left_free_today = max(0, max_dig_count - dig_count)
+
+        help_count = int(other_info.get("helpCount", 0))
+        max_help_count = int(other_info.get("maxHelpCount", 10))
+        left_help_today = max(0, max_help_count - help_count)
 
         # الحفر المجاني متاح فقط إذا:
         # 1. لم نستهلك كل المحاولات اليومية
@@ -152,12 +174,18 @@ class AllianceTreasureTask(BaseTask):
             and not is_digging
         )
 
-        ready = bool(can_receive_list or free_dig_ready)
+        unhelped_members = [m for m in can_help_list if not bool(m.get("isHelped", False))]
+        can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
+        can_request_help = any(bool(d.get("canCallHelp", True)) and not bool(d.get("isHelped", False)) for d in active_digs)
+
+        ready = bool(can_receive_list or free_dig_ready or can_help_others or can_request_help)
 
         if can_receive_list:
             msg = f"🎁 يوجد {len(can_receive_list)} صندوق تحالف مكتمل جاهز للاستلام فوراً!"
         elif free_dig_ready:
             msg = f"🎁 حفر صندوق التحالف المجاني متاح وجاهز فوراً! (متبقي {left_free_today}/{max_dig_count} اليوم)"
+        elif can_help_others:
+            msg = f"🤝 يوجد {len(unhelped_members)} أعضاء تحالف بانتظار المساعدة (متبقي {left_help_today}/{max_help_count} مساعدة اليوم)"
         elif is_digging:
             rem_m = max(1, dig_remain // 60)
             msg = f"⏳ صندوق التحالف قيد الحفر حالياً (متبقي {rem_m} دقيقة | تم {dig_count}/{max_dig_count} اليوم)"
@@ -174,11 +202,19 @@ class AllianceTreasureTask(BaseTask):
             "in_alliance": True,
             "free_dig_ready": free_dig_ready,
             "can_receive_list": can_receive_list,
+            "can_help_list": can_help_list,
+            "unhelped_members": unhelped_members,
+            "active_digs": active_digs,
+            "can_help_others": can_help_others,
+            "can_request_help": can_request_help,
             "is_digging": is_digging,
             "dig_remain": dig_remain,
             "dig_count": dig_count,
             "max_dig_count": max_dig_count,
+            "help_count": help_count,
+            "max_help_count": max_help_count,
             "left_free_today": left_free_today,
+            "left_help_today": left_help_today,
             "next_free_dig_time": next_free_dig_time,
             "treasure_info": treasure_info,
             "message": msg,
@@ -196,6 +232,8 @@ class AllianceTreasureTask(BaseTask):
             return TaskResult(success=True, message=st.get("message", "غير منضم لتحالف"))
 
         total_received = 0
+        total_helped = 0
+        help_requested_count = 0
 
         # ── الخطوة 2: استلام أي صناديق مكتملة جاهزة فوراً ─────────────────────
         can_receive_list = st.get("can_receive_list", [])
@@ -222,20 +260,90 @@ class AllianceTreasureTask(BaseTask):
             # إعادة تحديث الحالة بعد الاستلام
             st = await self.get_free_status(force_query=True)
 
-        # ── الخطوة 3: التحقق الصارم من توفر الحفر المجاني ─────────────────────
+        # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) ──────────────────
+        help_others = bool(self.config.get("help_others", True))
+        if help_others:
+            can_help_members = st.get("unhelped_members", [])
+            current_help_count = st.get("help_count", 0)
+            max_help_count = st.get("max_help_count", 10)
+
+            if can_help_members and current_help_count < max_help_count:
+                self.log.info(f"🤝 فحص طلبات مساعدة أعضاء التحالف (المتاح تقديم {max_help_count - current_help_count} مساعدة اليوم)...")
+                for chest in can_help_members:
+                    if current_help_count >= max_help_count:
+                        break
+                    h_uid = chest.get("ownUid")
+                    h_idx = chest.get("index")
+                    nick = chest.get("nickName", f"uid:{h_uid}")
+
+                    if h_uid and h_idx is not None:
+                        self.log.info(f"🤝 تقديم مساعدة صندوق التحالف للعضو {nick} [UID: {h_uid}, Index: {h_idx}] (2015/5)...")
+                        await asyncio.sleep(0.3)
+                        try:
+                            r_help = await self.conn.query(
+                                self.CMD_ALLIANCE_TREASURE,
+                                self.REQ_HELP_OTHER,
+                                {"helpedUid": h_uid, "helpedIndex": h_idx},
+                                timeout=6
+                            )
+                            if r_help and str(r_help.get("err", "-1")) == "0":
+                                total_helped += 1
+                                current_help_count += 1
+                                chest["isHelped"] = True
+                                self.log.info(f"✅ تم تقديم المساعدة للعضو {nick} بنجاح! ({current_help_count}/{max_help_count} اليوم)")
+                        except Exception as e_h:
+                            self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
+
+        # ── الخطوة 4: فحص وطلب المساعدة للصناديق الجارية مسبقاً (2015/4) ──────
+        auto_help = bool(self.config.get("auto_help", True))
+        if auto_help:
+            active_digs = st.get("active_digs", [])
+            for d in active_digs:
+                if bool(d.get("canCallHelp", True)) and not bool(d.get("isHelped", False)):
+                    d_idx = d.get("index")
+                    if d_idx is not None:
+                        self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
+                        await asyncio.sleep(0.3)
+                        try:
+                            r_ch = await self.conn.query(
+                                self.CMD_ALLIANCE_TREASURE,
+                                self.REQ_CALL_HELP,
+                                {"index": int(d_idx)},
+                                timeout=6
+                            )
+                            if r_ch and str(r_ch.get("err", "-1")) == "0":
+                                help_requested_count += 1
+                                d["canCallHelp"] = False
+                                self.log.info(f"✅ تم إرسال طلب المساعدة للصندوق الجاري #{d_idx} بنجاح.")
+                        except Exception as e_ch:
+                            self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
+
+        # ── الخطوة 5: التحقق الصارم من توفر الحفر المجاني ─────────────────────
         if not st.get("free_dig_ready"):
             reason_msg = st.get("message", "لا يوجد حفر مجاني جاهز الآن")
-            self.log.info(f"ℹ️ [صندوق التحالف] {reason_msg}. إنهاء المهمة بأمان تام لحماية الذهب.")
-            
+            summary_parts = []
             if total_received > 0:
-                return TaskResult(
-                    success=True,
-                    message=f"🎁 تم استلام {total_received} صندوق مكتمل بنجاح! ({reason_msg})",
-                    data={"received": total_received}
-                )
-            return TaskResult(success=True, message=reason_msg, data={"free_dig_ready": False})
+                summary_parts.append(f"استلام {total_received} صندوق مكتمل")
+            if total_helped > 0:
+                summary_parts.append(f"مساعدة {total_helped} من أعضاء التحالف")
+            if help_requested_count > 0:
+                summary_parts.append(f"طلب مساعدة لـ {help_requested_count} صندوق")
 
-        # ── الخطوة 4: تحديد رقم الصندوق المستهدف وبدء الحفر (2015/3) ───────────
+            final_msg = f"{', '.join(summary_parts)} ({reason_msg})" if summary_parts else reason_msg
+            self.log.info(f"ℹ️ [صندوق التحالف] {final_msg}. إنهاء المهمة بأمان لحماية الذهب.")
+            
+            return TaskResult(
+                success=True,
+                message=final_msg,
+                data={
+                    "received": total_received,
+                    "helped": total_helped,
+                    "help_requested": help_requested_count,
+                    "free_dig_ready": False,
+                }
+            )
+
+        # ── الخطوة 6: تحديد رقم الصندوق المستهدف وبدء الحفر (2015/3) ───────────
         target_index = int(self.config.get("index", 1))
         treasure_info = st.get("treasure_info", [])
 
@@ -258,28 +366,34 @@ class AllianceTreasureTask(BaseTask):
             return TaskResult(success=False, message=f"فشل حفر صندوق التحالف: {err}")
 
         # استخراج بيانات الحفر الجديد
-        dig_data = resp_dig.get("data") or resp_dig.get("rspdata") or {}
+        dig_data = resp_dig.get("rspdata") or resp_dig.get("data") or {}
         new_dig_info = dig_data.get("newDigInfo", {})
         dig_real_index = new_dig_info.get("index")
 
-        # ── الخطوة 5: طلب مساعدة التحالف لتسريع الفتح تلقائياً (2015/4) ───────
-        auto_help = bool(self.config.get("auto_help", True))
+        # ── الخطوة 7: طلب مساعدة التحالف للصندوق الجديد (2015/4) ───────────────
         if auto_help and dig_real_index is not None:
-            self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف #{dig_real_index} (2015/4)...")
+            self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف الجديد #{dig_real_index} (2015/4)...")
             await asyncio.sleep(0.3)
             try:
                 await self.conn.query(
                     self.CMD_ALLIANCE_TREASURE,
                     self.REQ_CALL_HELP,
-                    {"index": dig_real_index},
+                    {"index": int(dig_real_index)},
                     timeout=6
                 )
+                help_requested_count += 1
                 self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{dig_real_index} بنجاح.")
             except Exception as e_help:
                 self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_help}")
 
         left_times = max(0, st.get("left_free_today", 1) - 1)
-        res_msg = f"🎁 تم حفر صندوق التحالف المجاني #{target_index} بنجاح وطلب المساعدة (متبقي {left_times} اليوم)"
+        res_msg = f"🎁 تم حفر صندوق التحالف المجاني #{target_index} بنجاح"
+        if help_requested_count > 0:
+            res_msg += " وطلب المساعدة"
+        if total_helped > 0:
+            res_msg += f" ومساعدة {total_helped} أعضاء"
+        res_msg += f" (متبقي {left_times} اليوم)"
+
         self.log.info(f"🎉 {res_msg}")
 
         return TaskResult(
@@ -290,5 +404,7 @@ class AllianceTreasureTask(BaseTask):
                 "dig_index": dig_real_index,
                 "left_free_today": left_times,
                 "received": total_received,
+                "helped": total_helped,
+                "help_requested": help_requested_count,
             }
         )
