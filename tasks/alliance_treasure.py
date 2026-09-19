@@ -120,39 +120,62 @@ class AllianceTreasureTask(BaseTask):
         data = raw_data or {}
         other_info = data.get("otherInfo", {}) if isinstance(data.get("otherInfo"), dict) else {}
         treasure_info = data.get("treasureInfo", []) if isinstance(data.get("treasureInfo"), list) else []
-        dig_list_info = data.get("digListInfo", []) if isinstance(data.get("digListInfo"), list) else []
 
-        # فحص الصناديق الجاهزة للاستلام (canReceive == True أو انتهى وقتها)
+        # تحليل قائمة الحفر الحالية الخاصة بي (digListInfo)
+        dig_list_raw = data.get("digListInfo", [])
+        dig_list: List[Dict[str, Any]] = []
+        if isinstance(dig_list_raw, list):
+            dig_list = [x for x in dig_list_raw if isinstance(x, dict)]
+        elif isinstance(dig_list_raw, dict):
+            for v in dig_list_raw.values():
+                if isinstance(v, dict):
+                    dig_list.append(v)
+                elif isinstance(v, list):
+                    dig_list.extend([x for x in v if isinstance(x, dict)])
+
         can_receive_list: List[Dict[str, Any]] = []
         active_digs: List[Dict[str, Any]] = []
 
-        for d in dig_list_info:
+        for d in dig_list:
             if not isinstance(d, dict):
                 continue
+            can_receive = bool(d.get("canReceive", False))
             endtime = int(d.get("endtime", 0))
-            if bool(d.get("canReceive")) or (endtime > 0 and endtime <= now_ts):
+            if can_receive or (endtime > 0 and endtime <= now_ts):
                 can_receive_list.append(d)
-            elif endtime > now_ts:
+            else:
                 active_digs.append(d)
 
         is_digging = len(active_digs) > 0
         dig_remain = max(0, active_digs[0].get("endtime", 0) - now_ts) if is_digging else 0
 
-        # فحص قائمة الأعضاء الذين يمكن مساعدتهم (canHelpList)
+        # تحليل قائمة الأعضاء الذين يمكن مساعدتهم (canHelpList)
         can_help_raw = data.get("canHelpList", {})
         can_help_list: List[Dict[str, Any]] = []
+
         if isinstance(can_help_raw, dict):
-            u_list = can_help_raw.get("uid", [])
-            if isinstance(u_list, list):
-                can_help_list = [x for x in u_list if isinstance(x, dict)]
-            else:
-                for v in can_help_raw.values():
-                    if isinstance(v, list):
-                        can_help_list.extend([x for x in v if isinstance(x, dict)])
-                    elif isinstance(v, dict):
-                        can_help_list.append(v)
+            for k, v in can_help_raw.items():
+                if isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, dict):
+                            can_help_list.append(item)
+                elif isinstance(v, dict):
+                    can_help_list.append(v)
         elif isinstance(can_help_raw, list):
-            can_help_list = [x for x in can_help_raw if isinstance(x, dict)]
+            for item in can_help_raw:
+                if isinstance(item, dict):
+                    can_help_list.append(item)
+
+        # تصفية الصناديق التي يمكن مساعدتها (استبعاد الحساب نفسه وفحص عدم اكتمال المساعدة)
+        my_uid = str(getattr(getattr(self.conn, "creds", None), "uid", "") or "")
+        unhelped_members: List[Dict[str, Any]] = []
+        for m in can_help_list:
+            m_uid = str(m.get("ownUid") or m.get("helpedUid") or m.get("uid") or "")
+            if my_uid and m_uid == my_uid:
+                continue
+            is_h = m.get("isHelped")
+            if is_h in (False, 0, "0", "false", None):
+                unhelped_members.append(m)
 
         # فحص إمكانية الحفر المجاني والمساعدات
         dig_count = int(other_info.get("digCount", 0))
@@ -174,9 +197,8 @@ class AllianceTreasureTask(BaseTask):
             and not is_digging
         )
 
-        unhelped_members = [m for m in can_help_list if not bool(m.get("isHelped", False))]
         can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
-        can_request_help = any(bool(d.get("canCallHelp", True)) and not bool(d.get("isHelped", False)) for d in active_digs)
+        can_request_help = any(d.get("canCallHelp", True) not in (False, 0, "0", "false") for d in active_digs)
 
         ready = bool(can_receive_list or free_dig_ready or can_help_others or can_request_help)
 
@@ -264,26 +286,27 @@ class AllianceTreasureTask(BaseTask):
         help_others = bool(self.config.get("help_others", True))
         if help_others:
             can_help_members = st.get("unhelped_members", [])
-            current_help_count = st.get("help_count", 0)
-            max_help_count = st.get("max_help_count", 10)
+            current_help_count = int(st.get("help_count", 0))
+            max_help_count = int(st.get("max_help_count", 10))
+            left_help_slots = max(0, max_help_count - current_help_count)
 
-            if can_help_members and current_help_count < max_help_count:
-                self.log.info(f"🤝 فحص طلبات مساعدة أعضاء التحالف (المتاح تقديم {max_help_count - current_help_count} مساعدة اليوم)...")
+            if can_help_members and left_help_slots > 0:
+                self.log.info(f"🤝 فحص طلبات مساعدة أعضاء التحالف (المتاح تقديم {left_help_slots} مساعدة اليوم)...")
                 for chest in can_help_members:
                     if current_help_count >= max_help_count:
                         break
-                    h_uid = chest.get("ownUid")
-                    h_idx = chest.get("index")
+                    h_uid = chest.get("helpedUid") or chest.get("ownUid") or chest.get("uid")
+                    h_idx = chest.get("helpedIndex") or chest.get("index")
                     nick = chest.get("nickName", f"uid:{h_uid}")
 
-                    if h_uid and h_idx is not None:
+                    if h_uid is not None and h_idx is not None:
                         self.log.info(f"🤝 تقديم مساعدة صندوق التحالف للعضو {nick} [UID: {h_uid}, Index: {h_idx}] (2015/5)...")
                         await asyncio.sleep(0.3)
                         try:
                             r_help = await self.conn.query(
                                 self.CMD_ALLIANCE_TREASURE,
                                 self.REQ_HELP_OTHER,
-                                {"helpedUid": h_uid, "helpedIndex": h_idx},
+                                {"helpedUid": int(h_uid), "helpedIndex": int(h_idx)},
                                 timeout=6
                             )
                             if r_help and str(r_help.get("err", "-1")) == "0":
@@ -291,16 +314,22 @@ class AllianceTreasureTask(BaseTask):
                                 current_help_count += 1
                                 chest["isHelped"] = True
                                 self.log.info(f"✅ تم تقديم المساعدة للعضو {nick} بنجاح! ({current_help_count}/{max_help_count} اليوم)")
+                            elif r_help and str(r_help.get("err")) == "620009":
+                                self.log.info(f"ℹ️ صندوق العضو {nick} [UID: {h_uid}, Index: {h_idx}] تمت مساعدته مسبقاً من قِبل عضو آخر في التحالف.")
+                            else:
+                                err_h = r_help.get("err") if r_help else "timeout"
+                                self.log.warning(f"⚠️ نتيجة مساعدة العضو {nick}: {err_h}")
                         except Exception as e_h:
                             self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
 
-        # ── الخطوة 4: فحص وطلب المساعدة للصناديق الجارية مسبقاً (2015/4) ──────
+        # ── الخطوة 4: فحص وطلب المساعدة للصناديق الجارية في الكنوز الخاصة بي (2015/4) ──
         auto_help = bool(self.config.get("auto_help", True))
         if auto_help:
             active_digs = st.get("active_digs", [])
             for d in active_digs:
-                if bool(d.get("canCallHelp", True)) and not bool(d.get("isHelped", False)):
-                    d_idx = d.get("index")
+                can_call = d.get("canCallHelp", True)
+                if can_call not in (False, 0, "0", "false"):
+                    d_idx = d.get("index") or d.get("digIndex")
                     if d_idx is not None:
                         self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
                         await asyncio.sleep(0.3)
@@ -315,6 +344,12 @@ class AllianceTreasureTask(BaseTask):
                                 help_requested_count += 1
                                 d["canCallHelp"] = False
                                 self.log.info(f"✅ تم إرسال طلب المساعدة للصندوق الجاري #{d_idx} بنجاح.")
+                            elif r_ch and str(r_ch.get("err")) == "620011":
+                                d["canCallHelp"] = False
+                                self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
+                            else:
+                                err_ch = r_ch.get("err") if r_ch else "timeout"
+                                self.log.debug(f"نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
                         except Exception as e_ch:
                             self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
 
