@@ -689,6 +689,8 @@ class AccountContext:
             "icon": "🏛️",
             "remain_seconds": 0
         }
+        self.tactics_hall_free_draw_left: int = 0
+        self.tactics_hall_free_draw_ready: bool = False
 
         # حالة طاحونة الماء ومباني الموارد المعززة (Watermill Boost)
         self.watermill_boosted_count: int = 0
@@ -1603,6 +1605,14 @@ class BotManager:
                     ctx.treasure_pavilion_left_times = p_left
                     ctx.treasure_pavilion_ready = (p_left > 0 and (p_cut <= now_ts or p_cut == 0))
 
+                # فحص سحب كتب قاعة التكتيكات المجاني (الفئة 5)
+                tactics_draw_info = he_data.get("5", {})
+                if isinstance(tactics_draw_info, dict):
+                    td_left = int(tactics_draw_info.get("leftTimes", 0))
+                    td_cut = int(tactics_draw_info.get("canusetime", 0))
+                    ctx.tactics_hall_free_draw_left = td_left
+                    ctx.tactics_hall_free_draw_ready = (td_left > 0 and (td_cut <= now_ts or td_cut == 0))
+
         # فحص صقل معمل الحدادة المجاني (runeForgeAgCtrl)
         rf_ctrl = self.conn.init_data.get("runeForgeAgCtrl", {})
         if isinstance(rf_ctrl, dict):
@@ -1689,6 +1699,8 @@ class BotManager:
                     "icon": t_info.get("icon", "⏳"),
                     "remain_seconds": end_time - now_ts
                 }
+        ctx.tactics_hall_status["free_draw_left"] = ctx.tactics_hall_free_draw_left
+        ctx.tactics_hall_status["free_draw_ready"] = ctx.tactics_hall_free_draw_ready
 
         # 13. فحص حالة تعزيزات طاحونة الماء لمباني الموارد (buffCtrl)
         buff_ctrl = self.conn.init_data.get("buffCtrl", [])
@@ -2051,11 +2063,13 @@ class BotManager:
         else:
             print(f"👑 صندوق الـ VIP اليومي (VIP Daily Gift): ✅ تم استلام الصندوق اليوم مسبقاً (VIP مستوى {ctx.vip_lv} | نقاط: {ctx.vip_point:,})")
         print("─" * 72)
+        free_t_info = " | 🎁 سحبة مجانية جاهزة!" if ctx.tactics_hall_free_draw_ready else (f" | سحبات باقية: {ctx.tactics_hall_free_draw_left}" if ctx.tactics_hall_free_draw_left > 0 else "")
         if ctx.tactics_hall_status["active"]:
             rem_m = ctx.tactics_hall_status["remain_seconds"] // 60
-            print(f"🏛️ قاعة الاستراتيجيات: ⏳ قيد البحث حالياً ({ctx.tactics_hall_status['icon']} {ctx.tactics_hall_status['tactic_name']} | متبقي {rem_m} دقيقة)")
+            print(f"🏛️ قاعة الاستراتيجيات: ⏳ قيد البحث حالياً ({ctx.tactics_hall_status['icon']} {ctx.tactics_hall_status['tactic_name']} | متبقي {rem_m} دقيقة{free_t_info})")
         else:
-            print("🏛️ قاعة الاستراتيجيات: ✅ طابور التكتيكات شاغر وجاهز لتطوير بحث جديد")
+            ready_txt = " | 🎁 سحبة كتب التكتيكات جاهزة!" if ctx.tactics_hall_free_draw_ready else ""
+            print(f"🏛️ قاعة الاستراتيجيات: ✅ طابور التكتيكات شاغر وجاهز لتطوير بحث جديد{ready_txt}")
         print("─" * 72)
         if ctx.city_farms_count > 0:
             print(f"💧 طاحونة الماء (تعزيز الإنتاج): ⚡ {ctx.watermill_boosted_count}/{ctx.city_farms_count} مبنى موارد معزز حالياً")
@@ -2821,7 +2835,7 @@ class BotManager:
 
     # [12] مهمة قاعة الاستراتيجيات وتطوير التكتيكات
     async def step_12_tactics_hall_task(self) -> Dict[str, Any]:
-        """فحص واستلام أبحاث التكتيكات المكتملة وبدء البحث التكتيكي المحدد من المستخدم."""
+        """فحص واستلام سحوبات كتب التكتيكات المجانية وأبحاث التكتيكات المكتملة وبدء البحث التكتيكي المحدد."""
         th_cfg = self.config.get("tactics_hall", {})
         if not bool(th_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي مهمة قاعة الاستراتيجيات بناءً على رغبة المستخدم (tactics_hall.enabled = False)."
@@ -2834,7 +2848,7 @@ class BotManager:
 
         log.info(f"🏛️ بدء مهمة قاعة الاستراتيجيات للبحث المطلوب: {t_meta.get('icon', '📜')} [{t_meta.get('name_ar', target_tactic)}]...")
 
-        task = TacticsHallTask(self.conn, {"tactic": target_mid})
+        task = TacticsHallTask(self.conn, {"tactic": target_mid, "collect_free": True})
         res = await task.run()
 
         if res.success:

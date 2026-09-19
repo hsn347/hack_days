@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-tasks/tactics_hall.py — مهمة قاعة الاستراتيجيات وتطوير أبحاث التكتيكات تلقائياً
+tasks/tactics_hall.py — مهمة قاعة الاستراتيجيات، سحب كتب التكتيكات وتطوير الأبحاث تلقائياً
 ══════════════════════════════════════════════════════════════════════════════════════
 
 بروتوكول قاعة الاستراتيجيات (Hero Tactical Hall / Tactics Hall):
-  - بدء البحث:    cmd: "3137", subcmd: "1", data: {"mid": tactic_mid}
-  - استلام البحث: cmd: "3137", subcmd: "2"
-  - مسار البحث:   queueCtrl['1257']
+  - سحب كتب التكتيكات المجانية: cmd: "2058", subcmd: "1", data: {"nSubType": 1, "nType": 5}
+  - التحقق من التوفر المجاني:     heroEnlistCtrl.heroEnlistData['5'] (leftTimes > 0 و canusetime <= now)
+  - بدء البحث التكتيكي:         cmd: "3137", subcmd: "1", data: {"mid": tactic_mid}
+  - استلام البحث المكتمل:       cmd: "3137", subcmd: "2"
+  - مسار البحث الجاري:           queueCtrl['1257']
 
 قائمة الأبحاث الـ 17 المتاحة:
   ⚔️ الحرب (War):
@@ -155,19 +157,103 @@ class TacticsHallTask(BaseTask):
         raw_tactic = self.config.get("tactic") or self.config.get("mid")
         self.target_mid = parse_tactic_choice(raw_tactic)
 
+    async def collect_free_tactics(self) -> Dict[str, Any]:
+        """
+        فحص واستلام سحبة كتب التكتيكات المجانية بقاعة الاستراتيجيات (cmd: 2058 / subcmd: 1 / nType: 5).
+
+        قاعدة الأمان الصارمة:
+        - التحقق الدقيق من توفر سحبة مجانية (leftTimes > 0 وعدم وجود فترة تهدئة canusetime <= now).
+        - إذا كانت متوفرة مجاناً: تنفيذ الطلب واستلام المكافأة.
+        - إذا لم تتوفر (نفدت المحاولات أو قيد التهدئة): يتم التجاهل فوراً دون إرسال أي طلب لمنع صرف الذهب.
+        """
+        now_ts = int(time.time())
+        enlist_ctrl = self.conn.init_data.get('heroEnlistCtrl', {})
+        if not isinstance(enlist_ctrl, dict):
+            return {"collected": False, "reason": "no_enlist_ctrl"}
+
+        enlist_data = enlist_ctrl.get('heroEnlistData', {})
+        if not isinstance(enlist_data, dict):
+            return {"collected": False, "reason": "no_enlist_data"}
+
+        tactics_data = enlist_data.get('5', {})
+        if not isinstance(tactics_data, dict) or not tactics_data:
+            return {"collected": False, "reason": "no_type_5_data"}
+
+        left_times = int(tactics_data.get('leftTimes', 0))
+        can_use_time = int(tactics_data.get('canusetime', 0))
+
+        # 1. التحقق من توفر مرات مجانية متبقية اليوم
+        if left_times <= 0:
+            self.log.info("ℹ️ [قاعة الاستراتيجيات] تم استهلاك كافة سحوبات كتب التكتيكات المجانية لهذا اليوم (تم التجاهل لمنع صرف الذهب).")
+            return {"collected": False, "reason": "exhausted", "left_times": 0}
+
+        # 2. التحقق من فترة التهدئة الفاصلة
+        if can_use_time > now_ts:
+            rem_sec = can_use_time - now_ts
+            rem_min = rem_sec // 60
+            self.log.info(f"⏳ [قاعة الاستراتيجيات] سحب كتب التكتيكات قيد التهدئة (متبقي {rem_min} دقيقة و {rem_sec % 60} ثانية — تم التجاهل بأمان).")
+            return {"collected": False, "reason": "cooldown", "rem_sec": rem_sec, "left_times": left_times}
+
+        # 3. السحبة المجانية جاهزة ومتاحة فوراً!
+        self.log.info(f"✨ سحبة كتب التكتيكات المجانية متاحة بقاعة الاستراتيجيات (المرات المتبقية اليوم: {left_times})! جاري السحب...")
+
+        payload = {
+            "nSubType": 1,
+            "nType": 5
+        }
+
+        resp = await self.conn.query('2058', '1', payload, timeout=10)
+        if not resp:
+            self.log.warning("⚠️ لم يتم استلام رد من السيرفر على طلب سحب كتب التكتيكات المجانية.")
+            return {"collected": False, "reason": "timeout"}
+
+        err_code = str(resp.get('err', '-1'))
+        if err_code == '0':
+            resp_data = resp.get('data', {})
+            rewards = resp_data.get('reward', [])
+            new_left = max(0, left_times - 1)
+            self.log.info(f"🎁 [قاعة الاستراتيجيات] تم جمع سحبة كتب التكتيكات المجانية بنجاح! 🎉 المكافأة: {rewards} (المتبقي اليوم: {new_left})")
+
+            # تحديث الكاش المحلي فوراً للأمان
+            tactics_data['leftTimes'] = new_left
+            tactics_data['dayNum'] = int(tactics_data.get('dayNum', 0)) + 1
+            if 'totalNum' in resp_data:
+                tactics_data['totalNum'] = resp_data['totalNum']
+            tactics_data['canusetime'] = now_ts + 600
+
+            return {
+                "collected": True,
+                "reward": rewards,
+                "left_times": new_left,
+                "response": resp_data
+            }
+        else:
+            self.log.warning(f"⚠️ [قاعة الاستراتيجيات] فشل سحب كتب التكتيكات المجانية (كود: {err_code})")
+            return {"collected": False, "reason": f"error_{err_code}"}
+
     async def run(self) -> TaskResult:
         t_info = TACTICS_MAP.get(self.target_mid, {"name_ar": f"بحث #{self.target_mid}", "category": "", "icon": "📜"})
         self.log.info(f"🏛️ بدء مهمة قاعة الاستراتيجيات | البحث المستهدف: {t_info['icon']} [{t_info['name_ar']}] ({t_info['category']})...")
 
         now_ts = int(time.time())
+        actions_performed: List[str] = []
 
-        # 1. محاولة استلام أي بحث مكتمل جاهز أولاً (subcmd: 2)
+        # ── الخطوة 1: فحص وجمع كتب التكتيكات المجانية (cmd: 2058 / nType: 5) ──
+        allow_collect = bool(self.config.get("collect_free", self.config.get("free_draw", True)))
+        free_draw_result = {}
+        if allow_collect:
+            free_draw_result = await self.collect_free_tactics()
+            if free_draw_result.get("collected"):
+                actions_performed.append("جمع كتب التكتيكات المجانية")
+
+        # ── الخطوة 2: محاولة استلام أي بحث تكتيكي مكتمل جاهز (cmd: 3137 / subcmd: 2) ──
         r_claim = await self.conn.query("3137", "2", {}, timeout=8)
         if r_claim and str(r_claim.get("err", "0")) == "0":
             self.log.info("🎁 تم استلام نتائج ومكافآت البحث التكتيكي السابق بنجاح!")
+            actions_performed.append("استلام البحث المكتمل")
             await asyncio.sleep(1.0)
 
-        # 2. فحص مسار البحث الحالي (queueCtrl -> 1257)
+        # ── الخطوة 3: فحص مسار البحث الحالي (queueCtrl -> 1257) ──
         queue_ctrl = self.conn.init_data.get("queueCtrl", {})
         active_queue = queue_ctrl.get(QUEUE_TYPE_TACTICAL) if isinstance(queue_ctrl, dict) else None
 
@@ -187,7 +273,11 @@ class TacticsHallTask(BaseTask):
             active_info = TACTICS_MAP.get(active_mid, {"name_ar": f"بحث #{active_mid}", "icon": "⏳"})
             remaining_s = active_end_time - now_ts
             remaining_m = max(1, remaining_s // 60)
-            msg = f"يوجد بحث جاري حالياً: {active_info['icon']} [{active_info['name_ar']}]. متبقي: {remaining_m} دقيقة."
+            status_msg = f"يوجد بحث جاري حالياً: {active_info['icon']} [{active_info['name_ar']}]. متبقي: {remaining_m} دقيقة."
+            if actions_performed:
+                msg = f"✅ ({' + '.join(actions_performed)}) | ⏳ {status_msg}"
+            else:
+                msg = status_msg
             self.log.info(f"ℹ️ {msg}")
 
             return TaskResult.ok(
@@ -195,6 +285,8 @@ class TacticsHallTask(BaseTask):
                 status="research_in_progress",
                 retry_after=remaining_s,
                 data={
+                    "actions": actions_performed,
+                    "free_draw": free_draw_result,
                     "active_mid": active_mid,
                     "active_name": active_info["name_ar"],
                     "active_end_time": active_end_time,
@@ -202,7 +294,7 @@ class TacticsHallTask(BaseTask):
                 }
             )
 
-        # 3. لا يوجد بحث جاري (المسار فارغ) — بدء البحث المطلوب من المستخدم
+        # ── الخطوة 4: لا يوجد بحث جاري (المسار فارغ) — بدء البحث المطلوب من المستخدم ──
         self.log.info(f"🚀 مسار الأبحاث فارغ وجاهز! جاري بدء تطوير: {t_info['icon']} [{t_info['name_ar']}]...")
 
         payload = {"mid": self.target_mid}
@@ -210,7 +302,8 @@ class TacticsHallTask(BaseTask):
 
         if resp and str(resp.get("err", "0")) == "0":
             resp_data = resp.get("data", {})
-            msg = f"تم بدء بحث {t_info['icon']} [{t_info['name_ar']}] في قاعة الاستراتيجيات بنجاح!"
+            actions_performed.append(f"بدء بحث {t_info['name_ar']}")
+            msg = f"تم ({' + '.join(actions_performed)}) بنجاح!"
             self.log.info(f"✅ {msg}")
 
             # المدة الافتراضية للبحث التكتيكي هي 12 ساعة (43200 ثانية)
@@ -220,6 +313,8 @@ class TacticsHallTask(BaseTask):
                 status="started",
                 retry_after=retry_after,
                 data={
+                    "actions": actions_performed,
+                    "free_draw": free_draw_result,
                     "mid": self.target_mid,
                     "name": t_info["name_ar"],
                     "category": t_info["category"],
@@ -227,19 +322,36 @@ class TacticsHallTask(BaseTask):
                 }
             )
         elif resp and resp.get("err") == "Err_HERO_TACTICAL_NOT_COUNT":
-            msg = f"تعذر بدء البحث: نفدت مرات البحث التكتيكي المتاحة اليوم أو نقص المخططات المطلوبة."
+            msg = "تعذر بدء البحث: نفدت مرات البحث التكتيكي المتاحة اليوم أو نقص المخططات المطلوبة."
+            if actions_performed:
+                msg = f"✅ ({' + '.join(actions_performed)}) | ⚠️ {msg}"
             self.log.warning(f"⚠️ {msg}")
             return TaskResult.ok(
                 msg,
                 status="no_attempts_left",
                 retry_after=86400,
-                data={"err": "Err_HERO_TACTICAL_NOT_COUNT"}
+                data={
+                    "actions": actions_performed,
+                    "free_draw": free_draw_result,
+                    "err": "Err_HERO_TACTICAL_NOT_COUNT"
+                }
             )
         else:
             err_code = resp.get("err", "unknown") if resp else "timeout"
-            msg = f"فشل بدء بحث {t_info['name_ar']} (كود الخطأ: {err_code})"
-            self.log.error(f"❌ {msg}")
-            return TaskResult.fail(msg, status="error", data={"err": err_code})
+            fail_msg = f"فشل بدء بحث {t_info['name_ar']} (كود الخطأ: {err_code})"
+            if actions_performed:
+                msg = f"✅ ({' + '.join(actions_performed)}) ولكن {fail_msg}"
+                return TaskResult.ok(
+                    msg,
+                    status="partial_success",
+                    data={
+                        "actions": actions_performed,
+                        "free_draw": free_draw_result,
+                        "err": err_code
+                    }
+                )
+            self.log.error(f"❌ {fail_msg}")
+            return TaskResult.fail(fail_msg, status="error", data={"err": err_code})
 
 
 # ════════════════════════════════════════════════════════════════════
