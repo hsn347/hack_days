@@ -57,7 +57,6 @@ from tasks.treasure_pavilion import TreasurePavilionTask
 from tasks.blacksmith_forge import BlacksmithForgeTask
 from tasks.imperial_mausoleum import ImperialMausoleumTask
 from tasks.alliance_treasure import AllianceTreasureTask
-from tasks.alliance_treasure_help import AllianceTreasureHelpTask
 from tasks.daily_luxury_gift import DailyLuxuryGiftTask
 from tasks.vip_gift import VipGiftTask
 from tasks.tactics_hall import TacticsHallTask, TACTICS_MAP, parse_tactic_choice
@@ -236,11 +235,6 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "alliance_treasure": {
         "enabled": True,             # مهمة إلزامية تلقائية (حفر مجاني ومساعدة الأعضاء)
         "index": 1,                  # رقم الصندوق المستهدف افتراضياً (1)
-    },
-
-    # 🤝 11e2. مهمة طلب مساعدة كنز التحالف واستلام الجوائز (Alliance Treasure Help)
-    "alliance_treasure_help": {
-        "enabled": True,             # استلام جوائز الصناديق وطلب مساعدة كنز التحالف دورياً
     },
 
     # 🎁 11f. مهمة الهدية الفاخرة اليومية (Daily Luxury Gift)
@@ -801,7 +795,6 @@ class BotManager:
         "blacksmith_forge",    # صقل معمل الحدادة المجاني تلقائياً في كل دورة
         "imperial_mausoleum",  # الضريح الإمبراطوري المجاني تلقائياً في كل دورة
         "alliance_treasure",        # صندوق التحالف المجاني تلقائياً في كل دورة
-        "alliance_treasure_help",   # طلب مساعدة كنز التحالف واستلام الجوائز دورياً في كل دورة
         "daily_luxury_gift",        # استلام الهدية الفاخرة اليومية تلقائياً في كل دورة
         "vip_gift",            # استلام صندوق الـ VIP المجاني تلقائياً في كل دورة
     }
@@ -2197,7 +2190,6 @@ class BotManager:
             ("🔨 صقل معمل الحدادة (Blacksmith Forge)",          self.step_11c_blacksmith_forge_task,   "blacksmith_forge"),
             ("🏛️ الضريح الإمبراطوري (Imperial Mausoleum)",     self.step_11d_imperial_mausoleum_task, "imperial_mausoleum"),
             ("📦 صندوق التحالف (Alliance Treasure)",            self.step_11e_alliance_treasure_task, "alliance_treasure"),
-            ("🤝 طلب مساعدة كنز التحالف (Alliance Treasure Help)", self.step_11e2_alliance_treasure_help_task, "alliance_treasure_help"),
             ("🎁 الهدية الفاخرة اليومية (Daily Luxury Gift)",    self.step_11f_daily_luxury_gift_task, "daily_luxury_gift"),
             ("👑 صندوق الـ VIP اليومي (VIP Daily Gift)",        self.step_11g_vip_gift_task,          "vip_gift"),
             ("🏛️ قاعة الاستراتيجيات (Tactics Hall)",             self.step_12_tactics_hall_task,        "tactics_hall"),
@@ -2792,28 +2784,6 @@ class BotManager:
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
-    # [11e2] مهمة طلب مساعدة كنز التحالف واستلام الجوائز (مفعلة تلقائياً عند تفعيل مهام التحالف)
-    async def step_11e2_alliance_treasure_help_task(self) -> Dict[str, Any]:
-        """فحص واستلام جوائز كنز التحالف وطلب مساعدة التحالف للصناديق الجارية دورياً (مفعلة تلقائياً عند تفعيل مهام التحالف)."""
-        alliance_cfg = self.config.get("alliance", {}) if isinstance(self.config.get("alliance"), dict) else {}
-        if not alliance_cfg.get("enabled", True):
-            log.info("ℹ️ مهمة مهام التحالف معطلة — تخطي طلب مساعدة كنز التحالف تلقائياً.")
-            return {"success": True, "message": "مهام التحالف معطلة"}
-
-        if getattr(self.context, "alliance_id", 0) == 0:
-            log.info("ℹ️ الحساب غير منضم لأي تحالف — تخطي طلب مساعدة كنز التحالف.")
-            return {"success": True, "message": "غير منضم لتحالف"}
-
-        log.info("🤝 بدء مهمة طلب مساعدة كنز التحالف (Alliance Treasure Help)...")
-        task = AllianceTreasureHelpTask(self.conn, {})
-        res = await task.run()
-
-        if res.success:
-            log.info(f"🎉 نتيجة طلب مساعدة كنز التحالف: {res.message}")
-        else:
-            log.warning(f"⚠️ تنبيه في طلب مساعدة كنز التحالف: {res.message}")
-
-        return {"success": res.success, "message": res.message, "data": res.data}
 
     # [11f] مهمة الهدية الفاخرة اليومية (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
     async def step_11f_daily_luxury_gift_task(self) -> Dict[str, Any]:

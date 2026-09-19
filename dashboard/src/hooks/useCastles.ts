@@ -63,7 +63,6 @@ export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConf
     blacksmith_forge:   { ...def.blacksmith_forge,   ...((fc.blacksmith_forge   as Record<string, unknown>) || {}) },
     imperial_mausoleum: { ...def.imperial_mausoleum, ...((fc.imperial_mausoleum as Record<string, unknown>) || {}) },
     alliance_treasure:  { ...def.alliance_treasure,  ...((fc.alliance_treasure  as Record<string, unknown>) || {}) },
-    alliance_treasure_help: { ...def.alliance_treasure_help, ...((fc.alliance_treasure_help as Record<string, unknown>) || {}) },
     daily_luxury_gift:  { ...def.daily_luxury_gift,  ...((fc.daily_luxury_gift  as Record<string, unknown>) || {}) },
     vip_gift:           { ...def.vip_gift,           ...((fc.vip_gift           as Record<string, unknown>) || {}) },
     tactics_hall:       { ...def.tactics_hall,       ...((fc.tactics_hall       as Record<string, unknown>) || {}) },
