@@ -85,19 +85,21 @@ class AllianceTreasureTask(BaseTask):
         own_member = member_mgr.get("ownMember") if isinstance(member_mgr, dict) else None
         has_alliance = bool(own_member and isinstance(own_member, dict) and own_member.get("aid"))
 
-        # استعلام مباشر وحي دائماً من السيرفر عبر 2015/1 دون أي اعتماد على كاش
-        raw_data = None
-        has_alliance = True
-        try:
-            resp = await self.conn.query(self.CMD_ALLIANCE_TREASURE, self.REQ_INIT, {}, timeout=8)
-            if resp and str(resp.get("err", "-1")) == "0":
-                raw_data = resp.get("rspdata") or resp.get("data") or {}
-                init_data.setdefault("allianceTreasureCtrl", {})["data"] = raw_data
-                has_alliance = True
-            elif resp and str(resp.get("err")) in ("10002", "10003", "10004", "10005"):
-                has_alliance = False
-        except Exception as ex:
-            log.debug(f"خطأ أثناء استعلام صندوق التحالف 2015/1: {ex}")
+        # جلب أحدث بيانات صندوق التحالف عبر 2015/1
+        cached_ctrl = init_data.get("allianceTreasureCtrl", {})
+        raw_data = cached_ctrl.get("data") if isinstance(cached_ctrl, dict) else None
+
+        if force_query or not raw_data:
+            try:
+                resp = await self.conn.query(self.CMD_ALLIANCE_TREASURE, self.REQ_INIT, {}, timeout=6)
+                if resp and str(resp.get("err", "-1")) == "0":
+                    raw_data = resp.get("data") or resp.get("rspdata") or {}
+                    init_data.setdefault("allianceTreasureCtrl", {})["data"] = raw_data
+                    has_alliance = True
+                elif resp and str(resp.get("err")) in ("10002", "10003", "10004", "10005"):
+                    has_alliance = False
+            except Exception as ex:
+                log.debug(f"خطأ أثناء استعلام صندوق التحالف 2015/1: {ex}")
 
         if not has_alliance:
             return {
@@ -217,7 +219,7 @@ class AllianceTreasureTask(BaseTask):
         )
 
         can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
-        can_request_help = len(active_digs) > 0
+        can_request_help = any(d.get("canCallHelp", True) not in (False, 0, "0", "false") for d in active_digs)
 
         ready = bool(can_receive_list or can_receive_help_rewards or free_dig_ready or can_help_others or can_request_help)
 
@@ -328,7 +330,7 @@ class AllianceTreasureTask(BaseTask):
             # إعادة تحديث الحالة بعد الاستلامات
             st = await self.get_free_status(force_query=True)
 
-        # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي دائماً] ──
+        # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي] ──
         can_help_members = st.get("unhelped_members", [])
         current_help_count = int(st.get("help_count", 0))
         max_help_count = int(st.get("max_help_count", 10))
@@ -366,10 +368,8 @@ class AllianceTreasureTask(BaseTask):
                     except Exception as e_h:
                         self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
 
-        # ── الخطوة 4: استعلام الصناديق الجارية وطلب المساعدة (2015/1 ثم 2015/4) ──
-        # استعلام مسبق ومباشر (2015/1) لضمان أحدث بيانات الصناديق قيد الحفر قبل طلب المساعدة
-        st_for_help = await self.get_free_status()
-        active_digs = st_for_help.get("active_digs", [])
+        # ── الخطوة 4: طلب المساعدة للصناديق الجارية الخاصة بي (2015/4) [إلزامي وتلقائي] ──
+        active_digs = st.get("active_digs", [])
         for d in active_digs:
             d_idx = d.get("index") or d.get("digIndex")
             if d_idx is not None:
@@ -389,8 +389,6 @@ class AllianceTreasureTask(BaseTask):
                     elif r_ch and str(r_ch.get("err")) == "620011":
                         d["canCallHelp"] = False
                         self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
-                    elif r_ch and str(r_ch.get("err")) == "620003":
-                        self.log.info(f"ℹ️ الصندوق #{d_idx} تمت مساعدته بالكامل مسبقاً.")
                     else:
                         err_ch = r_ch.get("err") if r_ch else "timeout"
                         self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
@@ -450,42 +448,27 @@ class AllianceTreasureTask(BaseTask):
         # استخراج بيانات الحفر الجديد
         dig_data = resp_dig.get("rspdata") or resp_dig.get("data") or {}
         new_dig_info = dig_data.get("newDigInfo", {})
-        dig_real_index = new_dig_info.get("index") if isinstance(new_dig_info, dict) else None
+        dig_real_index = new_dig_info.get("index")
 
-        if dig_real_index is None:
-            dig_real_index = dig_data.get("index") or dig_data.get("digIndex")
-
-        # ── الخطوة 7: استعلام بيانات الصندوق الجديد ثم طلب مساعدة التحالف (2015/1 ثم 2015/4) ──
-        # استعلام مباشر وفوري بعد الحفر لمعرفة رقم الصندوق الحقيقي (digListInfo) وتنشيط حالة المساعدة بالسيرفر
-        await asyncio.sleep(0.4)
-        st_after_dig = await self.get_free_status()
-        active_after = st_after_dig.get("active_digs", [])
-        target_new_idx = None
-        if active_after:
-            target_new_idx = active_after[0].get("index") or active_after[0].get("digIndex")
-        if target_new_idx is None:
-            target_new_idx = dig_real_index
-
-        if target_new_idx is not None:
-            self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف الجديد #{target_new_idx} (2015/4)...")
-            await asyncio.sleep(0.3)
+        # ── الخطوة 7: طلب مساعدة التحالف للصندوق الجديد (2015/4) [إلزامي وتلقائي] ──
+        if dig_real_index is not None:
+            self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف الجديد #{dig_real_index} (2015/4)...")
+            await asyncio.sleep(0.5)
             try:
                 r_call = await self.conn.query(
                     self.CMD_ALLIANCE_TREASURE,
                     self.REQ_CALL_HELP,
-                    {"index": int(target_new_idx)},
+                    {"index": int(dig_real_index)},
                     timeout=6
                 )
                 if r_call and str(r_call.get("err", "-1")) == "0":
                     help_requested_count += 1
-                    self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{target_new_idx} بنجاح.")
+                    self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{dig_real_index} بنجاح.")
                 elif r_call and str(r_call.get("err")) == "620011":
-                    self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{target_new_idx} مسبقاً.")
-                elif r_call and str(r_call.get("err")) == "620003":
-                    self.log.info(f"ℹ️ الصندوق #{target_new_idx} تمت مساعدته بالكامل مسبقاً.")
+                    self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{dig_real_index} مسبقاً.")
                 else:
                     err_c = r_call.get("err") if r_call else "timeout"
-                    self.log.warning(f"⚠️ نتيجة طلب مساعدة الصندوق #{target_new_idx}: {err_c}")
+                    self.log.warning(f"⚠️ نتيجة طلب مساعدة الصندوق #{dig_real_index}: {err_c}")
             except Exception as e_help:
                 self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_help}")
 

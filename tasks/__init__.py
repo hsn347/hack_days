@@ -27,6 +27,7 @@ from .treasure_pavilion import TreasurePavilionTask
 from .blacksmith_forge import BlacksmithForgeTask
 from .imperial_mausoleum import ImperialMausoleumTask
 from .alliance_treasure import AllianceTreasureTask
+from .alliance_treasure_help import AllianceTreasureHelpTask
 from .daily_luxury_gift import DailyLuxuryGiftTask
 from .vip_gift import VipGiftTask
 from .troy_treasure import TroyTreasureTask
@@ -39,6 +40,6 @@ __all__ = [
     'MerchantTask', 'SkillsTask', 'FountainTask', 'PortDelegateTask',
     'TerritoryExpansionTask', 'GoldGatherTask', 'ResearchTask', 'BuildingTask',
     'CityHarvestTask', 'PrestigeTask', 'PrestigeBoxTask', 'TreasurePavilionTask', 'BlacksmithForgeTask',
-    'ImperialMausoleumTask', 'AllianceTreasureTask', 'DailyLuxuryGiftTask', 'VipGiftTask', 'TroyTreasureTask'
+    'ImperialMausoleumTask', 'AllianceTreasureTask', 'AllianceTreasureHelpTask', 'DailyLuxuryGiftTask', 'VipGiftTask', 'TroyTreasureTask'
 ]
 
