@@ -391,7 +391,7 @@ class AllianceTreasureTask(BaseTask):
                         self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
                     else:
                         err_ch = r_ch.get("err") if r_ch else "timeout"
-                        self.log.debug(f"نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
+                        self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
                 except Exception as e_ch:
                     self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
 
@@ -453,16 +453,22 @@ class AllianceTreasureTask(BaseTask):
         # ── الخطوة 7: طلب مساعدة التحالف للصندوق الجديد (2015/4) [إلزامي وتلقائي] ──
         if dig_real_index is not None:
             self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف الجديد #{dig_real_index} (2015/4)...")
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
             try:
-                await self.conn.query(
+                r_call = await self.conn.query(
                     self.CMD_ALLIANCE_TREASURE,
                     self.REQ_CALL_HELP,
                     {"index": int(dig_real_index)},
                     timeout=6
                 )
-                help_requested_count += 1
-                self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{dig_real_index} بنجاح.")
+                if r_call and str(r_call.get("err", "-1")) == "0":
+                    help_requested_count += 1
+                    self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{dig_real_index} بنجاح.")
+                elif r_call and str(r_call.get("err")) == "620011":
+                    self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{dig_real_index} مسبقاً.")
+                else:
+                    err_c = r_call.get("err") if r_call else "timeout"
+                    self.log.warning(f"⚠️ نتيجة طلب مساعدة الصندوق #{dig_real_index}: {err_c}")
             except Exception as e_help:
                 self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_help}")
 
