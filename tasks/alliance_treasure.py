@@ -219,7 +219,7 @@ class AllianceTreasureTask(BaseTask):
         )
 
         can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
-        can_request_help = any(d.get("canCallHelp", True) not in (False, 0, "0", "false") for d in active_digs)
+        can_request_help = len(active_digs) > 0
 
         ready = bool(can_receive_list or can_receive_help_rewards or free_dig_ready or can_help_others or can_request_help)
 
@@ -330,7 +330,7 @@ class AllianceTreasureTask(BaseTask):
             # إعادة تحديث الحالة بعد الاستلامات
             st = await self.get_free_status(force_query=True)
 
-        # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي] ──
+        # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي دائماً] ──
         can_help_members = st.get("unhelped_members", [])
         current_help_count = int(st.get("help_count", 0))
         max_help_count = int(st.get("max_help_count", 10))
@@ -368,7 +368,7 @@ class AllianceTreasureTask(BaseTask):
                     except Exception as e_h:
                         self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
 
-        # ── الخطوة 4: طلب المساعدة للصناديق الجارية الخاصة بي (2015/4) [إلزامي وتلقائي] ──
+        # ── الخطوة 4: طلب المساعدة للصناديق الجارية الخاصة بي (2015/4) [إلزامي وتلقائي دائماً] ──
         active_digs = st.get("active_digs", [])
         for d in active_digs:
             d_idx = d.get("index") or d.get("digIndex")
@@ -389,6 +389,8 @@ class AllianceTreasureTask(BaseTask):
                     elif r_ch and str(r_ch.get("err")) == "620011":
                         d["canCallHelp"] = False
                         self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
+                    elif r_ch and str(r_ch.get("err")) == "620003":
+                        self.log.info(f"ℹ️ الصندوق #{d_idx} تمت مساعدته بالكامل مسبقاً.")
                     else:
                         err_ch = r_ch.get("err") if r_ch else "timeout"
                         self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
@@ -448,9 +450,20 @@ class AllianceTreasureTask(BaseTask):
         # استخراج بيانات الحفر الجديد
         dig_data = resp_dig.get("rspdata") or resp_dig.get("data") or {}
         new_dig_info = dig_data.get("newDigInfo", {})
-        dig_real_index = new_dig_info.get("index")
+        dig_real_index = new_dig_info.get("index") if isinstance(new_dig_info, dict) else None
 
-        # ── الخطوة 7: طلب مساعدة التحالف للصندوق الجديد (2015/4) [إلزامي وتلقائي] ──
+        if dig_real_index is None:
+            dig_real_index = dig_data.get("index") or dig_data.get("digIndex")
+
+        # إذا لم يُعثر على index مباشرة في رد الحفر، نستعلم فوراً عبر 2015/1 لمعرفة رقم الصندوق قيد الحفر بدقة
+        if dig_real_index is None:
+            await asyncio.sleep(0.3)
+            st_after_dig = await self.get_free_status(force_query=True)
+            active_after = st_after_dig.get("active_digs", [])
+            if active_after:
+                dig_real_index = active_after[0].get("index") or active_after[0].get("digIndex")
+
+        # ── الخطوة 7: طلب مساعدة التحالف للصندوق الجديد (2015/4) [إلزامي وتلقائي دائماً] ──
         if dig_real_index is not None:
             self.log.info(f"🤝 طلب مساعدة أعضاء التحالف لتسريع صندوق التحالف الجديد #{dig_real_index} (2015/4)...")
             await asyncio.sleep(0.5)
@@ -466,6 +479,8 @@ class AllianceTreasureTask(BaseTask):
                     self.log.info(f"✅ تم إرسال طلب مساعدة التحالف للصندوق #{dig_real_index} بنجاح.")
                 elif r_call and str(r_call.get("err")) == "620011":
                     self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{dig_real_index} مسبقاً.")
+                elif r_call and str(r_call.get("err")) == "620003":
+                    self.log.info(f"ℹ️ الصندوق #{dig_real_index} تمت مساعدته بالكامل مسبقاً.")
                 else:
                     err_c = r_call.get("err") if r_call else "timeout"
                     self.log.warning(f"⚠️ نتيجة طلب مساعدة الصندوق #{dig_real_index}: {err_c}")
