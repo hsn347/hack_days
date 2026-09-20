@@ -223,8 +223,15 @@ class MarchManagerTask(BaseTask):
 
         return total
 
-    def get_active_marches_count(self) -> int:
-        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة من بيانات الطوابير."""
+    async def get_active_marches_count(self) -> int:
+        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة مع تحديث فوري وتجنب التكرار."""
+        try:
+            await self.conn.query('1007', '1000', {}, timeout=2)
+            await asyncio.sleep(0.3)
+        except Exception:
+            pass
+
+        seen_ids = set()
         active = 0
         all_queue_data = []
         if getattr(self.conn, 'local_queues', None):
@@ -241,8 +248,63 @@ class MarchManagerTask(BaseTask):
             q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
             for q in q_list:
                 if isinstance(q, dict) and q.get('status') in (1, 2, 3, 4, 7):
-                    active += 1
+                    qid = q.get('id') or q.get('queueId')
+                    if qid:
+                        if qid not in seen_ids:
+                            seen_ids.add(qid)
+                            active += 1
+                    else:
+                        active += 1
         return active
+
+    async def wait_for_free_queue(self, context_desc: str = "") -> bool:
+        """
+        الانتظار الذكي عند نفاذ الفيالق (الحالة 1):
+          - يسجل سقف الفيالق الممتلئة للقلعة عند حدوث امتلاء الفيالق (كود 8004).
+          - يدخل حلقة انتظار بدقيقة كاملة (60 ثانية).
+          - بعد انتهاء الدقيقة: يستعلم من السيرفر فورياً (1007/1000) ويفحص حالة وعدد الفيالق.
+          - إذا وجد فيلقاً شاغراً (عاد أحد الفيالق)، يخرج فوراً ويسمح بإطلاق المسيرة.
+          - إذا كانت جميع الفيالق لا تزال مشغولة بالكامل، لا يطلق المسيرة ولا يرسل حزم للسيرفر، بل يواصل دورة انتظار 60 ثانية أخرى.
+        """
+        current_active = await self.get_active_marches_count()
+        max_q = getattr(self, '_max_castle_queues', 0)
+        if current_active > max_q:
+            self._max_castle_queues = current_active
+            max_q = current_active
+        if max_q <= 0:
+            max_q = max(current_active, self.max_queues)
+            self._max_castle_queues = max_q
+
+        wait_count = 0
+        while not self.is_time_expired():
+            wait_count += 1
+            self.log.info(
+                f"⏳ [الحالة 1: نفاذ الفيالق ({current_active}/{max_q})] "
+                f"جميع الفيالق مشغولة بالخارج — الانتظار دقيقة كاملة (60 ثانية) لتفريغ فيلق {context_desc} [دورة {wait_count}]..."
+            )
+            await asyncio.sleep(60)
+
+            if self.is_time_expired():
+                self.log.warning("⏱️ [انتهاء المهلة] انتهت مهلة الـ 20 دقيقة المخصصة أثناء انتظار عودة الفيالق.")
+                return False
+
+            # فحص حالة الفيالق بعد انتهاء دقيقة الانتظار قبل القيام بأي محاولة إطلاق
+            current_active = await self.get_active_marches_count()
+            self.log.info(f"🔍 [فحص الفيالق] الفيالق النشطة بالخارج حالياً: {current_active}/{max_q}")
+
+            if current_active < max_q:
+                self.log.info(
+                    f"✅ [توفر فيلق شاغر] عاد أحد الفيالق إلى القلعة بنجاح ({current_active}/{max_q}) "
+                    f"— جاري إطلاق المسيرة {context_desc} الآن!"
+                )
+                return True
+            else:
+                self.log.info(
+                    f"⏳ [الفيالق لا تزال ممتلئة ({current_active}/{max_q})] "
+                    f"لم يعد أي فيلق بعد — مواصلة الانتظار 60 ثانية أخرى دون إرسال محاولات فاشلة..."
+                )
+
+        return False
 
     async def get_active_gather_resource_types(self) -> Set[int]:
         """
@@ -331,7 +393,7 @@ class MarchManagerTask(BaseTask):
             if castle_troops >= MIN_ATTACK_ARMY_COUNT:
                 return True
 
-            active_marches = self.get_active_marches_count()
+            active_marches = await self.get_active_marches_count()
             if active_marches > 0:
                 self.log.info(
                     f"⏳ [الحالة 1: القوات في مسيرات بالخارج ({active_marches} مسيرات نشطة)] "
@@ -578,6 +640,14 @@ class MarchManagerTask(BaseTask):
             # محاولة إرسال مسيرة جمع عادية واحدة بحمولة الحقل كاملة مع معالجة الحالات
             consecutive_errs = 0
             while not self.is_time_expired():
+                # فحص مسبق: إذا كان سقف الفيالق معروفاً وكل الفيالق مشغولة بالخارج حالياً، ننتظر تفريغ فيلق أولاً
+                if getattr(self, '_max_castle_queues', 0) > 0:
+                    cur_act = await self.get_active_marches_count()
+                    if cur_act >= self._max_castle_queues:
+                        has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}")
+                        if not has_free_queue:
+                            return {"status": "timeout_or_no_queue"}
+
                 gather_cfg = {
                     "res_type": item["res_type"],
                     "max_marches": 1,
@@ -602,10 +672,11 @@ class MarchManagerTask(BaseTask):
                     self.log.info(f"✅ تم إرسال مسيرة جمع عادية لـ {item['name']} بنجاح لإنجاز مهمة الهيبة!")
                     break
 
-                # الحالة 1: الفيالق ممتلئة بالكامل بالخارج
+                # الحالة 1: الفيالق ممتلئة بالكامل بالخارج (كود 8004)
                 if res.data.get("queue_full"):
-                    self.log.info(f"⏳ [الحالة 1: نفاذ الفيالق] جميع الفيالق مشغولة بالخارج — الانتظار دقيقة كاملة (60 ثانية) لتفريغ فيلق لجمع {item['name']}...")
-                    await asyncio.sleep(60)
+                    has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}")
+                    if not has_free_queue:
+                        return {"status": "timeout_or_no_queue"}
                     continue
 
                 # فحص الحالة 3: انعدام الجيش بالقلعة

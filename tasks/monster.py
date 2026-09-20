@@ -565,16 +565,47 @@ class MonsterTask(BaseTask):
                     self.log.info(f"🛡️ [أمان ومكافحة حظر] انتظار {spacing} ثانية قبل تجهيز المسيرة التالية...")
                     await asyncio.sleep(spacing)
             elif result_code == "QUEUE_FULL":
-                if wait_for_queue and wait_cycles < max_wait_cycles:
+                if not wait_for_queue or wait_cycles >= max_wait_cycles:
+                    self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.")
+                    break
+
+                cur_act = await self.get_active_marches_count()
+                max_q = max(getattr(self, '_max_castle_queues', 0), cur_act)
+                if max_q <= 0:
+                    max_q = max(cur_act, max_marches)
+                self._max_castle_queues = max_q
+
+                queue_freed = False
+                while wait_for_queue and wait_cycles < max_wait_cycles:
                     wait_cycles += 1
-                    self.log.info(f"⏳ [طوابير ممتلئة ({wait_cycles}/{max_wait_cycles})] بانتظار عودة أحد الفيالق لتفريغ مسيرة (انتظار {wait_interval:.0f} ثانية)...")
+                    self.log.info(
+                        f"⏳ [طوابير ممتلئة ({cur_act}/{max_q}) - دورة {wait_cycles}/{max_wait_cycles}] "
+                        f"جميع الفيالق مشغولة بالخارج — الانتظار {wait_interval:.0f} ثانية لتفريغ فيلق للغزاة..."
+                    )
                     await asyncio.sleep(wait_interval)
+
+                    cur_act = await self.get_active_marches_count()
+                    self.log.info(f"🔍 [فحص الفيالق] الفيالق النشطة بالخارج حالياً: {cur_act}/{max_q}")
+                    if cur_act < max_q:
+                        self.log.info(
+                            f"✅ [توفر فيلق شاغر] عاد أحد الفيالق إلى القلعة بنجاح ({cur_act}/{max_q}) "
+                            f"— استئناف هجوم الغزاة الآن!"
+                        )
+                        queue_freed = True
+                        break
+                    else:
+                        self.log.info(
+                            f"⏳ [الفيالق لا تزال ممتلئة ({cur_act}/{max_q})] "
+                            f"لم يعد أي فيلق بعد — مواصلة الانتظار {wait_interval:.0f} ثانية أخرى دون إرسال محاولات فاشلة..."
+                        )
+
+                if queue_freed:
                     self._busy.clear()
                     self._used_army.clear()
                     await self._load_heroes()
                     continue
                 else:
-                    self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.")
+                    self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل بعد استنفاد دورات الانتظار.")
                     break
             elif result_code == "STAMINA_EMPTY":
                 self.log.warning("🛑 نفدت طاقة اللورد بالكامل — إنهاء المهمة.")
