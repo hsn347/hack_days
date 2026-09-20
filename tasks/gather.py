@@ -169,10 +169,10 @@ def _add_exclude(uid: Any, target_id: Any):
 
 def _score_gather_hero(hero: dict) -> Tuple[int, int, int]:
     """
-    تقييم البطل لاختيار الأنسب لجمع الموارد:
+    تقييم البطل لاختيار الأنسب لجمع الموارد وفق الترتيب الصارم:
     - Tier 3: بطل تنمية وجمع (5502) يمتلك مهارات جمع (5620)
-    - Tier 2: بطل تنمية وجمع (5502) آخر
-    - Tier 1: أي بطل حربي متاح بالقلعة (5501)
+    - Tier 2: بطل تنمية وجمع (5502) آخر حتى لو بدون مهارات جمع محددة
+    - Tier 1: أي بطل حربي أو بديل متاح بالقلعة (5501 وغيره)
     - المفاضلة الإضافية: النجوم ثم المستوى
     """
     hid = str(hero.get('id', ''))
@@ -184,10 +184,12 @@ def _score_gather_hero(hero: dict) -> Tuple[int, int, int]:
             for s in skills.values() if isinstance(s, dict)
         )
 
-    tier = 0
+    tier = 1
     if hid.startswith('5502'):
         tier = 3 if has_gather_skill else 2
     elif hid.startswith('5501'):
+        tier = 1
+    else:
         tier = 1
 
     level = int(hero.get('level') or hero.get('lv') or 1)
@@ -199,9 +201,9 @@ def pick_best_gather_hero(heroes: list, busy: Set[int]) -> Optional[int]:
     """
     اختيار أفضل بطل جمع متاح في القلعة وغير مشغول:
     1. أبطال الجمع والتنمية (5502) ذوو مهارات الجمع بالأعلى نجوماً ومستوى.
-    2. أبطال التنمية الآخرون.
-    3. الأبطال الحربيون الاحتياطيون.
-    4. يعيد None عند انشغال كافة الأبطال للسماح بإرسال المسيرة بدون بطل.
+    2. أبطال التنمية الآخرون (5502) بدون مهارات جمع.
+    3. الأبطال الحربيون والاحتياطيون بالقلعة (5501 وغيرهم).
+    4. يعيد None عند انشغال كافة الأبطال للسماح بإرسال المسيرة بدون بطل (عربات وجنود فقط).
     """
     available_heroes = []
     for hero in heroes:
@@ -581,16 +583,19 @@ class GatherTask(BaseTask):
 
         sent_count = 0
         consecutive_errors = 0
-        self._busy_heroes  = set(cfg.get('busy_heroes', []))
+        target_marches = int(cfg.get('max_marches') or 10)
+        max_attempts = target_marches * 3 + 6
+        attempts = 0
+
+        self._busy_heroes  = set(int(h) for h in cfg.get('busy_heroes', []))
         self._used_army    = {}
-        self._used_pets    = set()
+        self._used_pets    = set(int(p) for p in cfg.get('used_pets', []))
         self._excluded_now = set()
         last_status = None
 
-        march_idx = 0
-        while march_idx < max_marches_safety:
-            march_idx += 1
-            self.log.info(f"🏹 محاولة إرسال مسيرة الفيلق رقم ({march_idx})...")
+        while sent_count < target_marches and attempts < max_attempts:
+            attempts += 1
+            self.log.info(f"🏹 محاولة إرسال مسيرة الفيلق (المطلوب: {sent_count + 1}/{target_marches} | محاولة رقم {attempts}/{max_attempts})...")
 
             status = await self._send_one_march(
                 res_info=res_info,
@@ -605,10 +610,11 @@ class GatherTask(BaseTask):
             if status == "SUCCESS":
                 sent_count += 1
                 consecutive_errors = 0
-                # مهلة أمان مدمجة في الكود بين إطلاق المسيرات لمكافحة الحظر وتشتيت النمط
-                wait_time = round(random.uniform(9.0, 14.0), 2)
-                self.log.info(f"⏳ [حماية ومكافحة حظر] مهلة أمان قبل إطلاق الفيلق التالي ({wait_time} ثانية)...")
-                await asyncio.sleep(wait_time)
+                if sent_count < target_marches:
+                    # مهلة أمان مدمجة في الكود بين إطلاق المسيرات لمكافحة الحظر وتشتيت النمط
+                    wait_time = round(random.uniform(9.0, 14.0), 2)
+                    self.log.info(f"⏳ [حماية ومكافحة حظر] مهلة أمان قبل إطلاق الفيلق التالي ({wait_time} ثانية)...")
+                    await asyncio.sleep(wait_time)
             elif status in ("QUEUE_FULL", "8004", "9007004"):
                 self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
                 break
@@ -620,34 +626,40 @@ class GatherTask(BaseTask):
                 break
             elif status in ("HERO_BUSY", "TARGET_OCCUPIED"):
                 consecutive_errors += 1
-                if consecutive_errors >= 3:
-                    self.log.warning("⚠️ 3 أخطاء متتالية أثناء تجهيز المسيرات — إنهاء الدورة.")
+                if consecutive_errors >= 4:
+                    self.log.warning("⚠️ 4 أخطاء متتالية أثناء تجهيز المسيرات — إنهاء الدورة.")
                     break
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(1.5)
             else:
                 consecutive_errors += 1
-                if consecutive_errors >= 2:
+                if consecutive_errors >= 3:
                     break
 
         self.log.info("═" * 60)
-        self.log.info(f"🏁 النتيجة النهائية: تم إرسال {sent_count} مسيرة جمع بنجاح!")
+        self.log.info(f"🏁 النتيجة النهائية: تم إرسال {sent_count}/{target_marches} مسيرة جمع بنجاح!")
         self.log.info("═" * 60)
+
+        result_data = {
+            "sent": sent_count,
+            "dispatched": sent_count,
+            "queue_full": (last_status in ("QUEUE_FULL", "8004", "9007004")),
+            "stop_reason": last_status,
+            "busy_heroes": list(self._busy_heroes),
+            "used_pets": list(self._used_pets),
+        }
 
         if sent_count > 0:
             return TaskResult.ok(
                 f"✅ تم إرسال {sent_count} مسيرة جمع ({res_info['name']})",
-                sent=sent_count,
-                dispatched=sent_count,
-                queue_full=(last_status in ("QUEUE_FULL", "8004", "9007004")),
-                stop_reason=last_status
+                **result_data
             )
         if last_status in ("QUEUE_FULL", "8004", "9007004"):
-            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True, stop_reason="QUEUE_FULL")
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", **result_data)
         if last_status in ("NO_ARMY", "8009"):
-            return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة لإرسال مسيرة جمع كاملة", stop_reason="NO_ARMY")
+            return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة لإرسال مسيرة جمع كاملة", **result_data)
         if last_status == "NO_TARGET":
-            return TaskResult.fail(f"⚠️ لم يتم العثور على حقول {res_info['name']} متاحة في النطاق المحدد", stop_reason="NO_TARGET")
-        return TaskResult.fail("لم يتم إرسال أي مسيرة جمع", retry_after=120, stop_reason=str(last_status))
+            return TaskResult.fail(f"⚠️ لم يتم العثور على حقول {res_info['name']} متاحة في النطاق المحدد", **result_data)
+        return TaskResult.fail("لم يتم إرسال أي مسيرة جمع", retry_after=120, **result_data)
 
     # ── إرسال مسيرة فيلق واحدة ───────────────────────────────────
 
@@ -778,9 +790,12 @@ class GatherTask(BaseTask):
         chosen_hero = pick_best_gather_hero(self._heroes, self._busy_heroes)
         chosen_heroes_list = [chosen_hero] if chosen_hero else []
         if chosen_hero:
-            self.log.info(f"   🦸 البطل المختار تلقائياً: بطل #{chosen_hero}")
+            h_obj = next((h for h in self._heroes if isinstance(h, dict) and int(h.get('id', 0)) == chosen_hero), {})
+            h_tier, h_star, h_lv = _score_gather_hero(h_obj)
+            h_type_desc = "بطل تنمية بمهارات جمع" if h_tier == 3 else ("بطل تنمية عام" if h_tier == 2 else "بطل حربي/بديل")
+            self.log.info(f"   🦸 البطل المختار تلقائياً: بطل #{chosen_hero} [{h_type_desc}] (نجوم: {h_star}★ | لفل: {h_lv})")
         else:
-            self.log.info("   🦸 تم إرسال المسيرة بدون بطل (لاستغلال كافة الفيالق الشاغرة)")
+            self.log.info("   🦸 تم إرسال المسيرة بدون بطل (عربات وجنود فقط لعدم توفر أبطال شاغرين بالقلعة)")
 
         pets_list = select_gathering_pet(self.conn, self._used_pets)
         if pets_list:
@@ -855,15 +870,21 @@ class GatherTask(BaseTask):
         elif err == '8009':
             self.log.warning(f"   ⚠️ نقص في القوات المتاحة بالقلعة (كود {err})")
             return "NO_ARMY"
-        elif err == '9007020':
+        elif err in ('9007020', '8014', '9007014'):
             if chosen_hero:
                 self._busy_heroes.add(chosen_hero)
+            self.log.warning(f"   ⚠️ البطل #{chosen_hero} مشغول في مسيرة أخرى (كود {err}) — استبعاده فوراً واختيار بديل")
+            return "HERO_BUSY"
+        elif err in ('8015', '9007021'):
+            if pets_list:
+                self._used_pets.add(pets_list[0])
+            self.log.warning(f"   ⚠️ الحيوان الأليف #{pets_list[0]} مشغول (كود {err}) — استبعاده فوراً واختيار بديل")
             return "HERO_BUSY"
         elif err in ('8062', '8063', '8060', '9007062'):
             self.log.warning(f"   ⚠️ الحقل {target_id} مشغول أو تغيرت حالته (كود {err})")
             return "TARGET_OCCUPIED"
         else:
-            self.log.error(f"   ❌ خطأ أثناء إطلاق المسيرة: {err} | الهدف={target_id}")
+            self.log.error(f"   ❌ خطأ غير متوقع أثناء إطلاق المسيرة: كود {err} | الحقل={target_id}")
             return "ERROR"
 
 

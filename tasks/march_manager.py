@@ -97,6 +97,8 @@ class MarchManagerTask(BaseTask):
 
         self.start_time: float = 0.0
         self.max_duration_seconds: float = self.duration_minutes * 60.0
+        self._busy_heroes: Set[int] = set()
+        self._used_pets: Set[int] = set()
 
     # ────────────────────────────────────────────────────────────────
     #  إدارة الوقت والمهلة الزمنية (20 دقيقة)
@@ -500,11 +502,17 @@ class MarchManagerTask(BaseTask):
                     "max_marches": 1,
                     "level": int(cfg.get("level", 6)),
                     "search_range": int(cfg.get("search_range", 100)),
+                    "busy_heroes": list(self._busy_heroes),
+                    "used_pets": list(self._used_pets),
                 }
 
                 gather_task = GatherTask(self.conn, gather_cfg)
                 self._forward_subtask_logs(gather_task)
                 res = await gather_task.run()
+
+                # تراكم وتحديث الأبطال والحيوانات المشغولة عبر جميع الموارد
+                self._busy_heroes.update(gather_task._busy_heroes)
+                self._used_pets.update(gather_task._used_pets)
 
                 if res.success and res.data.get("sent", 0) > 0:
                     sent_total += 1
