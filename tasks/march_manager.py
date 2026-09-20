@@ -53,6 +53,14 @@ from game_client import GameConnection
 from tasks.monster import MonsterTask
 from tasks.stronghold import StrongholdTask
 from tasks.gather import GatherTask
+from tasks.transport import (
+    get_market_capacity_from_conn,
+    calculate_resource_allocation,
+    get_target_castle_info,
+    RESOURCE_NAMES,
+    DEFAULT_MAX_CAPACITY,
+    DEFAULT_TAX_RATE,
+)
 
 # ── معرفات مهام الهيبة من السيرفر (meritoriousTaskCtrl) ───────────────
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
@@ -87,6 +95,7 @@ class MarchManagerTask(BaseTask):
         "prestige_invaders",
         "prestige_stronghold",
         "prestige_gather",
+        "transport",
     ]
 
     def __init__(self, conn: GameConnection, config: dict = None):
@@ -707,6 +716,193 @@ class MarchManagerTask(BaseTask):
         }
 
     # ────────────────────────────────────────────────────────────────
+    #  الأولوية 4: مساعدة الموارد (Resource Transport / Aid)
+    # ────────────────────────────────────────────────────────────────
+
+    async def execute_priority_transport(self) -> Dict[str, Any]:
+        """
+        تنفيذ أولوية مساعدة ونقل الموارد الشاملة (Farm Transport) لقلعة محددة بالإحداثيات:
+          - تستمر بإرسال مسيرات النقل حتى نفاد الموارد غير المحمية بالقلعة أو انتهاء مهلة المهمة (20 دقيقة).
+          - عند امتلاء الفيالق (الحالة 1 / كود 8004): تنتظر دقيقة كاملة (60 ثانية)
+            ثم تفحص حالة الفيالق وتستأنف النقل فور توفر فيلق شاغر.
+        """
+        cfg = self.config.get("transport", {})
+        if not cfg.get("enabled", False):
+            self.log.info("⏭️ [أولوية 4] تم تخطي مساعدة الموارد (معطلة من الإعدادات).")
+            return {"status": "skipped", "reason": "disabled"}
+
+        target_x = cfg.get("target_x")
+        target_y = cfg.get("target_y")
+        if target_x is None or target_y is None or (int(target_x) == 0 and int(target_y) == 0):
+            self.log.warning("⚠️ [أولوية 4] لم يتم تحديد إحداثيات القلعة الهدف (target_x, target_y) لمساعدة الموارد — تخطي الأولوية.")
+            return {"status": "skipped", "reason": "no_target_coords"}
+
+        target_x = int(target_x)
+        target_y = int(target_y)
+        res_ids = cfg.get("resource_ids") or [1002, 1003, 1004, 1005]
+        if not isinstance(res_ids, list):
+            res_ids = [res_ids]
+
+        res_desc = ", ".join([RESOURCE_NAMES.get(rid, str(rid)) for rid in res_ids])
+        self.log.info(f"🚚 ───【 الأولوية 4: مساعدة ونقل الموارد إلى ({target_x}, {target_y}) | الموارد: [{res_desc}] 】───")
+
+        # 1. جلب معرف المملكة (kingdom_id)
+        kingdom_id = 0
+        if getattr(self.conn, "kingdom_id", None):
+            try:
+                kingdom_id = int(self.conn.kingdom_id)
+            except Exception:
+                pass
+        if not kingdom_id:
+            try:
+                r_map = await self.conn.query('1002', '7', {"uid": int(self.uid) if str(self.uid).isdigit() else self.uid})
+                if r_map and 'data' in r_map:
+                    kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
+            except Exception:
+                pass
+        if not kingdom_id:
+            kingdom_id = 259
+
+        # 2. جلب بيانات ومعرف القلعة الهدف
+        self.log.info(f"🔍 [أولوية 4] جلب بيانات ومعرف القلعة الهدف عند ({target_x}, {target_y})...")
+        castle_info = await get_target_castle_info(self.conn, target_x, target_y)
+        if castle_info and castle_info.get('id'):
+            target_id = castle_info['id']
+            actual_x  = castle_info.get('x', target_x)
+            actual_y  = castle_info.get('y', target_y)
+            c_lv      = castle_info.get('level', '?')
+            self.log.info(f"🎯 تم العثور على القلعة الهدف: ID={target_id} عند ({actual_x}, {actual_y}) لفل={c_lv}")
+        else:
+            target_id = f"{target_x + 1}-{target_y + 1}-4-0-0"
+            actual_x, actual_y = target_x, target_y
+            self.log.warning(f"⚠️ تعذر جلب ID القلعة الهدف تلقائياً، استخدام المعرف المشتق: {target_id}")
+
+        # 3. حساب سعة السوق والضريبة
+        auto_cap, auto_tax = get_market_capacity_from_conn(self.conn)
+        max_cap = int(cfg.get("max_capacity") or auto_cap)
+        tax_rate = float(cfg.get("tax_rate") or auto_tax)
+        self.log.info(f"🏛️ سعة حمولة السوق المعتمدة: {max_cap:,} (نسبة الضريبة: {int(tax_rate * 100)}%)")
+
+        sent_count = 0
+        total_transported = 0
+        consecutive_errs = 0
+
+        # حلقة النقل المستمرة حتى نفاد الموارد أو انتهاء وقت المهمة
+        while not self.is_time_expired():
+            # أ. فحص مسبق: إذا كان سقف الفيالق معروفاً وكل الفيالق مشغولة بالخارج حالياً، ننتظر تفريغ فيلق أولاً
+            if getattr(self, '_max_castle_queues', 0) > 0:
+                cur_act = await self.get_active_marches_count()
+                if cur_act >= self._max_castle_queues:
+                    has_free_queue = await self.wait_for_free_queue("لنقل الموارد")
+                    if not has_free_queue:
+                        return {"status": "timeout_or_no_queue", "sent": sent_count, "total": total_transported}
+
+            # ب. فحص رصيد الموارد غير المحمية بالقلعة
+            city = self.conn.init_data.get('cityCtrl', {})
+            reslist = city.get('reslist', {}) if isinstance(city, dict) else {}
+            saferes = city.get('saferes', {}) if isinstance(city, dict) else {}
+
+            base_alloc = calculate_resource_allocation(res_ids, total_capacity=max_cap, tax_rate=tax_rate)
+            current_march_resources = []
+            for item in base_alloc:
+                rid_str = str(item['id'])
+                req_num = item['num']
+                total_res = float(reslist.get(rid_str, 0))
+                safe_res  = float(saferes.get(rid_str, 0))
+                avail_res = max(0, int(total_res - safe_res))
+
+                if avail_res <= 0:
+                    continue
+
+                send_num = min(req_num, avail_res)
+                current_march_resources.append({
+                    "id": item['id'],
+                    "num": send_num
+                })
+
+            if not current_march_resources:
+                self.log.info("🏁 [أولوية 4: مساعدة الموارد] استُنفدت جميع الموارد غير المحمية القابلة للنقل بالقلعة — اكتمال المهمة بنجاح!")
+                break
+
+            current_payload_units = sum(r['num'] for r in current_march_resources)
+            current_march_idx = sent_count + 1
+            self.log.info(f"🚚 [أولوية 4] تجهيز فيلق النقل #{current_march_idx} بحمولة {current_payload_units:,} إلى ({actual_x}, {actual_y})...")
+
+            march_payload = {
+                "matrixType": 4,      # 4 = نقل موارد
+                "moveLineType": 5,    # 5 = مسار خط النقل
+                "mapId": int(kingdom_id),
+                "data": {
+                    "to": {
+                        "x": int(actual_x),
+                        "y": int(actual_y),
+                        "id": str(target_id)
+                    },
+                    "data": {
+                        "resourceList": current_march_resources
+                    }
+                }
+            }
+
+            r_send = await self.conn.query('1007', '2', march_payload, timeout=6)
+            if not r_send:
+                consecutive_errs += 1
+                self.log.warning(f"⚠️ لم يستجب السيرفر لأمر إرسال فيلق النقل (#{current_march_idx})")
+                if consecutive_errs >= 3:
+                    break
+                await asyncio.sleep(3.0)
+                continue
+
+            err = str(r_send.get('err', '0'))
+            if err == '0':
+                sent_count += 1
+                total_transported += current_payload_units
+                consecutive_errs = 0
+                self.log.info(f"✅ [أولوية 4] تم إرسال فيلق النقل #{sent_count} بنجاح! 🚚 إجمالي المنقول حتى الآن: {total_transported:,}")
+
+                # خصم الكمية المنقولة محلياً من كاش القلعة فوراً
+                for itm in current_march_resources:
+                    r_str = str(itm['id'])
+                    if r_str in reslist:
+                        try:
+                            reslist[r_str] = max(0.0, float(reslist[r_str]) - float(itm['num']))
+                        except Exception:
+                            pass
+
+                # مهلة أمان عشوائية بين مسيرات النقل ضد الحظر
+                await asyncio.sleep(round(random.uniform(4.0, 6.0), 2))
+
+            elif err in ('8004', '9007004'):
+                # الحالة 1: امتلاء الفيالق بالكامل
+                self.log.info("🛑 [أولوية 4: نفاذ الفيالق] جميع طوابير المسيرات ممتلئة بالخارج (كود 8004).")
+                has_free_queue = await self.wait_for_free_queue("لنقل الموارد")
+                if not has_free_queue:
+                    return {"status": "timeout_or_no_queue", "sent": sent_count, "total": total_transported}
+                continue
+
+            elif err == '8009':
+                self.log.info("🏁 [أولوية 4: مساعدة الموارد] الموارد غير كافية بالقلعة لإرسال المزيد (كود 8009) — اكتمال المهمة بنجاح!")
+                break
+
+            elif err in ('8062', '8063', '8060'):
+                self.log.warning(f"⚠️ [أولوية 4] تعذر الإرسال للقلعة الهدف (كود {err}) — إنهاء الأولوية.")
+                break
+
+            else:
+                consecutive_errs += 1
+                self.log.error(f"❌ فشل إرسال فيلق النقل #{current_march_idx} (كود الخطأ: {err})")
+                if consecutive_errs >= 3:
+                    break
+                await asyncio.sleep(3.0)
+
+        self.log.info(f"🏁 ───【 اكتمال أولوية مساعدة الموارد: تم إرسال {sent_count} فيلق | إجمالي الموارد المنقولة: {total_transported:,} 】───")
+        return {
+            "status": "completed",
+            "sent": sent_count,
+            "total_transported": total_transported,
+        }
+
+    # ────────────────────────────────────────────────────────────────
     #  محرك التنفيذ المركزي (Execution Pipeline)
     # ────────────────────────────────────────────────────────────────
 
@@ -730,6 +926,7 @@ class MarchManagerTask(BaseTask):
             "prestige_invaders": self.execute_priority_prestige_invaders,
             "prestige_stronghold": self.execute_priority_prestige_stronghold,
             "prestige_gather": self.execute_priority_prestige_gather,
+            "transport": self.execute_priority_transport,
         }
 
         for p_key in self.priority_order:
