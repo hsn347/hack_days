@@ -27,7 +27,7 @@ import sys
 import time
 import zlib
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ── استيراد الكريبتو المثبتة من onemt_bot.py ─────────────────────
 try:
@@ -286,6 +286,7 @@ class GateClient:
             c    = r.get('content', {})
             cmd  = str(c.get('cmd', '')) if isinstance(c, dict) else ''
             sub  = str(c.get('subcmd', '')) if isinstance(c, dict) else ''
+            subcmd = sub
             cmd_key = (cmd, sub)
 
             # وضع التجسس على الحزم (Spy Mode)
@@ -360,7 +361,7 @@ class GateClient:
                 fut = self._cmd_pending.pop((cmd, ''))
             else:
                 for (p_cmd, p_sub), p_fut in list(self._cmd_pending.items()):
-                    if p_cmd == cmd and (not p_sub or p_sub == subcmd) and not p_fut.done():
+                    if p_cmd == cmd and (not p_sub or p_sub == sub) and not p_fut.done():
                         fut = self._cmd_pending.pop((p_cmd, p_sub))
                         break
 

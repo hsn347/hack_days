@@ -354,6 +354,22 @@ class PrestigeTask(BaseTask):
         consecutive_errors = 0
         max_refreshes = 30
 
+        def _has_buyable_item(items: List[Dict[str, Any]]) -> bool:
+            """فحص هل توجد أي سلعة معروضة حالياً يمكن شراؤها بالموارد العادية ورصيدها متوفر."""
+            for itm in items:
+                if not isinstance(itm, dict):
+                    continue
+                sid = itm.get("shopItemID")
+                pt = itm.get("pricetype")
+                pr = float(itm.get("price", 0))
+                ib = itm.get("isBuy", 0)
+                if ib == 1 or not sid:
+                    continue
+                if pt in ALLOWED_SMUGGLER_CURRENCIES and pt not in DISALLOWED_CURRENCIES:
+                    if resources.get(pt, 0) >= pr:
+                        return True
+            return False
+
         while len(purchased_items) < needed_buys:
             if not getattr(self.conn, "is_connected", True):
                 self.log.warning("⚠️ انقطع الاتصال بالسيرفر أثناء الشراء من المتجر!")
@@ -361,64 +377,76 @@ class PrestigeTask(BaseTask):
 
             purchased_in_this_pass = False
 
-            # فحص وشراء كافة السلع المعروضة المتاحة بالموارد
-            for idx, itm in enumerate(shop_items):
-                if not isinstance(itm, dict):
-                    continue
-                shop_id = itm.get("shopItemID")
-                ptype = itm.get("pricetype")
-                price = float(itm.get("price", 0))
-                is_buy = itm.get("isBuy", 0)
+            # فحص وشراء السلع المعروضة مع الشراء الفوري المتتالي لأي سلعة بديلة تنزل بالموارد
+            for idx in range(len(shop_items)):
+                if len(purchased_items) >= needed_buys:
+                    break
 
-                if is_buy == 1 or not shop_id:
-                    continue
-
-                # استبعاد الذهب والعملات الخاصة نهائياً
-                if ptype in DISALLOWED_CURRENCIES or ptype not in ALLOWED_SMUGGLER_CURRENCIES:
-                    continue
-
-                curr_info = ALLOWED_SMUGGLER_CURRENCIES[ptype]
-                curr_name = curr_info["name"]
-                curr_icon = curr_info["icon"]
-                avail_bal = resources.get(ptype, 0)
-
-                if avail_bal < price:
-                    continue
-
-                # محاكاة بشرية سريعة قبل الشراء
-                await asyncio.sleep(round(random.uniform(1.2, 2.2), 2))
-
-                buy_resp = await self.conn.query("1024", "3", {"shopItemID": int(shop_id)}, timeout=6)
-                if buy_resp and str(buy_resp.get("err", "0")) == "0":
-                    consecutive_errors = 0
-                    resources[ptype] = max(0, resources[ptype] - price)
-                    purchased_items.append({"shop_id": shop_id, "currency": curr_name, "price": price})
-                    self.log.info(
-                        f"✅ [متجر المهربين ({len(purchased_items)}/{self.target_smuggler_buys})] "
-                        f"تم شراء سلعة #{shop_id}! {curr_icon} السعر: {int(price):,} {curr_name}"
-                    )
-                    purchased_in_this_pass = True
-
-                    # استبدال السلعة المشتراة بالسلعة البديلة الجديدة فوراً
-                    new_item = buy_resp.get("data", {}).get("newShopItem")
-                    if new_item and isinstance(new_item, dict):
-                        shop_items[idx] = new_item
-                    else:
-                        shop_items[idx] = {}
-
-                    if len(purchased_items) >= needed_buys:
+                # حلقة الشراء المتتالي في نفس الخانة طالما تنزل سلع بديلة بالموارد
+                while len(purchased_items) < needed_buys:
+                    if idx >= len(shop_items):
                         break
-                else:
-                    consecutive_errors += 1
-                    err_c = buy_resp.get("err") if buy_resp else "timeout"
-                    self.log.warning(f"⚠️ تعذر شراء السلعة #{shop_id} (كود: {err_c})")
-                    if consecutive_errors >= 3:
+                    itm = shop_items[idx]
+                    if not isinstance(itm, dict):
+                        break
+                    shop_id = itm.get("shopItemID")
+                    ptype = itm.get("pricetype")
+                    price = float(itm.get("price", 0))
+                    is_buy = itm.get("isBuy", 0)
+
+                    if is_buy == 1 or not shop_id:
+                        break
+
+                    # استبعاد الذهب والعملات الخاصة نهائياً
+                    if ptype in DISALLOWED_CURRENCIES or ptype not in ALLOWED_SMUGGLER_CURRENCIES:
+                        break
+
+                    curr_info = ALLOWED_SMUGGLER_CURRENCIES[ptype]
+                    curr_name = curr_info["name"]
+                    curr_icon = curr_info["icon"]
+                    avail_bal = resources.get(ptype, 0)
+
+                    if avail_bal < price:
+                        break
+
+                    # محاكاة بشرية سريعة قبل الشراء
+                    await asyncio.sleep(round(random.uniform(1.2, 2.2), 2))
+
+                    buy_resp = await self.conn.query("1024", "3", {"shopItemID": int(shop_id)}, timeout=6)
+                    if buy_resp and str(buy_resp.get("err", "0")) == "0":
+                        consecutive_errors = 0
+                        resources[ptype] = max(0, resources[ptype] - price)
+                        purchased_items.append({"shop_id": shop_id, "currency": curr_name, "price": price})
+                        self.log.info(
+                            f"✅ [متجر المهربين ({len(purchased_items)}/{needed_buys})] "
+                            f"تم شراء سلعة #{shop_id}! {curr_icon} السعر: {int(price):,} {curr_name}"
+                        )
+                        purchased_in_this_pass = True
+
+                        # استبدال السلعة المشتراة بالسلعة البديلة الجديدة فوراً في نفس الخانة ومتابعة فحصها
+                        new_item = buy_resp.get("data", {}).get("newShopItem")
+                        if new_item and isinstance(new_item, dict):
+                            shop_items[idx] = new_item
+                            self.log.debug(f"🔄 نزلت سلعة بديلة في الخانة #{idx} (shopItemID: {new_item.get('shopItemID')})")
+                        else:
+                            shop_items[idx] = {}
+                            break
+                    else:
+                        consecutive_errors += 1
+                        err_c = buy_resp.get("err") if buy_resp else "timeout"
+                        self.log.warning(f"⚠️ تعذر شراء السلعة #{shop_id} (كود: {err_c})")
+                        if consecutive_errors >= 3:
+                            break
                         break
 
             if len(purchased_items) >= needed_buys:
                 break
 
-            # محاولة التحديث المجاني فقط
+            # تأكيد انتهاء سلع الموارد: إذا تم الشراء في هذه الجولة ولا زالت توجد سلع بالموارد، نكرر الفحص
+            if purchased_in_this_pass and _has_buyable_item(shop_items):
+                continue
+
+            # إذا لم تعد هناك أي سلعة معروضة أو بديلة بالموارد، نلجأ للتحديث المجاني فقط
             if refresh_gold == 0 and total_refreshes < max_refreshes:
                 total_refreshes += 1
                 self.log.info(f"🔄 [متجر المهربين] تحديث المتجر مجاناً (التحديث #{total_refreshes})...")
