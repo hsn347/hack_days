@@ -64,12 +64,14 @@ DISALLOWED_CURRENCIES: Set[int] = {1001, 1006}  # الذهب والعملات ا
 # ── معرفات مهام الهيبة اليومية لداخل القلعة (meritoriousTaskCtrl) ───
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
     "smuggler": 4112022,        # متجر المهربين / التاجر المتجول (10 مشتريات)
+    "watermill": 4112027,       # تعزيز إنتاج حقول الموارد (الساقية - مرة واحدة)
     "badge_exchange": 4112024,  # تبديل الموارد بوسام الحرب (مرة واحدة)
 }
 
 # أسماء وتسميات مهام الهيبة للعرض والتقارير
 PRESTIGE_QUEST_NAMES: Dict[str, str] = {
     "smuggler": "متجر المهربين (10 مشتريات بالموارد)",
+    "watermill": "تعزيز إنتاج حقول الموارد (الساقية)",
     "badge_exchange": "تبديل القمح بوسام الحرب (مرة واحدة)",
 }
 
@@ -478,10 +480,24 @@ class PrestigeTask(BaseTask):
 
     async def run_watermill_step(self) -> Dict[str, Any]:
         """
-        تشغيل مهمة الساقية لتفعيل جميع مباني الموارد (مزارع، مناشر، مناجم).
-        مسموح بالشراء من متجر التحالف بالكامل لضمان التفعيل.
+        تشغيل مهمة الساقية لتفعيل جميع مباني الموارد (مزارع، مناشر، مناجم) لمهام الهيبة:
+          - فحص مسبق: إذا كانت مهمة الهيبة مكتملة بالفعل (4112027) يتم تخطيها فوراً لحفظ نقاط التحالف.
+          - مسموح بالشراء من متجر التحالف بالكامل لضمان التفعيل عند الحاجة.
         """
-        self.log.info("💧 ───【 الخطوة 2: الساقية — تفعيل جميع مباني إنتاج الموارد 】───")
+        q_info = self.get_quest_info("watermill")
+        if q_info["is_done"]:
+            self.log.info(
+                f"✨ [استعلام مسبق] مهمة تعزيز إنتاج الموارد (الساقية) في الهيبة مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']}) "
+                f"— يتم تخطي خطوة الهيبة لتوفير نقاط شرف التحالف!"
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "activated": 0,
+                "message": f"مكتملة مسبقاً في الهيبة ({q_info['c_num']}/{q_info['l_num']})"
+            }
+
+        self.log.info("💧 ───【 الخطوة 2: الساقية — تفعيل جميع مباني إنتاج الموارد لمهام الهيبة 】───")
         try:
             wm_cfg = {
                 "types": "all",
@@ -712,7 +728,7 @@ class PrestigeTask(BaseTask):
         await self._refresh_merit_data()
 
         # 0.1 الاستعلام المسبق وفحص حالة مهام الهيبة من السيرفر (المهام الداخلية)
-        quests_status = self.query_prestige_summary(["smuggler", "badge_exchange"])
+        quests_status = self.query_prestige_summary(["smuggler", "watermill", "badge_exchange"])
         self.log_prestige_overview(quests_status)
 
         # 1. متجر المهربين
@@ -762,6 +778,7 @@ class PrestigeTask(BaseTask):
         watermill_activated = watermill_res.get("activated", 0)
         train_trained = train_res.get("trained_count", 0)
         smuggler_skipped = bool(smuggler_res.get("skipped"))
+        watermill_skipped = bool(watermill_res.get("skipped"))
         badge_exchanged = badge_res.get("exchanged", 0)
         badge_skipped = bool(badge_res.get("skipped"))
 
@@ -777,6 +794,8 @@ class PrestigeTask(BaseTask):
 
         if watermill_res.get("user_disabled"):
             skipped_parts.append("الساقية (معطل)")
+        elif watermill_skipped:
+            skipped_parts.append("الساقية ✨")
         else:
             executed_parts.append(f"الساقية ({watermill_activated} مبنى)")
 
@@ -812,6 +831,7 @@ class PrestigeTask(BaseTask):
             smuggler_buys=total_bought,
             smuggler_skipped=smuggler_skipped,
             watermill_activated=watermill_activated,
+            watermill_skipped=watermill_skipped,
             train_trained=train_trained,
             fortress_ok=fortress_res.get("success", False),
             badge_exchanged=badge_exchanged,
