@@ -63,7 +63,7 @@ DISALLOWED_CURRENCIES: Set[int] = {1001, 1006}  # الذهب والعملات ا
 
 # ── معرفات مهام الهيبة اليومية لداخل القلعة (meritoriousTaskCtrl) ───
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
-    "smuggler": 4112020,        # متجر المهربين (10 مشتريات)
+    "smuggler": 4112022,        # متجر المهربين / التاجر المتجول (10 مشتريات)
     "badge_exchange": 4112024,  # تبديل الموارد بوسام الحرب (مرة واحدة)
 }
 
