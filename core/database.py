@@ -23,9 +23,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("LocalDB")
 
-# المسار الافتراضي لملف قاعدة البيانات في المجلد الرئيسي للمشروع
+# المسار الافتراضي لملف قاعدة البيانات في مجلد database/ المخصص
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DB_PATH = os.path.join(_BASE_DIR, "castles.db")
+DB_DIR = os.path.join(_BASE_DIR, "database")
+DEFAULT_DB_PATH = os.path.join(DB_DIR, "castles.db")
 
 # قفل لمنع التضارب عند التهيئة المبدئية داخل نفس العملية
 _init_lock = threading.Lock()
@@ -33,8 +34,28 @@ _db_initialized = False
 
 
 def get_db_path(custom_path: Optional[str] = None) -> str:
-    """الحصول على مسار ملف قاعدة البيانات المعتمد."""
-    return custom_path or os.getenv("CASTLES_DB_PATH") or DEFAULT_DB_PATH
+    """
+    الحصول على مسار ملف قاعدة البيانات المعتمد:
+    1. المسار المخصص (إن وُجد)
+    2. متغير البيئة CASTLES_DB_PATH (إن وُجد)
+    3. المسار الجديد داخل مجلد database/castles.db
+    4. التوافق العكسي: إذا لم يُنقل الملف بعد وما زال في الجذر، يُستخدم القديم تلقائياً.
+    """
+    if custom_path:
+        return custom_path
+    if os.getenv("CASTLES_DB_PATH"):
+        return os.environ["CASTLES_DB_PATH"]
+
+    os.makedirs(DB_DIR, exist_ok=True)
+
+    if os.path.exists(DEFAULT_DB_PATH):
+        return DEFAULT_DB_PATH
+
+    legacy_path = os.path.join(_BASE_DIR, "castles.db")
+    if os.path.exists(legacy_path):
+        return legacy_path
+
+    return DEFAULT_DB_PATH
 
 
 def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:

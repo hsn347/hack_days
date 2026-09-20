@@ -27,11 +27,14 @@ session_cache.json
 .bot_cfg_*.json
 .bot_config_*.json
 .sched_*.json
+data/
 _frida_session.js
 
 # SQLite local databases and runtime data
 castles.db*
 *.db
+*.db*
+database/*.db*
 *.sqlite3
 exclude_history.json
 shared_gather_history.json

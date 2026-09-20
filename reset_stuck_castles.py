@@ -33,9 +33,9 @@ def reset_remote():
     remote_code = '''
 import sys
 sys.path.insert(0, "/var/www/osmanli")
-from core.database import reset_stuck_castles_db
-cnt = reset_stuck_castles_db("/var/www/osmanli/castles.db")
-print(f"DONE: Reset {cnt} castles to idle in /var/www/osmanli/castles.db")
+from core.database import reset_stuck_castles_db, get_db_path
+cnt = reset_stuck_castles_db()
+print(f"DONE: Reset {cnt} castles to idle in {get_db_path()}")
 '''
 
     client = paramiko.SSHClient()
