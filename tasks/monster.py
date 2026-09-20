@@ -1003,7 +1003,7 @@ class MonsterTask(BaseTask):
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
                 return "NO_ARMY"
-            elif err in ('10002', '10003'):
+            elif err in ('8032', '10002', '10003'):
                 self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
                 return "STAMINA_EMPTY"
             elif err == '9007020':
@@ -1030,7 +1030,7 @@ class MonsterTask(BaseTask):
                         return "SUCCESS"
                 self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
                 continue
-            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.startswith('80') and err not in ('8004', '8009')):
+            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.startswith('80') and err not in ('8004', '8009', '8032')):
                 self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
                 continue
             else:

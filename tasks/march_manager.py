@@ -56,6 +56,7 @@ from tasks.gather import GatherTask
 from tasks.transport import (
     get_market_capacity_from_conn,
     calculate_resource_allocation,
+    calculate_dynamic_resource_allocation,
     get_target_castle_info,
     RESOURCE_NAMES,
     DEFAULT_MAX_CAPACITY,
@@ -209,9 +210,13 @@ class MarchManagerTask(BaseTask):
 
         return {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "is_done": False, "remaining": 0}
 
-    # ────────────────────────────────────────────────────────────────
-    #  فحص الجيش الإجمالي بالقلعة (الحالة 3: انعدام القوات)
-    # ────────────────────────────────────────────────────────────────
+    def _get_lord_stamina(self) -> int:
+        """جلب رصيد طاقة اللورد الحالي من بيانات القلعة المحملة."""
+        try:
+            base = self.conn.init_data.get('loginDataInitCtrl', {}).get('base', {}) if hasattr(self.conn, 'init_data') else {}
+            return int(float(base.get('health', 100)))
+        except Exception:
+            return 100
 
     async def get_total_available_castle_army(self) -> int:
         """حساب إجمالي عدد الجنود المتاحين داخل القلعة حالياً عبر CMD 1005/1."""
@@ -463,6 +468,12 @@ class MarchManagerTask(BaseTask):
 
         self.log.info(f"👾 ───【 الأولوية 1: قتل غزاة الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات) 】───")
 
+        # فحص مسبق لطاقة اللورد (Stamina) لتجنب أخطاء 8032 والمحاولات غير المجدية
+        lord_stamina = self._get_lord_stamina()
+        if lord_stamina < 10:
+            self.log.warning(f"🛑 [أولوية 1: غزاة الهيبة] طاقة اللورد الحالية ({lord_stamina}) غير كافية لمسيرات الهجوم (مطلوب 10 على الأقل) — الانتقال للأولوية التالية.")
+            return {"status": "stamina_empty", "stamina": lord_stamina}
+
         # فحص مسبق ذكي للجيش بالقلعة (التمييز بين مسيرات بالخارج وبين انعدام كلي)
         has_army = await self.ensure_army_or_wait("لهجوم غزاة الهيبة")
         if not has_army:
@@ -491,23 +502,34 @@ class MarchManagerTask(BaseTask):
 
         task_res = await monster_task.run()
 
+        # فحص نفاد الطاقة أثناء الهجمات (كود 8032)
+        if task_res.data.get("stop_reason") == "STAMINA_EMPTY":
+            self.log.warning("🛑 [أولوية 1: غزاة الهيبة] توقف الهجوم بسبب نفاد طاقة اللورد — الانتقال للأولوية التالية.")
+
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res.data.get("stop_reason") == "NO_ARMY":
             has_army = await self.ensure_army_or_wait("لمتابعة هجوم الغزاة")
             if not has_army:
                 return {"status": "critical_no_army"}
 
+        sent_cnt = task_res.data.get("sent", 0)
+
         # تحديث بيانات الهيبة لفحص النتيجة
         await self._refresh_merit_data()
         updated_q = self.get_quest_info("invaders")
         if updated_q.get("is_done"):
             self.log.info(f"🎉 [أولوية 1: غزاة الهيبة] تم إكمال مهمة الهيبة بنجاح ({updated_q['c_num']}/{updated_q['l_num']})!")
+        elif sent_cnt > 0:
+            self.log.info(
+                f"ℹ️ [أولوية 1: غزاة الهيبة] تم إرسال {sent_cnt} مسيرة هجوم بنجاح وهي في طريقها للأهداف حالياً "
+                f"(التقدم المسجل حالياً: {updated_q['c_num']}/{updated_q['l_num']} — سيتم احتساب القتلى باللعبة فور وصول المسيرات للأهداف)."
+            )
         else:
             self.log.info(f"ℹ️ [أولوية 1: غزاة الهيبة] تقدم المهمة الحالي: ({updated_q['c_num']}/{updated_q['l_num']}).")
 
         return {
             "status": "completed" if updated_q.get("is_done") else "partial",
-            "sent": task_res.data.get("sent", 0),
+            "sent": sent_cnt,
             "quest_info": updated_q,
         }
 
@@ -543,6 +565,12 @@ class MarchManagerTask(BaseTask):
 
         self.log.info(f"🏰 ───【 الأولوية 2: الهجوم على معقل الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات [بحد أقصى مرتين]) 】───")
 
+        # فحص مسبق لطاقة اللورد (Stamina)
+        lord_stamina = self._get_lord_stamina()
+        if lord_stamina < 10:
+            self.log.warning(f"🛑 [أولوية 2: معقل الهيبة] طاقة اللورد الحالية ({lord_stamina}) غير كافية لمسيرات المعقل (مطلوب 10 على الأقل) — الانتقال للأولوية التالية.")
+            return {"status": "stamina_empty", "stamina": lord_stamina}
+
         # فحص مسبق ذكي للجيش بالقلعة (التمييز بين مسيرات بالخارج وبين انعدام كلي)
         has_army = await self.ensure_army_or_wait("لهجوم معقل الهيبة")
         if not has_army:
@@ -569,23 +597,34 @@ class MarchManagerTask(BaseTask):
 
         task_res = await stronghold_task.run()
 
+        # فحص نفاد الطاقة أثناء الهجمات (كود 8032)
+        if task_res.data.get("stop_reason") == "STAMINA_EMPTY":
+            self.log.warning("🛑 [أولوية 2: معقل الهيبة] توقف الهجوم بسبب نفاد طاقة اللورد — الانتقال للأولوية التالية.")
+
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res.data.get("stop_reason") == "NO_ARMY":
             has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعقل")
             if not has_army:
                 return {"status": "critical_no_army"}
 
+        sent_cnt = task_res.data.get("sent", 0)
+
         # تحديث بيانات الهيبة لفحص النتيجة
         await self._refresh_merit_data()
         updated_q = self.get_quest_info("stronghold")
         if updated_q.get("is_done"):
             self.log.info(f"🎉 [أولوية 2: معقل الهيبة] تم إكمال مهمة المعقل بنجاح ({updated_q['c_num']}/{updated_q['l_num']})!")
+        elif sent_cnt > 0:
+            self.log.info(
+                f"ℹ️ [أولوية 2: معقل الهيبة] تم إرسال {sent_cnt} مسيرة معقل بنجاح وهي في طريقها للأهداف حالياً "
+                f"(التقدم المسجل حالياً: {updated_q['c_num']}/{updated_q['l_num']} — سيتم تحديث التقدم باللعبة فور وصول المسيرات للأهداف)."
+            )
         else:
             self.log.info(f"ℹ️ [أولوية 2: معقل الهيبة] تقدم مهمة المعقل الحالي: ({updated_q['c_num']}/{updated_q['l_num']}).")
 
         return {
             "status": "completed" if updated_q.get("is_done") else "partial",
-            "sent": task_res.data.get("sent", 0),
+            "sent": sent_cnt,
             "quest_info": updated_q,
         }
 
@@ -746,24 +785,7 @@ class MarchManagerTask(BaseTask):
         res_desc = ", ".join([RESOURCE_NAMES.get(rid, str(rid)) for rid in res_ids])
         self.log.info(f"🚚 ───【 الأولوية 4: مساعدة ونقل الموارد إلى ({target_x}, {target_y}) | الموارد: [{res_desc}] 】───")
 
-        # 1. جلب معرف المملكة (kingdom_id)
-        kingdom_id = 0
-        if getattr(self.conn, "kingdom_id", None):
-            try:
-                kingdom_id = int(self.conn.kingdom_id)
-            except Exception:
-                pass
-        if not kingdom_id:
-            try:
-                r_map = await self.conn.query('1002', '7', {"uid": int(self.uid) if str(self.uid).isdigit() else self.uid})
-                if r_map and 'data' in r_map:
-                    kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
-            except Exception:
-                pass
-        if not kingdom_id:
-            kingdom_id = 259
-
-        # 2. جلب بيانات ومعرف القلعة الهدف
+        # 1. جلب بيانات ومعرف القلعة الهدف أولاً لاستخراج البارتشن بدقة
         self.log.info(f"🔍 [أولوية 4] جلب بيانات ومعرف القلعة الهدف عند ({target_x}, {target_y})...")
         castle_info = await get_target_castle_info(self.conn, target_x, target_y)
         if castle_info and castle_info.get('id'):
@@ -776,6 +798,29 @@ class MarchManagerTask(BaseTask):
             target_id = f"{target_x + 1}-{target_y + 1}-4-0-0"
             actual_x, actual_y = target_x, target_y
             self.log.warning(f"⚠️ تعذر جلب ID القلعة الهدف تلقائياً، استخدام المعرف المشتق: {target_id}")
+
+        # 2. تحديد معرف المملكة / البارتشن (mapId)
+        kingdom_id = 0
+        if target_id and '-' in target_id:
+            parts = target_id.split('-')
+            if len(parts) >= 3 and parts[2].isdigit() and int(parts[2]) > 0:
+                kingdom_id = int(parts[2])
+
+        if not kingdom_id:
+            uid_int = int(self.uid) if str(self.uid).isdigit() else 0
+            if not uid_int:
+                uid_int = int(getattr(self.conn, 'uid', 0) or 0)
+            try:
+                r_map = await self.conn.query('1002', '7', {"uid": uid_int}, timeout=4)
+                if r_map and 'data' in r_map:
+                    kingdom_id = int(r_map['data'].get('base', {}).get('partition', 0))
+            except Exception:
+                pass
+
+        if not kingdom_id:
+            kingdom_id = getattr(self.conn, 'server_id', 0) or getattr(self.conn, 'kingdom_id', 0)
+        if not kingdom_id:
+            kingdom_id = 4
 
         # 3. حساب سعة السوق والضريبة
         auto_cap, auto_tax = get_market_capacity_from_conn(self.conn)
@@ -797,28 +842,24 @@ class MarchManagerTask(BaseTask):
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue", "sent": sent_count, "total": total_transported}
 
-            # ب. فحص رصيد الموارد غير المحمية بالقلعة
-            city = self.conn.init_data.get('cityCtrl', {})
+            # ب. فحص رصيد الموارد غير المحمية بالقلعة وتوزيع 100% من سعة السوق ديناميكياً
+            city = self.conn.init_data.get('cityCtrl', {}) if hasattr(self.conn, 'init_data') else {}
             reslist = city.get('reslist', {}) if isinstance(city, dict) else {}
             saferes = city.get('saferes', {}) if isinstance(city, dict) else {}
 
-            base_alloc = calculate_resource_allocation(res_ids, total_capacity=max_cap, tax_rate=tax_rate)
-            current_march_resources = []
-            for item in base_alloc:
-                rid_str = str(item['id'])
-                req_num = item['num']
-                total_res = float(reslist.get(rid_str, 0))
-                safe_res  = float(saferes.get(rid_str, 0))
-                avail_res = max(0, int(total_res - safe_res))
+            avail_dict = {}
+            for rid in res_ids:
+                rid_str = str(rid)
+                tot = float(reslist.get(rid_str, 0))
+                saf = float(saferes.get(rid_str, 0))
+                avail_dict[int(rid)] = max(0, int(tot - saf))
 
-                if avail_res <= 0:
-                    continue
-
-                send_num = min(req_num, avail_res)
-                current_march_resources.append({
-                    "id": item['id'],
-                    "num": send_num
-                })
+            current_march_resources = calculate_dynamic_resource_allocation(
+                available_dict=avail_dict,
+                res_ids=res_ids,
+                total_capacity=max_cap,
+                tax_rate=tax_rate
+            )
 
             if not current_march_resources:
                 self.log.info("🏁 [أولوية 4: مساعدة الموارد] استُنفدت جميع الموارد غير المحمية القابلة للنقل بالقلعة — اكتمال المهمة بنجاح!")
@@ -829,6 +870,10 @@ class MarchManagerTask(BaseTask):
             self.log.info(f"🚚 [أولوية 4] تجهيز فيلق النقل #{current_march_idx} بحمولة {current_payload_units:,} إلى ({actual_x}, {actual_y})...")
 
             march_payload = {
+                "needSend": False,
+                "runePages": [1],
+                "heros": [],
+                "pets": [],
                 "matrixType": 4,      # 4 = نقل موارد
                 "moveLineType": 5,    # 5 = مسار خط النقل
                 "mapId": int(kingdom_id),
@@ -840,7 +885,8 @@ class MarchManagerTask(BaseTask):
                     },
                     "data": {
                         "resourceList": current_march_resources
-                    }
+                    },
+                    "army": []
                 }
             }
 
@@ -883,6 +929,13 @@ class MarchManagerTask(BaseTask):
             elif err == '8009':
                 self.log.info("🏁 [أولوية 4: مساعدة الموارد] الموارد غير كافية بالقلعة لإرسال المزيد (كود 8009) — اكتمال المهمة بنجاح!")
                 break
+
+            elif err == '8002':
+                consecutive_errs += 1
+                self.log.error(f"❌ فشل إرسال فيلق النقل #{current_march_idx} (كود 8002: يرجى التحقق من انتماء القلعة الهدف لنفس التحالف ومطابقة الخريطة).")
+                if consecutive_errs >= 3:
+                    break
+                await asyncio.sleep(3.0)
 
             elif err in ('8062', '8063', '8060'):
                 self.log.warning(f"⚠️ [أولوية 4] تعذر الإرسال للقلعة الهدف (كود {err}) — إنهاء الأولوية.")

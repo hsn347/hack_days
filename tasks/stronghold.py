@@ -461,6 +461,9 @@ class StrongholdTask(BaseTask):
                 else:
                     self.log.warning("⚠️ نفدت القوات المتاحة بالقلعة.")
                     break
+            elif result_code == "STAMINA_EMPTY":
+                self.log.warning("🛑 نفدت طاقة اللورد بالكامل — إيقاف محاولات الهجوم على المعقل.")
+                break
             elif result_code in ("NO_TARGET", "TARGET_OCCUPIED"):
                 consecutive_errors += 1
                 if consecutive_errors >= 3:
@@ -479,6 +482,8 @@ class StrongholdTask(BaseTask):
             return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة هجوم على المعقل", sent=sent_count, queue_full=(last_result == "QUEUE_FULL"))
         if last_result == "QUEUE_FULL":
             return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True)
+        if last_result == "STAMINA_EMPTY":
+            return TaskResult.fail("🛑 نفدت طاقة اللورد بالكامل", stop_reason="STAMINA_EMPTY")
         return TaskResult.fail("لم يتم إرسال أي مسيرة هجوم على المعقل", retry_after=120)
 
     # ── إرسال مسيرة معقل واحدة ────────────────────────────────────
@@ -788,6 +793,9 @@ class StrongholdTask(BaseTask):
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
                 return "NO_ARMY"
+            elif err in ('8032', '10002', '10003'):
+                self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
+                return "STAMINA_EMPTY"
             elif err == '9007020':
                 for hid in chosen_heroes:
                     self._busy.add(hid)
@@ -812,7 +820,7 @@ class StrongholdTask(BaseTask):
                         return "SUCCESS"
                 self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
                 continue
-            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100):
+            elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100 and err not in ('8004', '8009', '8032')):
                 self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
                 continue
             else:

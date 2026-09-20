@@ -129,6 +129,56 @@ def calculate_resource_allocation(res_ids: List[int], total_capacity: int = DEFA
     return result
 
 
+def calculate_dynamic_resource_allocation(
+    available_dict: Dict[int, int],
+    res_ids: List[int],
+    total_capacity: int = DEFAULT_MAX_CAPACITY,
+    tax_rate: float = DEFAULT_TAX_RATE
+) -> List[Dict[str, int]]:
+    """
+    توزيع ديناميكي ذكي بنسبة 100% من سعة السوق على الموارد المتوفرة بالقلعة حصراً:
+    - يستبعد الموارد ذات الرصيد الصفري أو المحمي.
+    - يقسم السعة بالتساوي بين الموارد المتاحة مع مراعاة أوزان الموارد (Food=1, Wood=1, Iron=6, Diamond=24).
+    - إذا كان أحد الموارد لا يكفي لحصته، يأخذ كامل رصيده المتاح ويُعاد توزيع السعة المتبقية فوراً على بقية الموارد.
+    - يضمن استغلال 100% من سعة السوق في كل مسيرة دون ترك أي سعة فارغة.
+    """
+    net_capacity = float(total_capacity) * (1.0 - tax_rate)
+
+    # 1. فلترة الموارد التي لها رصيد متاح > 0
+    active_rids = [int(rid) for rid in res_ids if available_dict.get(int(rid), 0) > 0]
+    if not active_rids:
+        return []
+
+    allocated: Dict[int, int] = {rid: 0 for rid in active_rids}
+    remaining_net_capacity = net_capacity
+    remaining_rids = list(active_rids)
+
+    while remaining_rids and remaining_net_capacity > 1.0:
+        n = len(remaining_rids)
+        share_per_res = remaining_net_capacity / n
+        newly_exhausted = []
+
+        for rid in remaining_rids:
+            w = float(RESOURCE_WEIGHTS.get(rid, 1))
+            max_units_for_share = int(share_per_res / w)
+            avail_units = available_dict.get(rid, 0) - allocated[rid]
+
+            if avail_units <= max_units_for_share:
+                allocated[rid] += avail_units
+                remaining_net_capacity -= avail_units * w
+                newly_exhausted.append(rid)
+            else:
+                allocated[rid] += max_units_for_share
+                remaining_net_capacity -= max_units_for_share * w
+
+        if not newly_exhausted or newly_exhausted == remaining_rids:
+            break
+        for rid in newly_exhausted:
+            remaining_rids.remove(rid)
+
+    return [{"id": rid, "num": int(allocated[rid])} for rid in active_rids if allocated[rid] > 0]
+
+
 # ════════════════════════════════════════════════════════════════════
 #  دالة جلب معرف القلعة الهدف (Castle ID Lookup)
 # ════════════════════════════════════════════════════════════════════
@@ -184,19 +234,7 @@ class TransportTask(BaseTask):
         res_desc = ", ".join([RESOURCE_NAMES.get(rid, str(rid)) for rid in res_ids])
         self.log.info(f"🚚 بدء مهمة نقل الموارد إلى ({target_x}, {target_y}) | الموارد: [{res_desc}] | الحد الأقصى للمسيرات: {max_marches}")
 
-        # 1. جلب معرف المملكة (kingdom_id / mapId)
-        kingdom_id = 0
-        if self.conn.kingdom_id:
-            try: kingdom_id = int(self.conn.kingdom_id)
-            except Exception: pass
-        if not kingdom_id:
-            r_map = await self.conn.query('1002', '7', {"uid": int(self.uid) if str(self.uid).isdigit() else self.uid})
-            if r_map and 'data' in r_map:
-                kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
-        if not kingdom_id:
-            kingdom_id = 259
-
-        # 2. جلب معرف القلعة الهدف (Target Castle ID)
+        # 1. جلب معرف القلعة الهدف (Target Castle ID) أولاً لاستخراج البارتشن بدقة
         self.log.info(f"🔍 جلب بيانات ومعرف القلعة عند ({target_x}, {target_y})...")
         castle_info = await get_target_castle_info(self.conn, target_x, target_y)
 
@@ -211,47 +249,59 @@ class TransportTask(BaseTask):
             actual_x, actual_y = target_x, target_y
             self.log.warning(f"⚠️ لم يتم جلب الـ ID تلقائياً، سيتم استخدام المعرف القياسي: {target_id}")
 
-        # 3. حساب سعة الحمولة والضريبة وتوزيع الموارد
+        # 2. جلب معرف المملكة (kingdom_id / mapId)
+        kingdom_id = 0
+        if target_id and '-' in target_id:
+            parts = target_id.split('-')
+            if len(parts) >= 3 and parts[2].isdigit() and int(parts[2]) > 0:
+                kingdom_id = int(parts[2])
+
+        if not kingdom_id:
+            uid_int = int(self.uid) if str(self.uid).isdigit() else 0
+            if not uid_int:
+                uid_int = int(getattr(self.conn, 'uid', 0) or 0)
+            try:
+                r_map = await self.conn.query('1002', '7', {"uid": uid_int}, timeout=4)
+                if r_map and 'data' in r_map:
+                    kingdom_id = int(r_map['data'].get('base', {}).get('partition', 0))
+            except Exception:
+                pass
+
+        if not kingdom_id:
+            kingdom_id = getattr(self.conn, 'server_id', 0) or getattr(self.conn, 'kingdom_id', 0)
+        if not kingdom_id:
+            kingdom_id = 4
+
+        # 3. حساب سعة الحمولة والضريبة
         auto_cap, auto_tax = get_market_capacity_from_conn(self.conn)
         max_cap  = int(cfg.get('max_capacity') or auto_cap)
         tax_rate = float(cfg.get('tax_rate') or auto_tax)
+        self.log.info(f"🏛️ سعة السوق المعتمدة: {max_cap:,} (ضريبة: {int(tax_rate*100)}%)")
 
-        base_resource_list = calculate_resource_allocation(res_ids, total_capacity=max_cap, tax_rate=tax_rate)
-        march_total_units = sum(r['num'] for r in base_resource_list)
-        self.log.info(f"🏛️ سعة السوق المعتمدة: {max_cap:,} (ضريبة: {int(tax_rate*100)}%) | صافي الحمولة بالفيلق: {march_total_units:,}")
-
-        # 4. إرسال فيالق متتالية
+        # 4. إرسال فيالق متتالية بتوزيع ديناميكي 100%
         sent_count = 0
         total_transported = 0
 
-        # فحص رصيد الموارد في القلعة لتفادي خطأ 8009
-        city = self.conn.init_data.get('cityCtrl', {})
-        reslist = city.get('reslist', {})
-        saferes = city.get('saferes', {})
+        city = self.conn.init_data.get('cityCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+        reslist = city.get('reslist', {}) if isinstance(city, dict) else {}
+        saferes = city.get('saferes', {}) if isinstance(city, dict) else {}
 
         for i in range(1, max_marches + 1):
             self.log.info(f"⚔️ محاولة إرسال فيلق النقل رقم ({i}/{max_marches})...")
 
-            # تعديل الحمولة حسب المتوفر غير المحمي بالقلعة
-            current_march_resources = []
-            for item in base_resource_list:
-                rid_str = str(item['id'])
-                req_num = item['num']
-                
-                # حساب الرصيد المتاح القابل للنقل
-                total_res = float(reslist.get(rid_str, 999999999))
-                safe_res  = float(saferes.get(rid_str, 0))
-                avail_res = max(0, int(total_res - safe_res))
+            avail_dict = {}
+            for rid in res_ids:
+                rid_str = str(rid)
+                tot = float(reslist.get(rid_str, 0))
+                saf = float(saferes.get(rid_str, 0))
+                avail_dict[int(rid)] = max(0, int(tot - saf))
 
-                if avail_res <= 0:
-                    self.log.warning(f"⚠️ الرصيد المتاح من {RESOURCE_NAMES.get(item['id'])} نَفِد أو محمي في المستودع!")
-                    continue
-
-                send_num = min(req_num, avail_res)
-                current_march_resources.append({
-                    "id": item['id'],
-                    "num": send_num
-                })
+            current_march_resources = calculate_dynamic_resource_allocation(
+                available_dict=avail_dict,
+                res_ids=res_ids,
+                total_capacity=max_cap,
+                tax_rate=tax_rate
+            )
 
             if not current_march_resources:
                 self.log.warning("⚠️ لا توجد موارد كافية قابلة للنقل لإرسال فيلق جديد.")
@@ -260,6 +310,10 @@ class TransportTask(BaseTask):
             current_payload_units = sum(r['num'] for r in current_march_resources)
 
             march_payload = {
+                "needSend": False,
+                "runePages": [1],
+                "heros": [],
+                "pets": [],
                 "matrixType": 4,      # 4 = نقل موارد
                 "moveLineType": 5,    # 5 = مسار خط النقل
                 "mapId": int(kingdom_id),
@@ -271,7 +325,8 @@ class TransportTask(BaseTask):
                     },
                     "data": {
                         "resourceList": current_march_resources
-                    }
+                    },
+                    "army": []
                 }
             }
 
@@ -285,6 +340,15 @@ class TransportTask(BaseTask):
                 sent_count += 1
                 total_transported += current_payload_units
                 self.log.info(f"✅ تم إرسال فيلق النقل ({i}) بنجاح! 🚚 حمولة: {current_payload_units:,}")
+
+                for itm in current_march_resources:
+                    r_str = str(itm['id'])
+                    if r_str in reslist:
+                        try:
+                            reslist[r_str] = max(0.0, float(reslist[r_str]) - float(itm['num']))
+                        except Exception:
+                            pass
+
                 await asyncio.sleep(5.0)  # حماية من الحظر - تأخير بين المسيرات
             elif err in ('8004', '9007004'):
                 self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (الحد الأقصى - كود {err}).")
