@@ -237,7 +237,9 @@ class FirebaseRunner:
                     pass
 
             if is_shreher:
-                log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+                logs_dir = os.path.join(_ROOT, "logs")
+                os.makedirs(logs_dir, exist_ok=True)
+                log_path = os.path.join(logs_dir, f"bot_{email.replace('@','_').replace('.','_')}.log")
                 with open(log_path, "a", encoding="utf-8", errors="replace") as lf:
                     lf.write(f"\n{'='*60}\n[{datetime.now():%Y-%m-%d %H:%M:%S}] دورة جديدة\n{'='*60}\n")
                     lf.flush()

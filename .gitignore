@@ -15,6 +15,7 @@ dumps/
 lua_src/
 *.log
 *.log.*
+logs/
 
 # Sensitive keys and credentials
 firebase_service_account*.json

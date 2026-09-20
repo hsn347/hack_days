@@ -51,6 +51,22 @@ logging.basicConfig(
 log = logging.getLogger("api_server")
 log.setLevel(logging.INFO)
 
+# ── مسار مجلد السجلات (Logs Directory) ────────────────────────────
+_LOGS_DIR = os.path.join(_ROOT, "logs")
+os.makedirs(_LOGS_DIR, exist_ok=True)
+
+
+def _get_bot_log_path(email: str) -> str:
+    """الحصول على مسار ملف سجل البوت مع دعم التوافق العكسي."""
+    safe_name = f"bot_{email.replace('@', '_').replace('.', '_')}.log"
+    new_path = os.path.join(_LOGS_DIR, safe_name)
+    if os.path.exists(new_path):
+        return new_path
+    legacy_path = os.path.join(_ROOT, safe_name)
+    if os.path.exists(legacy_path):
+        return legacy_path
+    return new_path
+
 
 # ══════════════════════════════════════════════════════════════════
 # FastAPI App & Secure CORS
@@ -138,15 +154,22 @@ def cleanup_unauthorized_bot_logs():
             log.warning(f"Error fetching allowed emails for logs: {e}")
 
         removed_count = 0
-        for fname in os.listdir(_ROOT):
-            if fname.startswith("bot_") and fname.endswith(".log") and fname != "bot_errors.log":
-                safe_name = fname[4:-4].lower()
-                if safe_name not in allowed_safe_names:
-                    try:
-                        os.remove(os.path.join(_ROOT, fname))
-                        removed_count += 1
-                    except Exception:
-                        pass
+        dirs_to_check = [_LOGS_DIR]
+        if os.path.exists(_ROOT):
+            dirs_to_check.append(_ROOT)
+
+        for check_dir in dirs_to_check:
+            if not os.path.exists(check_dir):
+                continue
+            for fname in os.listdir(check_dir):
+                if fname.startswith("bot_") and fname.endswith(".log") and fname != "bot_errors.log":
+                    safe_name = fname[4:-4].lower()
+                    if safe_name not in allowed_safe_names:
+                        try:
+                            os.remove(os.path.join(check_dir, fname))
+                            removed_count += 1
+                        except Exception:
+                            pass
         if removed_count > 0:
             log.info(f"🧹 تم حذف {removed_count} ملف log غير مصرح به لتخفيف الحمل على القرص.")
     except Exception as ex:
@@ -480,7 +503,7 @@ def _bot_thread(req: StartBotRequest):
         return
 
     # 4. ملف log البوت (مسموح فقط لقلاع المستخدم shreher@gmail.com لتخفيف الحمل واستهلاك القرص)
-    bot_log_path = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+    bot_log_path = os.path.join(_LOGS_DIR, f"bot_{email.replace('@','_').replace('.','_')}.log")
     _MAX_LOG_LINES = 300
 
     import re as _re
@@ -1466,7 +1489,11 @@ async def get_castle_data(email: str, user_id: Optional[str] = None, castle_id: 
 @app.get("/api/errors")
 def get_error_log(lines: int = 100, admin: Dict[str, Any] = Depends(require_admin)):
     """قراءة آخر N سطر من سجل الأخطاء bot_errors.log (خاص بالمشرف)."""
-    log_path = os.path.join(_ROOT, "bot_errors.log")
+    log_path = os.path.join(_LOGS_DIR, "bot_errors.log")
+    if not os.path.exists(log_path):
+        legacy = os.path.join(_ROOT, "bot_errors.log")
+        if os.path.exists(legacy):
+            log_path = legacy
     if not os.path.exists(log_path):
         return {"errors": [], "count": 0, "message": "لا توجد أخطاء مسجلة حتى الآن ✅"}
 
@@ -1503,7 +1530,7 @@ def get_castle_logs(castle_id: str, lines: int = 100, current_user: Dict[str, An
 
     log_path = None
     if email:
-        p = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+        p = _get_bot_log_path(email)
         if os.path.exists(p):
             log_path = p
 
@@ -1540,7 +1567,7 @@ async def ws_logs(websocket: WebSocket, castle_id: str):
 
     log_path = None
     if email:
-        p = os.path.join(_ROOT, f"bot_{email.replace('@','_').replace('.','_')}.log")
+        p = _get_bot_log_path(email)
         if os.path.exists(p):
             log_path = p
 
