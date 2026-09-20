@@ -244,6 +244,79 @@ class MarchManagerTask(BaseTask):
                     active += 1
         return active
 
+    async def get_active_gather_resource_types(self) -> Set[int]:
+        """
+        فحص الفيالق النشطة بالخارج وتحديد أنواع الموارد التي توجد لها مسيرات جمع قائمة حالياً
+        (2=قمح, 3=خشب, 4=حديد, 5=فضة, 1=ذهب):
+          - يطلب تحديثاً فورياً لطوابير المسيرات من السيرفر (CMD 1007/1000).
+          - يفحص بيانات الهدف (to) ونقطة الانطلاق (from) وكود المورد (subMapType و resourceType).
+          - يتيح تخطي إرسال مسيرة مكررة لنفس المورد إذا كانت هناك مسيرة تجمعه حالياً ولم تعد بعد.
+        """
+        active_res_types: Set[int] = set()
+        try:
+            # استعلام فوري لتحديث بيانات الفيالق من السيرفر
+            await self.conn.query('1007', '1000', {}, timeout=3)
+            await asyncio.sleep(0.4)
+        except Exception:
+            pass
+
+        all_queue_data = []
+        if getattr(self.conn, 'local_queues', None):
+            all_queue_data.extend(self.conn.local_queues)
+        for p in self.conn.cached_packets.values():
+            if isinstance(p, dict):
+                d = p.get('data', {})
+                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
+                    nd = d.get('notifyData', [])
+                    if isinstance(nd, list):
+                        all_queue_data.extend(nd)
+
+        for item in all_queue_data:
+            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
+            for q in q_list:
+                if not isinstance(q, dict):
+                    continue
+                # مسيرة نشطة (1=متجهة, 2=تجمع بالحقل, 3=عائدة, 4=مرابطة, 7=حشد)
+                if q.get('status') not in (1, 2, 3, 4, 7):
+                    continue
+
+                res_sub_type = None
+
+                # 1. فحص الهدف (to)
+                to_info = q.get('to', {})
+                if isinstance(to_info, dict):
+                    if to_info.get('mapType') == 5:
+                        res_sub_type = to_info.get('subMapType')
+                    if not res_sub_type and to_info.get('id'):
+                        parts = str(to_info.get('id')).split('-')
+                        if len(parts) >= 4 and parts[2] == '5' and parts[3].isdigit():
+                            res_sub_type = int(parts[3])
+
+                # 2. فحص نقطة الانطلاق (from) في حال كانت المسيرة في طريق العودة للقلعة
+                if not res_sub_type:
+                    from_info = q.get('from', {})
+                    if isinstance(from_info, dict):
+                        if from_info.get('mapType') == 5:
+                            res_sub_type = from_info.get('subMapType')
+                        if not res_sub_type and from_info.get('id'):
+                            parts = str(from_info.get('id')).split('-')
+                            if len(parts) >= 4 and parts[2] == '5' and parts[3].isdigit():
+                                res_sub_type = int(parts[3])
+
+                # 3. فحص كود المورد في data (resourceType)
+                if not res_sub_type:
+                    data_obj = q.get('data', {})
+                    if isinstance(data_obj, dict):
+                        res_code = data_obj.get('resourceType')
+                        if res_code:
+                            code_to_sub = {1001: 1, 1002: 2, 1003: 3, 1004: 4, 1005: 5}
+                            res_sub_type = code_to_sub.get(int(res_code))
+
+                if res_sub_type and int(res_sub_type) in (1, 2, 3, 4, 5):
+                    active_res_types.add(int(res_sub_type))
+
+        return active_res_types
+
     async def ensure_army_or_wait(self, context_desc: str = "") -> bool:
         """
         التحقق الذكي من توفر الجيش بالقلعة أو الانتظار لعودته من المسيرات:
@@ -465,16 +538,24 @@ class MarchManagerTask(BaseTask):
         # استعلام أحدث بيانات الهيبة
         await self._refresh_merit_data()
 
+        # فحص الفيالق النشطة بالخارج للتأكد من عدم وجود مسيرة جمع قائمة لأي مورد
+        active_gather_types = await self.get_active_gather_resource_types()
+
         uncompleted = []
         for item in PRESTIGE_GATHER_RESOURCES:
             q_info = self.get_quest_info(item["quest_id"])
-            if not q_info.get("is_done"):
-                uncompleted.append((item, q_info))
-            else:
+            if q_info.get("is_done"):
                 self.log.info(f"✨ [أولوية 3] مهمة جمع {item['name']} مكتملة مسبقاً ({q_info.get('c_num', 1)}/{q_info.get('l_num', 1)}).")
+            elif item["res_type"] in active_gather_types:
+                self.log.info(
+                    f"🌾 [أولوية 3] توجد مسيرة نشطة بالخارج حالياً لجمع {item['name']} "
+                    f"(الفيلق قائم بالخريطة ولم يعد للقلعة بعد) — يتم تخطي إرسال مسيرة جديدة."
+                )
+            else:
+                uncompleted.append((item, q_info))
 
         if not uncompleted:
-            self.log.info("✨ [أولوية 3: جمع موارد الهيبة] جميع مهام جمع الموارد الأربعة مكتملة مسبقاً.")
+            self.log.info("✨ [أولوية 3: جمع موارد الهيبة] جميع مهام جمع الموارد الأربعة مكتملة أو توجد لها مسيرات قائمة بالخارج.")
             return {"status": "already_done", "remaining": 0}
 
         self.log.info(f"🌾 ───【 الأولوية 3: جمع موارد الهيبة (المتبقي: {len(uncompleted)} مهام من أصل 4) 】───")
@@ -517,6 +598,7 @@ class MarchManagerTask(BaseTask):
                 if res.success and res.data.get("sent", 0) > 0:
                     sent_total += 1
                     results_by_res[item["key"]] = "sent"
+                    active_gather_types.add(item["res_type"])
                     self.log.info(f"✅ تم إرسال مسيرة جمع عادية لـ {item['name']} بنجاح لإنجاز مهمة الهيبة!")
                     break
 
