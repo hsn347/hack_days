@@ -71,6 +71,7 @@ from tasks.prestige import PrestigeTask
 from tasks.prestige_box import PrestigeBoxTask
 from tasks.troy_treasure import TroyTreasureTask
 from tasks.hospital import HospitalTask
+from tasks.march_manager import MarchManagerTask
 
 
 
@@ -3237,15 +3238,40 @@ class BotManager:
     async def step_23_march_manager_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator):
-          - إدارة الفيالق المتاحة وتوزيعها وفق مصفوفة أولويات مخصصة من Firebase.
-          - مساعدة الموارد (Transport).
-          - استكشاف الأطلال (Ruins) بمسيرة واحدة فقط حصراً.
-          - قتال: العفريت (مع استعلام استباقي لتأكيد الحدث) أو الغزاة أو المتمردين (خيار حصري).
-          - الهجوم على المعاقل والملاجئ (Stronghold).
-          - جمع الذهب في أراضي التحالفات (Gold Gather) بأولوية تسبق جمع الموارد العامة.
-          - جمع الموارد بالفيالق الشاغرة المتبقية بحسابات حمولة رياضية دقيقة مطابقة للعبة.
+          - إدارة الفيالق المتاحة وتوزيعها وفق مصفوفة أولويات ذكية ومخصصة.
+          - قتال غزاة الهيبة (Prestige Invaders) عبر monster.py بعد استعلام إنجاز المهمة.
+          - الهجوم على معقل الهيبة (Prestige Stronghold) مرتين كحد أقصى عبر stronghold.py بعد استعلام إنجاز المهمة.
+          - تطبيق الحالات الخمس الصارمة (نفاذ الفيالق، نقص التشكيلة، انعدام الجيش، أخطاء متتالية، اكتمال الأولويات).
         """
-        return {"skipped": True, "message": "مهمة منسق الفيالق قيد التطوير"}
+        mm_cfg = self.config.get("march_manager", {})
+        if isinstance(mm_cfg, bool):
+            mm_cfg = {"enabled": mm_cfg}
+        elif not isinstance(mm_cfg, dict):
+            mm_cfg = {"enabled": True}
+
+        if not mm_cfg.get("enabled", True):
+            msg = "⏭️ تم تخطي مهمة منسق الفيالق (march_manager.enabled = False)."
+            log.info(msg)
+            return {"success": True, "message": msg, "skipped": True}
+
+        task = MarchManagerTask(self.conn, mm_cfg)
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
+        if self._log_callback:
+            self._log_callback(f"🎖️ {res.message}")
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
 
 
 
