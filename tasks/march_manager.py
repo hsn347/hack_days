@@ -52,12 +52,25 @@ from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 from tasks.monster import MonsterTask
 from tasks.stronghold import StrongholdTask
+from tasks.gather import GatherTask
 
 # ── معرفات مهام الهيبة من السيرفر (meritoriousTaskCtrl) ───────────────
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
-    "invaders": 4112004,    # الهجوم على الغزاة في الخريطة (5 هجمات)
-    "stronghold": 4112030,  # احتلال المعقل / الملجأ (مرتان)
+    "invaders": 4112004,      # الهجوم على الغزاة في الخريطة (5 هجمات)
+    "stronghold": 4112030,    # احتلال المعقل / الملجأ (مرتان)
+    "gather_food": 4112000,   # جمع القمح من الخريطة (مرة واحدة)
+    "gather_wood": 4112001,   # جمع الخشب من الخريطة (مرة واحدة)
+    "gather_iron": 4112002,   # جمع الحجر / الحديد من الخريطة (مرة واحدة)
+    "gather_silver": 4112003, # جمع الكوارتز / الفضة من الخريطة (مرة واحدة)
 }
+
+# قائمة مهام جمع موارد الهيبة الأربعة
+PRESTIGE_GATHER_RESOURCES = [
+    {"key": "gather_food",   "res_type": 2, "name": "القمح (Food)",   "quest_id": 4112000},
+    {"key": "gather_wood",   "res_type": 3, "name": "الخشب (Wood)",   "quest_id": 4112001},
+    {"key": "gather_iron",   "res_type": 4, "name": "الحديد (Iron)",  "quest_id": 4112002},
+    {"key": "gather_silver", "res_type": 5, "name": "الفضة (Silver)", "quest_id": 4112003},
+]
 
 # أدنى حد للجنود بالقلعة لإطلاق مسيرة (إذا كان المجموع أقل منه نعتبر القلعة خالية)
 MIN_ATTACK_ARMY_COUNT = 300
@@ -66,13 +79,14 @@ MIN_ATTACK_ARMY_COUNT = 300
 class MarchManagerTask(BaseTask):
     """
     منسق الفيالق والمسيرات الذكي الموحد.
-    يدير الأولويات الخارجية بالاعتماد المباشر على مهام القتال المتخصصة (monster.py و stronghold.py).
+    يدير الأولويات الخارجية بالاعتماد المباشر على مهام القتال والجمع المتخصصة (monster.py و stronghold.py و gather.py).
     """
     name = "march_manager"
 
     DEFAULT_PRIORITY_ORDER = [
         "prestige_invaders",
         "prestige_stronghold",
+        "prestige_gather",
     ]
 
     def __init__(self, conn: GameConnection, config: dict = None):
@@ -387,6 +401,115 @@ class MarchManagerTask(BaseTask):
         }
 
     # ────────────────────────────────────────────────────────────────
+    #  الأولوية 3: جمع موارد الهيبة (Prestige Gather) عبر gather.py
+    # ────────────────────────────────────────────────────────────────
+
+    async def execute_priority_prestige_gather(self) -> Dict[str, Any]:
+        """
+        تنفيذ أولوية جمع موارد الهيبة اليومية (القمح، الخشب، الحديد، الفضة) عبر gather.py:
+          1. استعلام حالة مهام جمع الموارد الأربعة من meritoriousTaskCtrl.
+          2. تخطي الموارد المنجزة مسبقاً.
+          3. إرسال مسيرة جمع عادية واحدة بحمولة الحقل كاملة لكل مورد غير مكتمل.
+          4. تطبيق الحالات الخمس (نفاذ الفيالق 60ث، نقص التشكيلة، انعدام الجيش، تعذر الأهداف).
+        """
+        cfg = self.config.get("prestige_gather", {})
+        if not cfg.get("enabled", True):
+            self.log.info("⏭️ [أولوية 3] تم تخطي جمع موارد الهيبة (معطلة من الإعدادات).")
+            return {"status": "skipped", "reason": "disabled"}
+
+        # استعلام أحدث بيانات الهيبة
+        await self._refresh_merit_data()
+
+        uncompleted = []
+        for item in PRESTIGE_GATHER_RESOURCES:
+            q_info = self.get_quest_info(item["quest_id"])
+            if not q_info.get("is_done"):
+                uncompleted.append((item, q_info))
+            else:
+                self.log.info(f"✨ [أولوية 3] مهمة جمع {item['name']} مكتملة مسبقاً ({q_info.get('c_num', 1)}/{q_info.get('l_num', 1)}).")
+
+        if not uncompleted:
+            self.log.info("✨ [أولوية 3: جمع موارد الهيبة] جميع مهام جمع الموارد الأربعة مكتملة مسبقاً.")
+            return {"status": "already_done", "remaining": 0}
+
+        self.log.info(f"🌾 ───【 الأولوية 3: جمع موارد الهيبة (المتبقي: {len(uncompleted)} مهام من أصل 4) 】───")
+
+        sent_total = 0
+        results_by_res = {}
+
+        for item, q_info in uncompleted:
+            if self.is_time_expired():
+                self.log.warning("⏱️ [انتهاء المهلة] انتهت مدة الـ 20 دقيقة المخصصة للمهمة بالكامل.")
+                break
+
+            self.log.info(f"🌾 ───【 جمع مورد الهيبة: {item['name']} (مهمة #{item['quest_id']}) 】───")
+
+            # فحص مسبق للجيش بالقلعة (الحالة 3: انعدام القوات كلياً)
+            castle_troops = await self.get_total_available_castle_army()
+            if castle_troops < MIN_ATTACK_ARMY_COUNT:
+                self.log.warning(
+                    f"🛑 [الحالة 3: انعدام القوات] إجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({MIN_ATTACK_ARMY_COUNT}) — "
+                    f"الخروج فوراً من مهمة المسيرات ككل."
+                )
+                return {"status": "critical_no_army", "castle_troops": castle_troops}
+
+            # محاولة إرسال مسيرة جمع عادية واحدة بحمولة الحقل كاملة مع معالجة الحالات
+            consecutive_errs = 0
+            while not self.is_time_expired():
+                gather_cfg = {
+                    "res_type": item["res_type"],
+                    "max_marches": 1,
+                    "level": int(cfg.get("level", 6)),
+                    "search_range": int(cfg.get("search_range", 100)),
+                }
+
+                gather_task = GatherTask(self.conn, gather_cfg)
+                self._forward_subtask_logs(gather_task)
+                res = await gather_task.run()
+
+                if res.success and res.data.get("sent", 0) > 0:
+                    sent_total += 1
+                    results_by_res[item["key"]] = "sent"
+                    self.log.info(f"✅ تم إرسال مسيرة جمع عادية لـ {item['name']} بنجاح لإنجاز مهمة الهيبة!")
+                    break
+
+                # الحالة 1: الفيالق ممتلئة بالكامل بالخارج
+                if res.data.get("queue_full"):
+                    self.log.info(f"⏳ [الحالة 1: نفاذ الفيالق] جميع الفيالق مشغولة بالخارج — الانتظار دقيقة كاملة (60 ثانية) لتفريغ فيلق لجمع {item['name']}...")
+                    await asyncio.sleep(60)
+                    continue
+
+                # فحص الحالة 3: انعدام الجيش بالقلعة
+                if res.data.get("stop_reason") == "NO_ARMY":
+                    tot = await self.get_total_available_castle_army()
+                    if tot < MIN_ATTACK_ARMY_COUNT:
+                        self.log.warning(f"🛑 [الحالة 3: خروج فوري] نفدت القوات بالقلعة أثناء تجهيز مسيرة جمع {item['name']}.")
+                        return {"status": "critical_no_army", "castle_troops": tot}
+                    self.log.info(f"⏳ [الحالة 1: القوات في مسيرات] بانتظار عودة الجيش إلى القلعة (انتظار 60 ثانية)...")
+                    await asyncio.sleep(60)
+                    continue
+
+                # أخطاء أخرى مثل تعذر إيجاد هدف في النطاق (الحالة 4: تجاوز بعد 3 محاولات)
+                consecutive_errs += 1
+                if consecutive_errs >= 3:
+                    self.log.warning(f"⚠️ [الحالة 4] تكرر تعذر إرسال مسيرة جمع {item['name']} (3 محاولات) — الانتقال للمورد التالي.")
+                    results_by_res[item["key"]] = "failed_max_retries"
+                    break
+                await asyncio.sleep(3)
+
+            # مهلة أمان بين إطلاق مسيرات الموارد
+            await asyncio.sleep(round(random.uniform(4.0, 7.0), 2))
+
+        # تحديث بيانات الهيبة
+        await self._refresh_merit_data()
+
+        return {
+            "status": "completed",
+            "sent": sent_total,
+            "results": results_by_res,
+        }
+
+    # ────────────────────────────────────────────────────────────────
     #  محرك التنفيذ المركزي (Execution Pipeline)
     # ────────────────────────────────────────────────────────────────
 
@@ -409,6 +532,7 @@ class MarchManagerTask(BaseTask):
         handlers = {
             "prestige_invaders": self.execute_priority_prestige_invaders,
             "prestige_stronghold": self.execute_priority_prestige_stronghold,
+            "prestige_gather": self.execute_priority_prestige_gather,
         }
 
         for p_key in self.priority_order:
