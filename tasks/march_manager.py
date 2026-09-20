@@ -221,6 +221,59 @@ class MarchManagerTask(BaseTask):
 
         return total
 
+    def get_active_marches_count(self) -> int:
+        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة من بيانات الطوابير."""
+        active = 0
+        all_queue_data = []
+        if getattr(self.conn, 'local_queues', None):
+            all_queue_data.extend(self.conn.local_queues)
+        for p in self.conn.cached_packets.values():
+            if isinstance(p, dict):
+                d = p.get('data', {})
+                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
+                    nd = d.get('notifyData', [])
+                    if isinstance(nd, list):
+                        all_queue_data.extend(nd)
+
+        for item in all_queue_data:
+            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
+            for q in q_list:
+                if isinstance(q, dict) and q.get('status') in (1, 2, 3, 4, 7):
+                    active += 1
+        return active
+
+    async def ensure_army_or_wait(self, context_desc: str = "") -> bool:
+        """
+        التحقق الذكي من توفر الجيش بالقلعة أو الانتظار لعودته من المسيرات:
+          - إذا كانت قوات القلعة >= 300: يعيد True فوراً (جاهزية تامة).
+          - إذا كانت قوات القلعة < 300 وتوجد مسيرات نشطة بالخارج:
+            تُطبق الحالة 1 بالانتظار 60 ثانية لعودة الفيالق، وتتكرر طالما لم تنته مهلة الـ 20 دقيقة.
+          - إذا كانت قوات القلعة < 300 والمسيرات بالخارج = 0 (جميع الفيالق داخل القلعة):
+            تُطبق الحالة 3 (انعدام القوات كلياً) ويعيد False للخروج الفوري.
+        """
+        while not self.is_time_expired():
+            castle_troops = await self.get_total_available_castle_army()
+            if castle_troops >= MIN_ATTACK_ARMY_COUNT:
+                return True
+
+            active_marches = self.get_active_marches_count()
+            if active_marches > 0:
+                self.log.info(
+                    f"⏳ [الحالة 1: القوات في مسيرات بالخارج ({active_marches} مسيرات نشطة)] "
+                    f"رصيد القلعة الحالي ({castle_troops}) — انتظار دقيقة كاملة (60 ثانية) لعودة الجيش {context_desc}..."
+                )
+                await asyncio.sleep(60)
+                await self._refresh_merit_data()
+            else:
+                self.log.warning(
+                    f"🛑 [الحالة 3: انعدام القوات كلياً] لا توجد أي مسيرات بالخارج (0 مسيرة نشطة) "
+                    f"وإجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({MIN_ATTACK_ARMY_COUNT}) — الخروج فوراً."
+                )
+                return False
+
+        self.log.warning("⏱️ [انتهاء المهلة] انتهت الـ 20 دقيقة المحددة للمهمة أثناء انتظار عودة الجيش.")
+        return False
+
     # ────────────────────────────────────────────────────────────────
     #  ربط سجلات المهام الفرعية بسجل المهمة الحالي
     # ────────────────────────────────────────────────────────────────
@@ -264,14 +317,10 @@ class MarchManagerTask(BaseTask):
 
         self.log.info(f"👾 ───【 الأولوية 1: قتل غزاة الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات) 】───")
 
-        # فحص مسبق للجيش بالقلعة (الحالة 3: انعدام القوات كلياً)
-        castle_troops = await self.get_total_available_castle_army()
-        if castle_troops < MIN_ATTACK_ARMY_COUNT:
-            self.log.warning(
-                f"🛑 [الحالة 3: انعدام القوات] إجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({MIN_ATTACK_ARMY_COUNT}) — "
-                f"الخروج فوراً من مهمة المسيرات ككل."
-            )
-            return {"status": "critical_no_army", "castle_troops": castle_troops}
+        # فحص مسبق ذكي للجيش بالقلعة (التمييز بين مسيرات بالخارج وبين انعدام كلي)
+        has_army = await self.ensure_army_or_wait("لهجوم غزاة الهيبة")
+        if not has_army:
+            return {"status": "critical_no_army"}
 
         # حساب دورات الانتظار المتاحة لطوابير الفيالق ضمن مهلة الـ 20 دقيقة (الحالة 1: انتظار دقيقة = 60 ثانية)
         rem_seconds = self.get_remaining_seconds()
@@ -298,10 +347,9 @@ class MarchManagerTask(BaseTask):
 
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res.data.get("stop_reason") == "NO_ARMY":
-            current_troops = await self.get_total_available_castle_army()
-            if current_troops < MIN_ATTACK_ARMY_COUNT:
-                self.log.warning("🛑 [الحالة 3: خروج فوري] نفدت القوات المتاحة بالقلعة تماماً أثناء الهجوم على الغزاة.")
-                return {"status": "critical_no_army", "castle_troops": current_troops}
+            has_army = await self.ensure_army_or_wait("لمتابعة هجوم الغزاة")
+            if not has_army:
+                return {"status": "critical_no_army"}
 
         # تحديث بيانات الهيبة لفحص النتيجة
         await self._refresh_merit_data()
@@ -349,14 +397,10 @@ class MarchManagerTask(BaseTask):
 
         self.log.info(f"🏰 ───【 الأولوية 2: الهجوم على معقل الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات [بحد أقصى مرتين]) 】───")
 
-        # فحص مسبق للجيش بالقلعة (الحالة 3: انعدام القوات كلياً)
-        castle_troops = await self.get_total_available_castle_army()
-        if castle_troops < MIN_ATTACK_ARMY_COUNT:
-            self.log.warning(
-                f"🛑 [الحالة 3: انعدام القوات] إجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({MIN_ATTACK_ARMY_COUNT}) — "
-                f"الخروج فوراً من مهمة المسيرات ككل."
-            )
-            return {"status": "critical_no_army", "castle_troops": castle_troops}
+        # فحص مسبق ذكي للجيش بالقلعة (التمييز بين مسيرات بالخارج وبين انعدام كلي)
+        has_army = await self.ensure_army_or_wait("لهجوم معقل الهيبة")
+        if not has_army:
+            return {"status": "critical_no_army"}
 
         rem_seconds = self.get_remaining_seconds()
         max_wait_cycles = max(1, int(rem_seconds // 60))
@@ -381,10 +425,9 @@ class MarchManagerTask(BaseTask):
 
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res.data.get("stop_reason") == "NO_ARMY":
-            current_troops = await self.get_total_available_castle_army()
-            if current_troops < MIN_ATTACK_ARMY_COUNT:
-                self.log.warning("🛑 [الحالة 3: خروج فوري] نفدت القوات المتاحة بالقلعة تماماً أثناء الهجوم على المعقل.")
-                return {"status": "critical_no_army", "castle_troops": current_troops}
+            has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعقل")
+            if not has_army:
+                return {"status": "critical_no_army"}
 
         # تحديث بيانات الهيبة لفحص النتيجة
         await self._refresh_merit_data()
@@ -444,14 +487,10 @@ class MarchManagerTask(BaseTask):
 
             self.log.info(f"🌾 ───【 جمع مورد الهيبة: {item['name']} (مهمة #{item['quest_id']}) 】───")
 
-            # فحص مسبق للجيش بالقلعة (الحالة 3: انعدام القوات كلياً)
-            castle_troops = await self.get_total_available_castle_army()
-            if castle_troops < MIN_ATTACK_ARMY_COUNT:
-                self.log.warning(
-                    f"🛑 [الحالة 3: انعدام القوات] إجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({MIN_ATTACK_ARMY_COUNT}) — "
-                    f"الخروج فوراً من مهمة المسيرات ككل."
-                )
-                return {"status": "critical_no_army", "castle_troops": castle_troops}
+            # فحص مسبق ذكي للجيش بالقلعة (التمييز بين مسيرات بالخارج وبين انعدام كلي)
+            has_army = await self.ensure_army_or_wait(f"لجمع {item['name']}")
+            if not has_army:
+                return {"status": "critical_no_army"}
 
             # محاولة إرسال مسيرة جمع عادية واحدة بحمولة الحقل كاملة مع معالجة الحالات
             consecutive_errs = 0
@@ -481,12 +520,9 @@ class MarchManagerTask(BaseTask):
 
                 # فحص الحالة 3: انعدام الجيش بالقلعة
                 if res.data.get("stop_reason") == "NO_ARMY":
-                    tot = await self.get_total_available_castle_army()
-                    if tot < MIN_ATTACK_ARMY_COUNT:
-                        self.log.warning(f"🛑 [الحالة 3: خروج فوري] نفدت القوات بالقلعة أثناء تجهيز مسيرة جمع {item['name']}.")
-                        return {"status": "critical_no_army", "castle_troops": tot}
-                    self.log.info(f"⏳ [الحالة 1: القوات في مسيرات] بانتظار عودة الجيش إلى القلعة (انتظار 60 ثانية)...")
-                    await asyncio.sleep(60)
+                    has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {item['name']}")
+                    if not has_army:
+                        return {"status": "critical_no_army"}
                     continue
 
                 # أخطاء أخرى مثل تعذر إيجاد هدف في النطاق (الحالة 4: تجاوز بعد 3 محاولات)
