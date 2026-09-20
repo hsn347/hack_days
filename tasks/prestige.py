@@ -739,12 +739,12 @@ class PrestigeTask(BaseTask):
             self.log.info("⏭️ [تخطي] مهمة تدريب الجنود معطلة بناءً على اختيار المستخدم.")
             train_res = {"success": True, "skipped": True, "user_disabled": True, "trained_count": 0}
 
-        # 4. حصن الحرب — تدريب الفخاخ تلقائياً (تُفعّل تلقائياً عند تفعيل تدريب الجنود في مهام الهيبة)
-        if self.is_subtask_enabled("train"):
+        # 4. حصن الحرب — تدريب الفخاخ تلقائياً
+        if self.is_subtask_enabled("fortress"):
             fortress_res = await self.run_fortress_step()
             await asyncio.sleep(round(random.uniform(1.5, 2.5), 2))
         else:
-            self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة (تعتمد حصراً على تفعيل تدريب الجنود في مهام الهيبة).")
+            self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة بناءً على اختيار المستخدم.")
             fortress_res = {"success": True, "skipped": True, "user_disabled": True}
 
         # 5. تبديل القمح بوسام الحرب (تُفعّل تلقائياً عند تفعيل مهمة الهيبة)
