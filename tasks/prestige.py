@@ -12,6 +12,8 @@ tasks/prestige.py — مهمة مهام الهيبة اليومية داخل ا�
      - تدريب 250 وحدة من كل نوع على مستوى 1 (مشاة، فرسان، رماة، عربات).
   4. حصن الحرب وتدريب الفخاخ (Fortress Traps - CMD 1005):
      - تدريب الفخاخ بالحد الأقصى المتاح تلقائياً.
+  5. تبديل القمح بوسام الحرب (War Badge Exchange - CMD 1067/2):
+     - استبدال القمح بوسام الحرب مرة واحدة يومياً لإكمال مهمة المجد (#4112024).
 
 ملاحظة هامة:
 مهام المسيرات الخارجية لمهام الهيبة:
@@ -61,12 +63,14 @@ DISALLOWED_CURRENCIES: Set[int] = {1001, 1006}  # الذهب والعملات ا
 
 # ── معرفات مهام الهيبة اليومية لداخل القلعة (meritoriousTaskCtrl) ───
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
-    "smuggler": 4112020,     # متجر المهربين (10 مشتريات)
+    "smuggler": 4112020,        # متجر المهربين (10 مشتريات)
+    "badge_exchange": 4112024,  # تبديل الموارد بوسام الحرب (مرة واحدة)
 }
 
 # أسماء وتسميات مهام الهيبة للعرض والتقارير
 PRESTIGE_QUEST_NAMES: Dict[str, str] = {
     "smuggler": "متجر المهربين (10 مشتريات بالموارد)",
+    "badge_exchange": "تبديل القمح بوسام الحرب (مرة واحدة)",
 }
 
 # ── أسماء وتسميات المهام الفرعية لمهام الهيبة داخل القلعة ───────────
@@ -75,6 +79,7 @@ PRESTIGE_SUBTASKS_ALL: List[str] = [
     "watermill",
     "train",
     "fortress",
+    "badge_exchange",
 ]
 
 PRESTIGE_SUBTASK_ALIASES: Dict[str, str] = {
@@ -86,6 +91,10 @@ PRESTIGE_SUBTASK_ALIASES: Dict[str, str] = {
     "train": "train", "تدريب": "train", "الجنود": "train", "تدريب الجنود": "train", "troops": "train",
     # 4. حصن الحرب
     "fortress": "fortress", "حصن": "fortress", "الحصن": "fortress", "فخاخ": "fortress", "حصن الحرب": "fortress", "traps": "fortress",
+    # 5. تبديل وسام الحرب
+    "badge_exchange": "badge_exchange", "badge": "badge_exchange", "war_badge": "badge_exchange",
+    "وسام": "badge_exchange", "وسام الحرب": "badge_exchange", "تبديل الوسام": "badge_exchange",
+    "تبديل": "badge_exchange", "exchange": "badge_exchange",
 }
 
 
@@ -197,6 +206,26 @@ class PrestigeTask(BaseTask):
         if not isinstance(merit_ctrl, dict):
             return {"found": False, "c_num": 0, "l_num": 0, "is_done": False, "remaining": 0}
 
+        # 1. فحص taskData (القاموس الرئيسي لمهام الهيبة اليومية)
+        task_data = merit_ctrl.get("taskData", {})
+        if isinstance(task_data, dict) and str(qid) in task_data:
+            t_obj = task_data[str(qid)]
+            if isinstance(t_obj, dict):
+                c_num = int(t_obj.get("cNum", t_obj.get("c_num", 0)))
+                l_num = int(t_obj.get("lNum", t_obj.get("l_num", 0)))
+                status = int(t_obj.get("status", 0))
+                is_done = (status == 4) or (l_num > 0 and c_num >= l_num)
+                remaining = max(0, l_num - c_num) if l_num > 0 else 0
+                return {
+                    "found": True,
+                    "task_id": qid,
+                    "c_num": c_num,
+                    "l_num": l_num,
+                    "is_done": is_done,
+                    "remaining": remaining,
+                }
+
+        # 2. فحص قائمة tasks القديمة إن وُجدت
         tasks = merit_ctrl.get("tasks", [])
         if isinstance(tasks, dict):
             tasks = list(tasks.values())
@@ -219,6 +248,19 @@ class PrestigeTask(BaseTask):
                     "is_done": is_done,
                     "remaining": remaining,
                 }
+
+        # 3. فحص daily_task (قاموس العدادات اليومية)
+        daily_task = merit_ctrl.get("daily_task", {})
+        if isinstance(daily_task, dict) and str(qid) in daily_task:
+            c_val = int(daily_task[str(qid)])
+            return {
+                "found": True,
+                "task_id": qid,
+                "c_num": c_val,
+                "l_num": 1,
+                "is_done": c_val >= 1,
+                "remaining": 0 if c_val >= 1 else 1,
+            }
 
         return {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "is_done": False, "remaining": 0}
 
@@ -489,7 +531,87 @@ class PrestigeTask(BaseTask):
             return {"success": False, "message": str(e)}
 
     # ════════════════════════════════════════════════════════════════
-    #  الجزء 5: فحص مهام الهيبة اليومية (Meritorious Quests Status)
+    #  الجزء 5: تبديل القمح بوسام الحرب (War Badge Exchange)
+    # ════════════════════════════════════════════════════════════════
+
+    async def run_badge_exchange_step(self) -> Dict[str, Any]:
+        """
+        تبديل القمح بوسام الحرب (CMD 1067/2) مرة واحدة يومياً لإنجاز مهمة الهيبة #4112024:
+          - الاستعلام المسبق: إذا كانت المهمة مكتملة مسبقاً اليوم يتم التخطي فوراً لتوفير الموارد.
+          - فحص 1067/1: إذا تم التبديل مسبقاً (curExchangeNum >= 1) يتم التخطي أيضاً.
+          - إرسال الطلب: {"nType": 1002, "exchangeNum": 1, "badgeType": 1}
+        """
+        q_info = self.get_quest_info("badge_exchange")
+        if q_info["is_done"]:
+            self.log.info(
+                f"✨ [استعلام مسبق] مهمة تبديل القمح بوسام الحرب مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']}) "
+                f"— يتم التخطي لتوفير الموارد!"
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "exchanged": 0,
+                "message": f"مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']})"
+            }
+
+        # فحص إضافي عبر CMD 1067 / subcmd 1
+        try:
+            r1 = await self.conn.query("1067", "1", {}, timeout=5)
+            if r1 and str(r1.get("err", "0")) == "0":
+                cur_num = int(r1.get("curExchangeNum", 0))
+                if cur_num >= 1:
+                    self.log.info(
+                        f"✨ [استعلام مسبق] تم تبديل وسام الحرب اليوم مسبقاً ({cur_num} مرات) — يتم التخطي لتوفير الموارد!"
+                    )
+                    return {
+                        "success": True,
+                        "skipped": True,
+                        "exchanged": 0,
+                        "message": f"تم التبديل مسبقاً اليوم ({cur_num})"
+                    }
+        except Exception as e:
+            self.log.debug(f"استعلام 1067/1 لم يكتمل: {e}")
+
+        self.log.info("🎖️ ───【 الخطوة 5: تبديل القمح بوسام الحرب (War Badge Exchange) 】───")
+
+        payload = {
+            "nType": 1002,        # القمح
+            "exchangeNum": 1,     # مرة واحدة
+            "badgeType": 1        # وسام الحرب
+        }
+
+        resp = await self.conn.query("1067", "2", payload, timeout=8)
+        if resp and str(resp.get("err", "0")) == "0":
+            self.log.info("✅ [مهام الهيبة] تم تبديل القمح بوسام الحرب بنجاح! 🎖️ (المورد: القمح #1002 | العدد: 1)")
+
+            # تحديث الكاش المحلي
+            merit = self.conn.init_data.setdefault("meritoriousTaskCtrl", {})
+            task_data = merit.setdefault("taskData", {})
+            t24 = task_data.setdefault("4112024", {"id": 4112024, "lNum": 1})
+            t24["cNum"] = 1
+            t24["status"] = 4
+            daily = merit.setdefault("daily_task", {})
+            daily["4112024"] = 1
+
+            return {
+                "success": True,
+                "skipped": False,
+                "exchanged": 1,
+                "message": "تم التبديل بنجاح"
+            }
+        else:
+            err_code = resp.get("err", "unknown") if resp else "timeout"
+            self.log.warning(f"⚠️ [مهام الهيبة] تعذر تبديل القمح بوسام الحرب (كود: {err_code})")
+            return {
+                "success": False,
+                "skipped": False,
+                "exchanged": 0,
+                "error": err_code,
+                "message": f"فشل التبديل: {err_code}"
+            }
+
+    # ════════════════════════════════════════════════════════════════
+    #  الجزء 6: فحص مهام الهيبة اليومية (Meritorious Quests Status)
     # ════════════════════════════════════════════════════════════════
 
     async def report_prestige_status(self):
@@ -523,7 +645,8 @@ class PrestigeTask(BaseTask):
         print(f"  • الساقية: تفعيل جميع مباني الموارد مع السماح بالشراء من متجر التحالف")
         print(f"  • تدريب الجنود: 250 وحدة من كل نوع على مستوى 1 (مشاة، خيالة، أسهم، عربات)")
         print(f"  • حصن الحرب: تدريب الفخاخ بالحد الأقصى التلقائي")
-        print("  ℹ️ مهام الهيبة الأربعة المعتمدة داخل المدينة: متجر المهربين، الساقية، تدريب الجنود، حصن الحرب.")
+        print(f"  • وسام الحرب: تبديل القمح بوسام الحرب (مرة واحدة يومياً)")
+        print("  ℹ️ مهام الهيبة المعتمدة داخل المدينة: متجر المهربين، الساقية، تدريب الجنود، حصن الحرب، وسام الحرب.")
         print("═" * 70 + "\n")
 
         # 0. تجديد بيانات مهام الهيبة من السيرفر للحصول على أحدث حالة
@@ -531,7 +654,7 @@ class PrestigeTask(BaseTask):
         await self._refresh_merit_data()
 
         # 0.1 الاستعلام المسبق وفحص حالة مهام الهيبة من السيرفر (المهام الداخلية)
-        quests_status = self.query_prestige_summary(["smuggler"])
+        quests_status = self.query_prestige_summary(["smuggler", "badge_exchange"])
         self.log_prestige_overview(quests_status)
 
         # 1. متجر المهربين
@@ -561,17 +684,28 @@ class PrestigeTask(BaseTask):
         # 4. حصن الحرب — تدريب الفخاخ تلقائياً (تُفعّل تلقائياً عند تفعيل تدريب الجنود في مهام الهيبة)
         if self.is_subtask_enabled("train"):
             fortress_res = await self.run_fortress_step()
+            await asyncio.sleep(round(random.uniform(1.5, 2.5), 2))
         else:
             self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة (تعتمد حصراً على تفعيل تدريب الجنود في مهام الهيبة).")
             fortress_res = {"success": True, "skipped": True, "user_disabled": True}
 
-        # 5. عرض تقرير حالة الهيبة
+        # 5. تبديل القمح بوسام الحرب (تُفعّل تلقائياً عند تفعيل مهمة الهيبة)
+        if self.is_subtask_enabled("badge_exchange"):
+            badge_res = await self.run_badge_exchange_step()
+            await asyncio.sleep(round(random.uniform(1.2, 2.0), 2))
+        else:
+            self.log.info("⏭️ [تخطي] مهمة تبديل القمح بوسام الحرب معطلة بناءً على اختيار المستخدم.")
+            badge_res = {"success": True, "skipped": True, "user_disabled": True, "exchanged": 0}
+
+        # 6. عرض تقرير حالة الهيبة
         await self.report_prestige_status()
 
         total_bought = smuggler_res.get("purchased_count", 0)
         watermill_activated = watermill_res.get("activated", 0)
         train_trained = train_res.get("trained_count", 0)
         smuggler_skipped = bool(smuggler_res.get("skipped"))
+        badge_exchanged = badge_res.get("exchanged", 0)
+        badge_skipped = bool(badge_res.get("skipped"))
 
         executed_parts = []
         skipped_parts = []
@@ -598,6 +732,13 @@ class PrestigeTask(BaseTask):
         else:
             executed_parts.append(f"حصن الحرب ({'✅' if fortress_res.get('success') else '⚠️'})")
 
+        if badge_res.get("user_disabled"):
+            skipped_parts.append("تبديل وسام الحرب (معطل)")
+        elif badge_skipped:
+            skipped_parts.append("تبديل وسام الحرب ✨")
+        elif badge_exchanged > 0:
+            executed_parts.append("تبديل وسام الحرب 🎖️")
+
         summary_txt = ""
         if executed_parts:
             summary_txt += f"المنفذ: [{', '.join(executed_parts)}]"
@@ -615,6 +756,8 @@ class PrestigeTask(BaseTask):
             watermill_activated=watermill_activated,
             train_trained=train_trained,
             fortress_ok=fortress_res.get("success", False),
+            badge_exchanged=badge_exchanged,
+            badge_skipped=badge_skipped,
         )
 
 
