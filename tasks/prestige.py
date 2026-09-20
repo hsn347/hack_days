@@ -537,10 +537,13 @@ class PrestigeTask(BaseTask):
     async def run_badge_exchange_step(self) -> Dict[str, Any]:
         """
         تبديل القمح بوسام الحرب (CMD 1067/2) مرة واحدة يومياً لإنجاز مهمة الهيبة #4112024:
-          - الاستعلام المسبق: إذا كانت المهمة مكتملة مسبقاً اليوم يتم التخطي فوراً لتوفير الموارد.
-          - فحص 1067/1: إذا تم التبديل مسبقاً (curExchangeNum >= 1) يتم التخطي أيضاً.
-          - إرسال الطلب: {"nType": 1002, "exchangeNum": 1, "badgeType": 1}
+          - قاعدة التكلفة الصارمة: التبديل مسموح فقط إذا كانت تكلفة القمح 300,000 أو أقل.
+            (السحبة الأولى = 300,000 قمح، بينما السحبات التالية تكلف 600,000+ قمح وتتجاوز الحد المسموح).
+          - إذا كانت المهمة مكتملة مسبقاً اليوم (is_done أو curExchangeNum >= 1) يتم التخطي فوراً لتوفير الموارد.
+          - إذا كان رصيد القمح بالقلعة أقل من 300,000 يتم التخطي فوراً.
         """
+        MAX_WHEAT_COST = 300000
+
         q_info = self.get_quest_info("badge_exchange")
         if q_info["is_done"]:
             self.log.info(
@@ -554,25 +557,49 @@ class PrestigeTask(BaseTask):
                 "message": f"مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']})"
             }
 
-        # فحص إضافي عبر CMD 1067 / subcmd 1
+        # فحص إضافي عبر CMD 1067 / subcmd 1 و badgeExchangeCtrl
+        cur_num = 0
         try:
             r1 = await self.conn.query("1067", "1", {}, timeout=5)
             if r1 and str(r1.get("err", "0")) == "0":
                 cur_num = int(r1.get("curExchangeNum", 0))
-                if cur_num >= 1:
-                    self.log.info(
-                        f"✨ [استعلام مسبق] تم تبديل وسام الحرب اليوم مسبقاً ({cur_num} مرات) — يتم التخطي لتوفير الموارد!"
-                    )
-                    return {
-                        "success": True,
-                        "skipped": True,
-                        "exchanged": 0,
-                        "message": f"تم التبديل مسبقاً اليوم ({cur_num})"
-                    }
         except Exception as e:
             self.log.debug(f"استعلام 1067/1 لم يكتمل: {e}")
 
-        self.log.info("🎖️ ───【 الخطوة 5: تبديل القمح بوسام الحرب (War Badge Exchange) 】───")
+        if cur_num == 0:
+            bctrl = self.conn.init_data.get("badgeExchangeCtrl", {})
+            if isinstance(bctrl, dict):
+                cur_num = int(bctrl.get("curExchangeNum", 0))
+
+        # التحقق من أن تكلفة التبديل لا تتجاوز 300,000 (التبديل الأول فقط = 300k، ما بعده يتجاوز 300k)
+        if cur_num >= 1:
+            self.log.info(
+                f"🛑 [تبديل وسام الحرب] تكلفة التبديل القادمة تتجاوز الحد الأقصى 300,000 قمح "
+                f"(عدد التباديل السابقة اليوم: {cur_num} — التكلفة > 300,000) — تم التخطي لحماية الموارد!"
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "exchanged": 0,
+                "message": f"تكلفة التبديل تتجاوز 300,000 قمح (curExchangeNum={cur_num})"
+            }
+
+        # فحص رصيد القمح المتاح بالقلعة
+        resources = self._get_castle_resources()
+        wheat_bal = resources.get(1002, 0)
+        if wheat_bal < MAX_WHEAT_COST:
+            self.log.info(
+                f"🛑 [تبديل وسام الحرب] رصيد القمح بالقلعة غير كافٍ ({int(wheat_bal):,} < {MAX_WHEAT_COST:,}) "
+                f"— تم إلغاء التبديل لحماية مخزون القلعة!"
+            )
+            return {
+                "success": False,
+                "skipped": True,
+                "exchanged": 0,
+                "message": f"رصيد القمح غير كافٍ ({int(wheat_bal):,} < {MAX_WHEAT_COST:,})"
+            }
+
+        self.log.info(f"🎖️ ───【 الخطوة 5: تبديل القمح بوسام الحرب (التكلفة: {MAX_WHEAT_COST:,} قمح) 】───")
 
         payload = {
             "nType": 1002,        # القمح
@@ -582,7 +609,7 @@ class PrestigeTask(BaseTask):
 
         resp = await self.conn.query("1067", "2", payload, timeout=8)
         if resp and str(resp.get("err", "0")) == "0":
-            self.log.info("✅ [مهام الهيبة] تم تبديل القمح بوسام الحرب بنجاح! 🎖️ (المورد: القمح #1002 | العدد: 1)")
+            self.log.info("✅ [مهام الهيبة] تم تبديل 300,000 قمح بوسام الحرب بنجاح! 🎖️ (المورد: القمح #1002 | العدد: 1)")
 
             # تحديث الكاش المحلي
             merit = self.conn.init_data.setdefault("meritoriousTaskCtrl", {})
@@ -593,11 +620,14 @@ class PrestigeTask(BaseTask):
             daily = merit.setdefault("daily_task", {})
             daily["4112024"] = 1
 
+            bctrl = self.conn.init_data.setdefault("badgeExchangeCtrl", {})
+            bctrl["curExchangeNum"] = cur_num + 1
+
             return {
                 "success": True,
                 "skipped": False,
                 "exchanged": 1,
-                "message": "تم التبديل بنجاح"
+                "message": "تم التبديل بنجاح (300,000 قمح)"
             }
         else:
             err_code = resp.get("err", "unknown") if resp else "timeout"
