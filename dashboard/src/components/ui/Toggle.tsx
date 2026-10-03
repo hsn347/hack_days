@@ -10,9 +10,9 @@ interface ToggleProps {
 
 export function Toggle({ value, onChange, disabled, size = 'md' }: ToggleProps) {
   const isSmall = size === 'sm'
-  const width = isSmall ? 40 : 48
-  const height = isSmall ? 22 : 26
-  const knobSize = isSmall ? 18 : 22
+  const width = isSmall ? 36 : 44
+  const height = isSmall ? 20 : 24
+  const knobSize = isSmall ? 16 : 20
   const travel = width - knobSize - 4
 
   return (

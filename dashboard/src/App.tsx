@@ -8,6 +8,7 @@ import { DashboardPage }   from './pages/Dashboard'
 import { AccountsPage }    from './pages/Accounts'
 import { CastleDetailPage }from './pages/CastleDetail'
 import { AdminPage }       from './pages/Admin'
+import { AdminLiveProcessesPage } from './pages/AdminLiveProcesses'
 import { SettingsPage }    from './pages/Settings'
 import { AuthContext, useAuthProvider } from './hooks/useAuth'
 import { queryClient }     from './lib/queryClient'
@@ -28,7 +29,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
       <div className="text-primary-400 animate-pulse">جارٍ التحميل...</div>
     </div>
   )
-  if (!ctx?.firebaseUser) return <Navigate to="/login" replace />
+  if (!ctx?.user && !ctx?.firebaseUser) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
@@ -45,8 +46,10 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     </div>
   )
 
-  if (!ctx?.firebaseUser) return <Navigate to="/login" replace />
-  if (!ctx?.isAdmin) return <Navigate to="/dashboard" replace />
+  const email = (ctx?.firebaseUser?.email || '').trim().toLowerCase()
+  if (!ctx?.firebaseUser || email !== 'ibraboths@gmail.com' || !ctx?.isAdmin) {
+    return <Navigate to="/dashboard" replace />
+  }
   return <>{children}</>
 }
 
@@ -105,6 +108,10 @@ export default function App() {
             <Route path="/admin" element={
               <AdminRoute><AdminPage /></AdminRoute>
             } />
+            <Route path="/admin/live-processes" element={
+              <AdminRoute><AdminPage /></AdminRoute>
+            } />
+
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

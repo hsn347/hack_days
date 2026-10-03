@@ -36,9 +36,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 from tasks.monster import get_monster_recommended_power, calculate_smart_combat_troops
-
-# ── ملف تاريخ الاستبعاد ──────────────────────────────────────────
-HISTORY_FILE = os.path.join(_ROOT_DIR, "exclude_history.json")
+from tasks.exclude_manager import get_manager as _get_exclude_manager
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -54,41 +52,9 @@ DEFAULT_TROOPS_COUNT       = 30000            # عدد الجنود الافتر
 
 
 # ════════════════════════════════════════════════════════════════════
-#  إدارة استبعاد الأهداف المكررة
+#  إدارة استبعاد الأهداف المكررة (مدير مركزي موحد)
+#  → تم نقلها إلى tasks/exclude_manager.py
 # ════════════════════════════════════════════════════════════════════
-
-def _get_exclude(uid: Any) -> Dict[str, bool]:
-    if not os.path.exists(HISTORY_FILE):
-        return {}
-    try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return {str(i): True for i in data.get(str(uid), [])}
-    except Exception:
-        return {}
-
-
-def _add_exclude(uid: Any, target_id: Any):
-    data: dict = {}
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
-
-    key = str(uid)
-    arr = data.setdefault(key, [])
-    t   = str(target_id)
-    if t not in arr:
-        arr.append(t)
-    while len(arr) > 20:
-        arr.pop(0)
-    try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -295,6 +261,7 @@ class StrongholdTask(BaseTask):
         self._busy      : Set[int] = set()
         self._used_army : Dict[int, int] = {}
         self._used_pets : Set[int] = set()
+        self._exclude_mgr = _get_exclude_manager()
 
     async def on_start(self):
         for _ in range(20):
@@ -479,9 +446,14 @@ class StrongholdTask(BaseTask):
 
         self.log.info(f"🏁 إجمالي مسيرات الهجوم على المعقل المُرسَلة: {sent_count}/{max_marches}")
         if sent_count > 0:
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة هجوم على المعقل", sent=sent_count, queue_full=(last_result == "QUEUE_FULL"))
+            return TaskResult.ok(
+                f"✅ تم إرسال {sent_count} مسيرة هجوم على المعقل",
+                sent=sent_count,
+                queue_full=(last_result == "QUEUE_FULL"),
+                stop_reason=last_result
+            )
         if last_result == "QUEUE_FULL":
-            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True)
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (كود 8004: QUEUE_FULL)", queue_full=True, stop_reason="QUEUE_FULL")
         if last_result == "STAMINA_EMPTY":
             return TaskResult.fail("🛑 نفدت طاقة اللورد بالكامل", stop_reason="STAMINA_EMPTY")
         return TaskResult.fail("لم يتم إرسال أي مسيرة هجوم على المعقل", retry_after=120)
@@ -504,29 +476,9 @@ class StrongholdTask(BaseTask):
             cx = int(cx)
             cy = int(cy)
 
-        # 2. البحث عن المعاقل (mapType: 26, subType: 0)
-        search_payload = {
-            "mapType": 26,
-            "subType": 0,
-            "num": 5,
-            "y": cy,
-            "x": cx,
-            "exclude": _get_exclude(self.uid),
-            "range": search_range,
-        }
-        if min_lv and max_lv:
-            search_payload["minLv"] = min_lv
-            search_payload["maxLv"] = max_lv
-
-        r_search = await self.conn.query('2011', '3', search_payload)
-        candidates = r_search.get('result', []) if r_search else []
-        if not candidates:
-            self.log.warning(f"⚠️ لا توجد معاقل متاحة في نطاق {search_range}!")
-            return "NO_TARGET"
-
-        # 3. جلب معرف المملكة (kingdom_id)
+        # 2. جلب معرف المملكة (kingdom_id)
         kingdom_id = 0
-        if self.conn.kingdom_id:
+        if getattr(self.conn, 'kingdom_id', None):
             try: kingdom_id = int(self.conn.kingdom_id)
             except: pass
         if not kingdom_id:
@@ -535,6 +487,28 @@ class StrongholdTask(BaseTask):
                 kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
         if not kingdom_id:
             kingdom_id = 4
+
+        # 3. البحث عن المعاقل (mapType: 26, subType: 0)
+        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
+        search_payload = {
+            "mapType": 26,
+            "subType": 0,
+            "num": 5,
+            "y": cy,
+            "x": cx,
+            "exclude": exclude_map,
+            "range": search_range,
+        }
+        if min_lv and max_lv:
+            search_payload["minLv"] = min_lv
+            search_payload["maxLv"] = max_lv
+
+        r_search = await self.conn.query('2011', '3', search_payload)
+        raw_candidates = r_search.get('result', []) if r_search else []
+        candidates = [c for c in raw_candidates if str(c.get('id', '')) not in exclude_map]
+        if not candidates:
+            self.log.warning(f"⚠️ لا توجد معاقل متاحة في نطاق {search_range}!")
+            return "NO_TARGET"
 
         # 4. جلب القوات المتوفرة بالقلعة
         available: Dict[int, int] = {}
@@ -752,7 +726,21 @@ class StrongholdTask(BaseTask):
             tx, ty    = target.get('x'), target.get('y')
             t_lv      = target.get('level', '?')
             self.log.info(f"🎯 محاولة استهداف معقل: ID={target_id} عند ({tx}, {ty}) لفل={t_lv}")
-            _add_exclude(self.uid, target_id)
+            # حجز مؤقت في الذاكرة فقط — لن يُثبت في الملف إلا بعد نجاح الهجوم
+            await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
+
+            # ── فحص مسبق شامل (1006/22 + 1006/1000): هل المعقل مشغول بمعركة أو مسيرة متجهة له حالياً؟ ──
+            is_busy, busy_reason, _ = await self.check_target_busy_or_marched(
+                target_id=target_id,
+                tx=tx,
+                ty=ty,
+                kingdom_id=kingdom_id,
+                is_stronghold=True
+            )
+            if is_busy:
+                self.log.warning(f"⚠️ المعقل {target_id} مستبعد: {busy_reason} — تخطي للبديل...")
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+                continue
 
             attack_payload = {
                 "needSend": False,
@@ -777,11 +765,14 @@ class StrongholdTask(BaseTask):
 
             r_attack = await self.conn.query('1007', '2', attack_payload)
             if not r_attack:
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
 
             err = str(r_attack.get('err', '0'))
             if err == '0':
                 self.log.info(f"✅ تم إرسال مسيرة المعقل بنجاح! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                # ✅ نجاح — تثبيت الاستبعاد في الملف
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 for hid in chosen_heroes:
                     self._busy.add(hid)
                 for item in army_list:
@@ -789,16 +780,20 @@ class StrongholdTask(BaseTask):
                 return "SUCCESS"
             elif err in ('8004', '9007004'):
                 self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "QUEUE_FULL"
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "NO_ARMY"
             elif err in ('8032', '10002', '10003'):
                 self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "STAMINA_EMPTY"
             elif err == '9007020':
                 for hid in chosen_heroes:
                     self._busy.add(hid)
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "HERO_BUSY"
             elif err == '8035':
                 current_total = sum(item['num'] for item in army_list)
@@ -813,18 +808,24 @@ class StrongholdTask(BaseTask):
                     r_retry = await self.conn.query('1007', '2', attack_payload)
                     if r_retry and str(r_retry.get('err', '0')) == '0':
                         self.log.info(f"✅ تم إرسال مسيرة المعقل بنجاح بعد ضبط القوات! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                        await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                         for hid in chosen_heroes:
                             self._busy.add(hid)
                         for item in army_list:
                             self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
                         return "SUCCESS"
                 self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
+                # المعقل مشغول فعلاً — نثبت الاستبعاد
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
             elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100 and err not in ('8004', '8009', '8032')):
                 self.log.warning(f"⚠️ المعقل {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص معقل بديل فوراً...")
+                # المعقل مشغول فعلاً — نثبت الاستبعاد
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
             else:
                 self.log.error(f"❌ خطأ غير معروف: {err} | الهدف={target_id}")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "ERROR"
 
         return "TARGET_OCCUPIED"

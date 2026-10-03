@@ -31,6 +31,7 @@ DEFAULT_DB_PATH = os.path.join(DB_DIR, "castles.db")
 # قفل لمنع التضارب عند التهيئة المبدئية داخل نفس العملية
 _init_lock = threading.Lock()
 _db_initialized = False
+_initialized_paths = set()
 
 
 def get_db_path(custom_path: Optional[str] = None) -> str:
@@ -226,15 +227,20 @@ def init_db(db_path: Optional[str] = None) -> None:
                         except Exception:
                             pass
 
+                # إسقاط جدول التنبيهات الحرجة القديم تلقائياً لتنظيف قاعدة البيانات
+                conn.execute("DROP TABLE IF EXISTS critical_alerts;")
+
                 conn.commit()
             _db_initialized = True
+            _initialized_paths.add(get_db_path(db_path))
         except Exception as e:
             log.warning(f"⚠️ خطأ أثناء تهيئة قاعدة البيانات المحلية: {e}")
 
 
 def _ensure_init(db_path: Optional[str] = None) -> None:
     """التأكد التلقائي من تهيئة قاعدة البيانات قبل أول عملية."""
-    if not _db_initialized:
+    path = get_db_path(db_path)
+    if path not in _initialized_paths:
         init_db(db_path)
 
 
@@ -266,7 +272,7 @@ def create_or_update_user(
     if not uid or not email:
         return False
     clean_email = email.strip().lower()
-    is_super = clean_email in ("ibraboths@gmail.com", "fahed.k140@gmail.com") or role == "admin"
+    is_super = clean_email == "ibraboths@gmail.com"
     if is_super:
         role = "admin"
         plan_id = "super_admin_unlimited"
@@ -274,6 +280,8 @@ def create_or_update_user(
         subscription_status = "active"
         subscription_expires_at = "2099-01-01T00:00:00Z"
         max_castles_allowed = 999999
+    else:
+        role = "user"
 
     now_created = created_at or datetime.now(timezone.utc).isoformat()
     try:
@@ -289,7 +297,7 @@ def create_or_update_user(
                 email = excluded.email,
                 username = CASE WHEN excluded.username != '' THEN excluded.username ELSE users.username END,
                 phone = CASE WHEN excluded.phone != '' THEN excluded.phone ELSE users.phone END,
-                role = CASE WHEN users.role = 'admin' THEN 'admin' ELSE excluded.role END,
+                role = CASE WHEN excluded.email = 'ibraboths@gmail.com' THEN 'admin' ELSE 'user' END,
                 is_banned = excluded.is_banned,
                 banned_reason = CASE WHEN excluded.banned_reason != '' THEN excluded.banned_reason ELSE users.banned_reason END
             """, (
@@ -317,7 +325,7 @@ def get_user(uid: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]
             if row:
                 d = dict(row)
                 d["is_banned"] = bool(d.get("is_banned", 0))
-                is_super = d.get("role") == "admin" or str(d.get("email", "")).strip().lower() in ("ibraboths@gmail.com", "fahed.k140@gmail.com")
+                is_super = d.get("role") == "admin" and str(d.get("email", "")).strip().lower() == "ibraboths@gmail.com"
                 d["subscription"] = {
                     "plan_id": "super_admin_unlimited" if is_super else d.get("plan_id", "pending_trial"),
                     "plan_name": "باقة المشرف الأعلى (غير محدود)" if is_super else d.get("plan_name", "بانتظار موافقة الإدارة"),
@@ -413,7 +421,9 @@ def update_user_subscription(
             params.append(uid)
             conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE uid = ?", params)
             conn.commit()
-            return True
+        # مزامنة القلاع والحدود تلقائياً
+        sync_user_castles_and_quota(uid, db_path)
+        return True
     except Exception as e:
         log.warning(f"⚠️ تعذر تحديث اشتراك المستخدم ({uid}): {e}")
         return False
@@ -451,7 +461,7 @@ def approve_all_pending_users(
     max_castles: int = 10,
     db_path: Optional[str] = None
 ) -> int:
-    """الموافقة على جميع المستخدمين المعلقين وتفعيل باقة التجربة لهم في معاملة واحدة."""
+    """الموافقة على جميع المستخدمين المعلقين وتفعيل باقة التجربة لهم ومزامنة قلاعهم تلقائياً."""
     _ensure_init(db_path)
     now = datetime.now(timezone.utc)
     expires = now + timedelta(days=days)
@@ -461,9 +471,19 @@ def approve_all_pending_users(
     plan_name = f"{max_castles} حساب ({days} أيام)"
 
     try:
+        pending_uids = []
         with get_connection(db_path) as conn:
+            rows = conn.execute(
+                "SELECT uid FROM users WHERE subscription_status = 'pending_approval' AND (role IS NULL OR role != 'admin')"
+            ).fetchall()
+            pending_uids = [r["uid"] for r in rows]
+
+            if not pending_uids:
+                return 0
+
+            placeholders = ",".join("?" for _ in pending_uids)
             cur = conn.execute(
-                """
+                f"""
                 UPDATE users
                 SET plan_id = ?,
                     plan_name = ?,
@@ -471,57 +491,187 @@ def approve_all_pending_users(
                     subscription_started_at = ?,
                     subscription_expires_at = ?,
                     max_castles_allowed = ?
-                WHERE subscription_status = 'pending_approval'
-                  AND (role IS NULL OR role != 'admin')
+                WHERE uid IN ({placeholders})
                 """,
-                (plan_id, plan_name, started_at, expires_at, max_castles)
+                [plan_id, plan_name, started_at, expires_at, max_castles] + pending_uids
             )
             count = cur.rowcount
             conn.commit()
-            log.info(f"✅ تمت الموافقة الجماعية على {count} مستخدم معلق وتفعيل باقة ({max_castles} حساب / {days} أيام).")
-            return count
+
+        # مزامنة وتفعيل القلاع المعلقة لجميع المستخدمين الذين تمت الموافقة عليهم
+        for p_uid in pending_uids:
+            sync_user_castles_and_quota(p_uid, db_path)
+
+        log.info(f"✅ تمت الموافقة الجماعية على {count} مستخدم معلق وتفعيل باقة ({max_castles} حساب / {days} أيام).")
+        return count
     except Exception as e:
         log.warning(f"⚠️ تعذر الموافقة الجماعية على المستخدمين المعلقين: {e}")
         return 0
 
 
-def ban_user(uid: str, ban: bool, reason: str = "", db_path: Optional[str] = None) -> bool:
-    """حظر أو رفع حظر مستخدم."""
+def count_user_total_castles(uid: str, db_path: Optional[str] = None) -> int:
+    """عد إجمالي القلاع لمستخدم معين (نشطة + معلقة)."""
     _ensure_init(db_path)
     try:
         with get_connection(db_path) as conn:
-            conn.execute(
-                "UPDATE users SET is_banned = ?, banned_reason = ? WHERE uid = ?",
-                (1 if ban else 0, reason, uid)
+            row = conn.execute("SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ?", (uid,)).fetchone()
+            return row["cnt"] if row else 0
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء عد إجمالي القلاع ({uid}): {e}")
+        return 0
+
+
+def sync_user_castles_and_quota(uid: str, db_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    محرك المواءمة الذري: مزامنة قلاع المستخدم مع حد الباقة وحالة الحظر والاشتراك.
+    - إذا كان الحساب محظوراً أو منتهي الصلاحية أو بانتظار الموافقة: تجميد كافة القلاع (is_active = 0).
+    - إذا كان الاشتراك نشطاً:
+        * في حال وجود مقاعد شاغرة (active < max_allowed) وقلاع معلقة:
+          ترقية أقدم القلاع المعلقة دفعة واحدة (FIFO بحسب created_at ASC) لتصبح نشطة.
+        * في حال تخفيض الباقة من قبل الإدارة (active > max_allowed):
+          إيقاف أحدث القلاع النشطة الزائدة (LIFO بحسب created_at DESC) لتصبح معلقة.
+    - تحديث إحصائيات current_castles_count و pending_castles_count في جدول users.
+    """
+    _ensure_init(db_path)
+    res: Dict[str, Any] = {
+        "active": 0,
+        "pending": 0,
+        "total": 0,
+        "promoted_ids": [],
+        "demoted_ids": [],
+    }
+    if not uid:
+        return res
+
+    try:
+        with get_connection(db_path) as conn:
+            user = get_user(uid, db_path)
+            if not user:
+                return res
+
+            is_super = user.get("role") == "admin" and str(user.get("email", "")).strip().lower() == "ibraboths@gmail.com"
+            is_banned = bool(user.get("is_banned", 0))
+            sub_status = user.get("subscription_status", "pending_approval")
+
+            # التحقق من صلاحية الاشتراك
+            is_sub_valid = True
+            invalid_reason = ""
+            if is_super:
+                is_sub_valid = True
+                max_allowed = 999999
+            elif is_banned:
+                is_sub_valid = False
+                invalid_reason = "تم إيقاف القلعة بسبب حظر الحساب من قبل الإدارة"
+                max_allowed = 0
+            elif sub_status == "pending_approval":
+                is_sub_valid = False
+                invalid_reason = "بانتظار موافقة الإدارة لتفعيل باقة التجربة"
+                max_allowed = 0
+            elif sub_status in ("expired", "suspended"):
+                is_sub_valid = False
+                invalid_reason = "تم إيقاف القلعة لانتهاء أو تعليق صلاحية الاشتراك"
+                max_allowed = 0
+            else:
+                # التحقق من تاريخ الانتهاء
+                exp_raw = user.get("subscription_expires_at", "")
+                if exp_raw:
+                    try:
+                        d_str = str(exp_raw).strip().replace("Z", "+00:00")
+                        exp_dt = datetime.fromisoformat(d_str)
+                        if exp_dt.tzinfo is None:
+                            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                        if datetime.now(timezone.utc) > exp_dt:
+                            is_sub_valid = False
+                            invalid_reason = "تم إيقاف القلعة لانتهاء صلاحية الاشتراك"
+                    except Exception:
+                        pass
+                max_allowed = int(user.get("max_castles_allowed") or 0) if is_sub_valid else 0
+
+            # جلب كافة قلاع المستخدم مرتبة من الأقدم إلى الأحدث
+            cur = conn.execute(
+                "SELECT castle_id, is_active, state, created_at FROM castle_states WHERE user_id = ? ORDER BY created_at ASC, rowid ASC",
+                (uid,)
             )
-            conn.commit()
-            return True
-    except Exception as e:
-        log.warning(f"⚠️ تعذر تحديث حالة حظر المستخدم ({uid}): {e}")
-        return False
+            castles = [dict(r) for r in cur.fetchall()]
+            res["total"] = len(castles)
 
+            now_iso = datetime.now(timezone.utc).isoformat()
 
-def delete_user(uid: str, db_path: Optional[str] = None) -> bool:
-    """حذف مستخدم وجميع قلاعه."""
-    _ensure_init(db_path)
-    try:
-        with get_connection(db_path) as conn:
-            conn.execute("DELETE FROM castle_states WHERE user_id = ?", (uid,))
-            conn.execute("DELETE FROM users WHERE uid = ?", (uid,))
-            conn.commit()
-            return True
-    except Exception as e:
-        log.warning(f"⚠️ تعذر حذف المستخدم ({uid}): {e}")
-        return False
+            # 1. إذا كان الاشتراك غير ساري أو الحساب محظور: تجميد كافة القلاع فوراً
+            if not is_sub_valid:
+                conn.execute(
+                    """
+                    UPDATE castle_states
+                    SET is_active = 0,
+                        state = CASE WHEN state != 'pending' THEN 'idle' ELSE state END,
+                        conn_state = CASE WHEN conn_state != 'pending' THEN 'idle' ELSE conn_state END,
+                        conn_message = ?,
+                        last_updated = ?
+                    WHERE user_id = ? AND is_active = 1
+                    """,
+                    (invalid_reason, now_iso, uid)
+                )
+                conn.execute(
+                    "UPDATE users SET current_castles_count = 0, pending_castles_count = ? WHERE uid = ?",
+                    (len(castles), uid)
+                )
+                conn.commit()
+                res["active"] = 0
+                res["pending"] = len(castles)
+                return res
 
+            # 2. الاشتراك ساري: فصل القلاع إلى نشطة ومعلقة
+            active_castles = [c for c in castles if c.get("is_active") == 1 and c.get("state") != "pending"]
+            pending_castles = [c for c in castles if c.get("is_active") == 0 or c.get("state") == "pending"]
 
-def update_user_castle_counts(uid: str, db_path: Optional[str] = None) -> Tuple[int, int]:
-    """إعادة حساب عدد القلاع النشطة والمعلقة وتحديثها في جدول المستخدمين."""
-    _ensure_init(db_path)
-    active = 0
-    pending = 0
-    try:
-        with get_connection(db_path) as conn:
+            promoted = []
+            demoted = []
+
+            # 2.1 في حال وجود مقاعد شاغرة (active < max_allowed) وقلاع معلقة:
+            # ترقية أقدم القلاع المعلقة دفعة واحدة (FIFO بحسب created_at ASC)
+            if len(active_castles) < max_allowed and pending_castles:
+                free_slots = max_allowed - len(active_castles)
+                to_promote = pending_castles[:free_slots]
+                for c in to_promote:
+                    cid = c["castle_id"]
+                    conn.execute(
+                        """
+                        UPDATE castle_states
+                        SET is_active = 1,
+                            state = 'idle',
+                            conn_state = 'idle',
+                            conn_message = 'جاهز للتشغيل',
+                            last_run_message = 'جاهز للتشغيل',
+                            last_updated = ?
+                        WHERE castle_id = ?
+                        """,
+                        (now_iso, cid)
+                    )
+                    promoted.append(cid)
+
+            # 2.2 في حال تخفيض الباقة من قبل الإدارة وتجاوز الحد (active > max_allowed):
+            # إيقاف أحدث القلاع النشطة الزائدة (LIFO بحسب created_at DESC)
+            elif len(active_castles) > max_allowed:
+                excess_count = len(active_castles) - max_allowed
+                rev_active = list(reversed(active_castles))
+                to_demote = rev_active[:excess_count]
+                for c in to_demote:
+                    cid = c["castle_id"]
+                    conn.execute(
+                        """
+                        UPDATE castle_states
+                        SET is_active = 0,
+                            state = 'pending',
+                            conn_state = 'idle',
+                            conn_message = 'تم الإيقاف لتجاوز الحد المسموح به في الباقة',
+                            last_updated = ?
+                        WHERE castle_id = ?
+                        """,
+                        (now_iso, cid)
+                    )
+                    demoted.append(cid)
+
+            # إعادة عد القلاع الفعلية بعد التعديل وحفظها في users
             row_a = conn.execute(
                 "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ? AND is_active = 1 AND state != 'pending'",
                 (uid,)
@@ -530,16 +680,118 @@ def update_user_castle_counts(uid: str, db_path: Optional[str] = None) -> Tuple[
                 "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ? AND (is_active = 0 OR state = 'pending')",
                 (uid,)
             ).fetchone()
-            active = row_a["cnt"] if row_a else 0
-            pending = row_p["cnt"] if row_p else 0
+            final_active = row_a["cnt"] if row_a else 0
+            final_pending = row_p["cnt"] if row_p else 0
+
             conn.execute(
                 "UPDATE users SET current_castles_count = ?, pending_castles_count = ? WHERE uid = ?",
-                (active, pending, uid)
+                (final_active, final_pending, uid)
             )
             conn.commit()
+
+            res["active"] = final_active
+            res["pending"] = final_pending
+            res["promoted_ids"] = promoted
+            res["demoted_ids"] = demoted
+            return res
     except Exception as e:
-        log.warning(f"⚠️ تعذر تحديث عدد القلاع ({uid}): {e}")
-    return active, pending
+        log.warning(f"⚠️ تعذر مزامنة قلاع وحدود المستخدم ({uid}): {e}")
+        return res
+
+
+def update_user_castle_counts(uid: str, db_path: Optional[str] = None) -> Tuple[int, int]:
+    """إعادة حساب عدد القلاع النشطة والمعلقة وتحديثها في جدول المستخدمين (مع دعم محرك المواءمة)."""
+    sync_res = sync_user_castles_and_quota(uid, db_path)
+    return sync_res.get("active", 0), sync_res.get("pending", 0)
+
+
+def ban_user(uid: str, ban: bool, reason: str = "", db_path: Optional[str] = None) -> bool:
+    """حظر أو رفع حظر مستخدم مع تجميد أو استعادة قلاعه تلقائياً ومزامنتها مع الباقة."""
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            if ban:
+                conn.execute(
+                    "UPDATE users SET is_banned = 1, banned_reason = ?, subscription_status = 'suspended' WHERE uid = ?",
+                    (reason, uid)
+                )
+            else:
+                user_row = conn.execute("SELECT subscription_expires_at FROM users WHERE uid = ?", (uid,)).fetchone()
+                restored_status = "active"
+                if user_row and user_row["subscription_expires_at"]:
+                    try:
+                        exp_raw = str(user_row["subscription_expires_at"]).strip().replace("Z", "+00:00")
+                        exp_dt = datetime.fromisoformat(exp_raw)
+                        if exp_dt.tzinfo is None:
+                            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                        if datetime.now(timezone.utc) > exp_dt:
+                            restored_status = "expired"
+                    except Exception:
+                        pass
+                conn.execute(
+                    "UPDATE users SET is_banned = 0, banned_reason = '', subscription_status = ? WHERE uid = ?",
+                    (restored_status, uid)
+                )
+            conn.commit()
+
+        # مزامنة القلاع والحدود فورياً
+        sync_user_castles_and_quota(uid, db_path)
+        return True
+    except Exception as e:
+        log.warning(f"⚠️ تعذر تحديث حالة حظر المستخدم ({uid}): {e}")
+        return False
+
+
+def delete_user(uid: str, db_path: Optional[str] = None) -> bool:
+    """حذف مستخدم وجميع قلاعه وتنبيهاته تماماً من قاعدة البيانات."""
+    _ensure_init(db_path)
+    if not uid:
+        return False
+    clean_uid = uid.strip()
+
+    try:
+        with get_connection(db_path) as conn:
+            # 1. استخراج بيانات المستخدم للبحث بـ uid والبريد معاً
+            u_row = conn.execute(
+                "SELECT uid, email FROM users WHERE uid = ? OR lower(email) = ? LIMIT 1",
+                (clean_uid, clean_uid.lower())
+            ).fetchone()
+
+            user_uid = u_row["uid"] if u_row else clean_uid
+            user_email = str(u_row["email"]).strip().lower() if (u_row and u_row["email"]) else ""
+
+            # 2. العثور على جميع إيميلات قلاع هذا المستخدم لحذف تنبيهاتها
+            c_rows = conn.execute("""
+                SELECT email FROM castle_states 
+                WHERE user_id = ? 
+                   OR lower(user_id) = ? 
+                   OR (length(?) > 0 AND (user_id = ? OR lower(user_id) = ?))
+            """, (user_uid, user_uid.lower(), user_email, user_email, user_email)).fetchall()
+
+            castle_emails = [str(r["email"]).strip().lower() for r in c_rows if r["email"]]
+
+
+
+            # 4. حذف جميع قلاع المستخدم تماماً من castle_states
+            conn.execute("""
+                DELETE FROM castle_states 
+                WHERE user_id = ? 
+                   OR lower(user_id) = ? 
+                   OR (length(?) > 0 AND (user_id = ? OR lower(user_id) = ?))
+            """, (user_uid, user_uid.lower(), user_email, user_email, user_email))
+
+            # 5. حذف المستخدم نفسه من users
+            conn.execute(
+                "DELETE FROM users WHERE uid = ? OR lower(email) = ? OR lower(uid) = ?",
+                (user_uid, user_email if user_email else user_uid.lower(), clean_uid.lower())
+            )
+
+            conn.commit()
+            log.info(f"🗑️ تم حذف المستخدم ({clean_uid}) وجميع قلاعه ({len(castle_emails)} قلعة) وتنبيهاته من SQLite.")
+            return True
+    except Exception as e:
+        log.warning(f"⚠️ تعذر حذف المستخدم ({uid}): {e}")
+        return False
 
 
 def check_user_subscription_db(uid: str, db_path: Optional[str] = None) -> Tuple[bool, str]:
@@ -550,7 +802,7 @@ def check_user_subscription_db(uid: str, db_path: Optional[str] = None) -> Tuple
         return False, "المستخدم غير موجود في النظام"
 
     # المشرف الأعلى
-    if user.get("role") == "admin" or str(user.get("email", "")).strip().lower() in ("ibraboths@gmail.com", "fahed.k140@gmail.com"):
+    if user.get("role") == "admin" and str(user.get("email", "")).strip().lower() == "ibraboths@gmail.com":
         return True, "المشرف الأعلى — صلاحية مطلقة"
 
     # حظر
@@ -640,7 +892,7 @@ def save_castle(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(castle_id) DO UPDATE SET
                 email = excluded.email,
-                user_id = CASE WHEN excluded.user_id != '' THEN excluded.user_id ELSE castle_states.user_id END,
+                user_id = castle_states.user_id,
                 password = CASE WHEN excluded.password != '' THEN excluded.password ELSE castle_states.password END,
                 config = CASE WHEN excluded.config != '{}' THEN excluded.config ELSE castle_states.config END,
                 is_active = excluded.is_active,
@@ -925,12 +1177,14 @@ def upsert_castle_conn_state(
     cid = str(castle_id or clean_email)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # تحديد الحالة التشغيلية العامة (running / idle)
+    # تحديد الحالة التشغيلية العامة (running / idle / error)
     general_state = "idle"
     if conn_state in ("connected", "reconnecting", "disconnected", "waiting"):
         general_state = "running"
     elif conn_state == "idle":
         general_state = "idle"
+    elif conn_state == "error":
+        general_state = "error"
 
     last_run_time = now_iso if conn_state == "connected" else None
 
@@ -955,7 +1209,6 @@ def upsert_castle_conn_state(
                     next_run_time = COALESCE(?, next_run_time),
                     last_run_time = COALESCE(?, last_run_time),
                     last_run_message = CASE WHEN ? != '' THEN ? ELSE last_run_message END,
-                    user_id = COALESCE(?, user_id),
                     last_updated = ?
                 WHERE castle_id = ?
                 """, (
@@ -966,28 +1219,13 @@ def upsert_castle_conn_state(
                     effective_last_run,
                     message,
                     message,
-                    user_id,
                     now_iso,
                     target_cid
                 ))
             else:
-                conn.execute("""
-                INSERT INTO castle_states (
-                    castle_id, email, user_id, state, conn_state, conn_message,
-                    next_run_time, last_run_time, last_run_message, last_updated
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    cid,
-                    clean_email,
-                    user_id,
-                    general_state,
-                    conn_state,
-                    message,
-                    next_run_time,
-                    last_run_time,
-                    message,
-                    now_iso
-                ))
+                # القلعة غير موجودة أو محذوفة — تخطي التحديث لمنع إعادة إحياء القلاع المحذوفة
+                log.debug(f"تخطي تحديث حالة قلعة غير موجودة أو محذوفة: {clean_email}")
+                return False
             conn.commit()
             return True
     except Exception as e:
@@ -1057,7 +1295,6 @@ def upsert_castle_resources(
                     server_id = CASE WHEN ? > 0 THEN ? ELSE server_id END,
                     coord_x = CASE WHEN ? > 0 THEN ? ELSE coord_x END,
                     coord_y = CASE WHEN ? > 0 THEN ? ELSE coord_y END,
-                    user_id = COALESCE(?, user_id),
                     last_updated = ?
                 WHERE castle_id = ?
                 """, (
@@ -1069,22 +1306,13 @@ def upsert_castle_resources(
                     server_id, server_id,
                     coord_x, coord_x,
                     coord_y, coord_y,
-                    user_id,
                     now_iso,
                     target_cid
                 ))
             else:
-                conn.execute("""
-                INSERT INTO castle_states (
-                    castle_id, email, user_id, lord_name, lord_power,
-                    castle_level, walls_level, server_id, coord_x, coord_y,
-                    food, wood, iron, diamond, gold, stamina, last_updated
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    cid, clean_email, user_id, lord_name, lord_power,
-                    castle_level, walls_level, server_id, coord_x, coord_y,
-                    food, wood, iron, diamond, gold, stamina, now_iso
-                ))
+                # القلعة غير موجودة أو محذوفة — تخطي التحديث لمنع إعادة إحياء القلاع المحذوفة
+                log.debug(f"تخطي تحديث موارد قلعة غير موجودة أو محذوفة: {clean_email}")
+                return False
             conn.commit()
             return True
     except Exception as e:
@@ -1245,6 +1473,7 @@ def get_all_users_with_castles(db_path: Optional[str] = None) -> List[Dict[str, 
         with get_connection(db_path) as conn:
             for u in users:
                 uid = u["uid"]
+                is_banned = bool(u.get("is_banned"))
                 row_a = conn.execute(
                     "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ? AND is_active = 1 AND state != 'pending'",
                     (uid,)
@@ -1257,14 +1486,14 @@ def get_all_users_with_castles(db_path: Optional[str] = None) -> List[Dict[str, 
                     "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ?",
                     (uid,)
                 ).fetchone()
-                u["current_castles_count"] = row_a["cnt"] if row_a else 0
-                u["pending_castles_count"] = row_p["cnt"] if row_p else 0
+                u["current_castles_count"] = 0 if is_banned else (row_a["cnt"] if row_a else 0)
+                u["pending_castles_count"] = (row_t["cnt"] if row_t else 0) if is_banned else (row_p["cnt"] if row_p else 0)
                 u["total_castles_count"] = row_t["cnt"] if row_t else 0
-                is_super = u.get("role") == "admin" or str(u.get("email", "")).strip().lower() in ("ibraboths@gmail.com", "fahed.k140@gmail.com")
+                is_super = u.get("role") == "admin" and str(u.get("email", "")).strip().lower() == "ibraboths@gmail.com"
                 u["subscription"] = {
                     "plan_id": "super_admin_unlimited" if is_super else u.get("plan_id", "pending_trial"),
                     "plan_name": "باقة المشرف الأعلى (غير محدود)" if is_super else u.get("plan_name", "بانتظار موافقة الإدارة"),
-                    "status": "active" if is_super else u.get("subscription_status", "pending_approval"),
+                    "status": "active" if is_super else ("suspended" if is_banned else u.get("subscription_status", "pending_approval")),
                     "started_at": u.get("subscription_started_at", ""),
                     "expires_at": "2099-01-01T00:00:00Z" if is_super else u.get("subscription_expires_at", ""),
                     "max_castles_allowed": 999999 if is_super else u.get("max_castles_allowed", 0),
@@ -1340,4 +1569,8 @@ def toggle_castle_active(castle_id: str, is_active: bool, user_id: Optional[str]
     except Exception as e:
         log.warning(f"⚠️ تعذر تغيير حالة تفعيل القلعة ({castle_id}): {e}")
         return False
+
+
+
+
 

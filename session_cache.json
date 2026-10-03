@@ -95,6 +95,12 @@
       "sessionId": "OtFIP4Dg+eAac54vQKtApoIN2hfolHw/xj5Mimzo53608JAUJkZZC30uyywnznNBlppUv+yKtvop8bZs+C+o/w==",
       "timestamp": 1789153757.2587378,
       "source": "sdk_password_login"
+    },
+    "hichambaraki10@gmail.com": {
+      "userId": "ffdaf66a461b7572389d8de6773b0dc6",
+      "sessionId": "ZgIoR6HUhUQjwHzZk1b6aQLhW04jbxpBVjD5dLAwXJ3eCd87Bf7pt2ntwSKipkSveyp2jWutfs/vMGWSHUMbGQ==",
+      "timestamp": 1790206607.1910229,
+      "source": "sdk_login"
     }
   }
 }

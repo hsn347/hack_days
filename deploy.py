@@ -2,6 +2,12 @@
 """
 deploy.py — أداة النشر والتحديث الذكي السلس لخادم IBRA BOT
 ═════════════════════════════════════════════════════════════
+
+
+python deploy.py --backend
+python deploy.py --full
+python deploy.py --frontend
+
 يدعم:
   1) تحديث الواجهة فقط (Frontend) بدون إيقاف أي بوت (0% توقف).
   2) تحديث شامل ذكي (Full Deploy) مع استئناف فوري تلقائي لجميع البوتات الشغالة (Auto-Resume).
@@ -29,12 +35,47 @@ REMOTE_DIR  = "/var/www/osmanli"
 LOCAL_DIR   = os.path.dirname(os.path.abspath(__file__))
 
 
+# إعدادات الاستئناف التدريجي — يجب أن تتطابق مع _RESUME_BATCH_SIZE في api_server.py
+RESUME_BATCH_SIZE  = 20    # عدد البوتات في كل دفعة
+RESUME_BATCH_DELAY = 30    # ثوانٍ بين الدفعات
+
+
 def get_ssh_client():
+    import socket
     import paramiko
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(SERVER_HOST, username=SERVER_USER, password=SERVER_PASS, timeout=20)
-    return client
+    last_err = None
+    for attempt in range(1, 11):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(6)
+            s.connect((SERVER_HOST, 22))
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(SERVER_HOST, username=SERVER_USER, password=SERVER_PASS, sock=s, banner_timeout=30)
+            return client
+        except Exception as e:
+            last_err = e
+            time.sleep(1.5)
+    raise RuntimeError(f"فشل الاتصال بالسيرفر بعد 10 محاولات: {last_err}")
+
+
+def _run(client, cmd: str) -> str:
+    """تنفيذ أمر SSH وإرجاع الناتج."""
+    stdin, stdout, stderr = client.exec_command(cmd)
+    stdout.channel.recv_exit_status()
+    return stdout.read().decode("utf-8", errors="replace").strip()
+
+
+def _deploy_lock(client):
+    """تفعيل وضع النشر على السيرفر — يمنع تشغيل أي بوت جديد أثناء التحديث."""
+    resp = _run(client, "curl -s -X POST http://127.0.0.1:8000/api/internal/deploy-lock")
+    print(f"   🔒 Deploy Lock: {resp}")
+
+
+def _deploy_unlock(client):
+    """إلغاء وضع النشر — يسمح للمستخدمين بتشغيل البوتات مرة أخرى."""
+    resp = _run(client, "curl -s -X POST http://127.0.0.1:8000/api/internal/deploy-unlock")
+    print(f"   🔓 Deploy Unlock: {resp}")
 
 
 def build_frontend():
@@ -96,6 +137,7 @@ def upload_backend_files(client):
         ("core/database.py", f"{REMOTE_DIR}/core/database.py"),
         ("core/session_manager.py", f"{REMOTE_DIR}/core/session_manager.py"),
         ("core/firebase_schema.py", f"{REMOTE_DIR}/core/firebase_schema.py"),
+        ("empire-bot.service", "/etc/systemd/system/empire-bot.service"),
     ]
 
 
@@ -113,7 +155,8 @@ def upload_backend_files(client):
             print(f"  ⬆️  {rel_path}")
 
     sftp.close()
-    print("✅ تم رفع ملفات الباك إند بنجاح.")
+    _run(client, "systemctl daemon-reload")
+    print("✅ تم رفع ملفات الباك إند وتحديث إعدادات النظام بنجاح.")
 
 
 def deploy_frontend_only():
@@ -137,7 +180,8 @@ def deploy_frontend_only():
 def deploy_full_smart():
     print("\n" + "=" * 65)
     print("🚀 خيار 2: تحديث شامل ذكي (Full Deploy + Auto-Resume)")
-    print("🔄 ميزة: تحديث البايثون والواجهة مع استئناف فوري لجميع البوتات الشغالة تلقائياً")
+    print("🔄 ميزة: تحديث البايثون والواجهة مع استئناف تدريجي للبوتات")
+    print(f"📦 الاستئناف التدريجي: {RESUME_BATCH_SIZE} بوت كل {RESUME_BATCH_DELAY} ثانية")
     print("=" * 65)
 
     if not build_frontend():
@@ -145,79 +189,112 @@ def deploy_full_smart():
 
     client = get_ssh_client()
 
-    # 1. حفظ حالة جميع البوتات الشغالة الآن أياً كان عددها
-    print("\n💾 [1/5] حفظ قائمة البوتات النشطة حالياً عبر ميزة Auto-Resume...")
-    cmd_save = "curl -s -X POST http://127.0.0.1:8000/api/internal/save-running-state"
-    stdin, stdout, stderr = client.exec_command(cmd_save)
-    save_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   استجابة السيرفر: {save_resp}")
+    # 1. قفل وضع النشر — يمنع المستخدمين من تشغيل بوتات أثناء التحديث
+    print("\n🔒 [1/6] تفعيل وضع النشر (Deploy Lock) — تعليق تشغيل البوتات...")
+    _deploy_lock(client)
 
-    # 2. رفع ملفات الباك إند
-    print("\n⬆️  [2/5] رفع ملفات الباك إند...")
+    # 2. حفظ حالة البوتات النشطة
+    print("\n💾 [2/6] حفظ قائمة البوتات النشطة عبر Auto-Resume...")
+    save_resp = _run(client, "curl -s -X POST http://127.0.0.1:8000/api/internal/save-running-state")
+    try:
+        import json as _json
+        count = _json.loads(save_resp).get("count", "?")
+        print(f"   تم حفظ {count} بوت شغّال.")
+    except Exception:
+        print(f"   {save_resp[:80]}")
+
+    # 3. رفع ملفات الباك إند
+    print("\n⬆️  [3/6] رفع ملفات الباك إند...")
     upload_backend_files(client)
 
-    # 3. رفع ملفات الواجهة الأمامية
-    print("\n⬆️  [3/5] رفع حزمة الواجهة الأمامية وتحديث Nginx...")
+    # 4. رفع الواجهة الأمامية
+    print("\n⬆️  [4/6] رفع حزمة الواجهة الأمامية وتحديث Nginx...")
     upload_frontend(client)
 
-    # 4. إعادة تشغيل خدمة البايثون لاعتماد الكود الجديد
-    print("\n🔄 [4/5] إعادة تشغيل خدمة البايثون (empire-bot.service)...")
-    cmd_restart = "systemctl restart empire-bot.service; sleep 2; systemctl is-active empire-bot.service"
-    stdin, stdout, stderr = client.exec_command(cmd_restart)
-    status_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   حالة الخدمة الآن: {status_resp}")
+    # 5. إعادة تشغيل خدمة البايثون
+    print("\n🔄 [5/6] إعادة تشغيل خدمة البايثون (empire-bot.service)...")
+    status_resp = _run(client, "systemctl restart empire-bot.service; sleep 3; systemctl is-active empire-bot.service")
+    print(f"   حالة الخدمة: {status_resp}")
 
-    # 5. التحقق من صحة السيرفر والاستئناف التلقائي
-    print("\n🔍 [5/5] فحص صحة الخدمة والاستئناف التلقائي...")
+    # 6. التحقق من الصحة
+    print("\n🔍 [6/6] فحص صحة الخدمة...")
     time.sleep(3)
-    cmd_health = "curl -s http://127.0.0.1:8000/api/health"
-    stdin, stdout, stderr = client.exec_command(cmd_health)
-    health_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   فحص الصحة: {health_resp}")
+    health_resp = _run(client, "curl -s http://127.0.0.1:8000/api/health")
+    print(f"   الصحة: {health_resp}")
 
     client.close()
+
+    # مؤشر الاستئناف التدريجي (يعمل تلقائياً في الخلفية على السيرفر)
+    try:
+        import json as _json
+        bot_count = _json.loads(save_resp).get("count", 0)
+        if bot_count > 0:
+            batches = (bot_count + RESUME_BATCH_SIZE - 1) // RESUME_BATCH_SIZE
+            total_time = (batches - 1) * RESUME_BATCH_DELAY
+            print(f"\n⏳ الاستئناف التدريجي: {bot_count} بوت في {batches} دفعة")
+            print(f"   الوقت التقديري للاستئناف الكامل: ~{total_time}ث ({total_time//60}د {total_time%60}ث)")
+    except Exception:
+        pass
+
     print("\n" + "═" * 65)
-    print("🎉 تم التحديث الشامل بنجاح! جاري استئناف البوتات تلقائياً في الخلفية.")
+    print("🎉 تم التحديث الشامل بنجاح! البوتات تستأنف تلقائياً بشكل متدرج.")
     print("═" * 65)
 
 
 def deploy_backend_only():
     print("\n" + "=" * 65)
     print("🐍 خيار 4: تحديث الباك إند فقط (Backend Only + Auto-Resume)")
-    print("🔄 ميزة: تحديث ملفات البايثون فوراً واستئناف البوتات النشطة تلقائياً")
+    print("🔄 ميزة: تحديث ملفات البايثون واستئناف تدريجي للبوتات")
+    print(f"📦 الاستئناف التدريجي: {RESUME_BATCH_SIZE} بوت كل {RESUME_BATCH_DELAY} ثانية")
     print("=" * 65)
 
     client = get_ssh_client()
 
-    # 1. حفظ حالة جميع البوتات الشغالة الآن
-    print("\n💾 [1/4] حفظ قائمة البوتات النشطة حالياً عبر Auto-Resume...")
-    cmd_save = "curl -s -X POST http://127.0.0.1:8000/api/internal/save-running-state"
-    stdin, stdout, stderr = client.exec_command(cmd_save)
-    save_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   استجابة السيرفر: {save_resp}")
+    # 1. قفل وضع النشر — يمنع المستخدمين من تشغيل بوتات أثناء التحديث
+    print("\n🔒 [1/5] تفعيل وضع النشر (Deploy Lock) — تعليق تشغيل البوتات...")
+    _deploy_lock(client)
 
-    # 2. رفع ملفات الباك إند
-    print("\n⬆️  [2/4] رفع ملفات الباك إند المحدثة...")
+    # 2. حفظ حالة البوتات النشطة
+    print("\n💾 [2/5] حفظ قائمة البوتات النشطة عبر Auto-Resume...")
+    save_resp = _run(client, "curl -s -X POST http://127.0.0.1:8000/api/internal/save-running-state")
+    try:
+        import json as _json
+        count = _json.loads(save_resp).get("count", "?")
+        print(f"   تم حفظ {count} بوت شغّال.")
+    except Exception:
+        print(f"   {save_resp[:80]}")
+
+    # 3. رفع ملفات الباك إند
+    print("\n⬆️  [3/5] رفع ملفات الباك إند المحدثة...")
     upload_backend_files(client)
 
-    # 3. إعادة تشغيل خدمة البايثون
-    print("\n🔄 [3/4] إعادة تشغيل خدمة البايثون (empire-bot.service)...")
-    cmd_restart = "systemctl restart empire-bot.service; sleep 2; systemctl is-active empire-bot.service"
-    stdin, stdout, stderr = client.exec_command(cmd_restart)
-    status_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   حالة الخدمة الآن: {status_resp}")
+    # 4. إعادة تشغيل خدمة البايثون
+    print("\n🔄 [4/5] إعادة تشغيل خدمة البايثون (empire-bot.service)...")
+    status_resp = _run(client, "systemctl restart empire-bot.service; sleep 3; systemctl is-active empire-bot.service")
+    print(f"   حالة الخدمة: {status_resp}")
 
-    # 4. فحص الصحة والاستئناف
-    print("\n🔍 [4/4] التحقق من صحة الخدمة بعد إعادة التشغيل...")
+    # 5. التحقق من الصحة
+    print("\n🔍 [5/5] فحص صحة الخدمة بعد إعادة التشغيل...")
     time.sleep(3)
-    cmd_health = "curl -s http://127.0.0.1:8000/api/health"
-    stdin, stdout, stderr = client.exec_command(cmd_health)
-    health_resp = stdout.read().decode("utf-8", errors="replace").strip()
-    print(f"   فحص الصحة: {health_resp}")
+    health_resp = _run(client, "curl -s http://127.0.0.1:8000/api/health")
+    print(f"   الصحة: {health_resp}")
 
     client.close()
+
+    # مؤشر الاستئناف التدريجي
+    try:
+        import json as _json
+        bot_count = _json.loads(save_resp).get("count", 0)
+        if bot_count > 0:
+            batches = (bot_count + RESUME_BATCH_SIZE - 1) // RESUME_BATCH_SIZE
+            total_time = (batches - 1) * RESUME_BATCH_DELAY
+            print(f"\n⏳ الاستئناف التدريجي: {bot_count} بوت في {batches} دفعة")
+            print(f"   الوقت التقديري: ~{total_time}ث ({total_time//60}د {total_time%60}ث)")
+    except Exception:
+        pass
+
     print("\n" + "═" * 65)
-    print("🎉 تم تحديث الباك إند بنجاح! جاري استئناف البوتات تلقائياً.")
+    print("🎉 تم تحديث الباك إند بنجاح! البوتات تستأنف تلقائياً بشكل متدرج.")
     print("═" * 65)
 
 

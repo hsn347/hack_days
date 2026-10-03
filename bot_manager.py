@@ -3,6 +3,7 @@
 أمثلة التشغيل من سطر الأوامر (CLI):
   # 1. تشغيل افتراضي شامل:
   python bot_manager.py --email "johan2003@yopmail.com"
+python3 -c "import sqlite3; conn = sqlite3.connect('database/castles.db'); cur = conn.cursor(); cur.execute('DELETE FROM castle_states WHERE lower(email) = lower(\"lyalshyhany21@gmail.com\")'); conn.commit(); print(f'تم حذف {cur.rowcount} سجل بنجاح'); conn.close()"
 
   # 2. تحديد شجرة الأبحاث (مثلاً دفاعية أو عسكرية أو فحص فقط):
   python bot_manager.py --email "samartilleli@yopmail.com" --research-tree defense
@@ -49,6 +50,7 @@ from tasks.city_harvest import CityHarvestTask
 from tasks.research import ResearchTask, load_tech_names
 from tasks.alliance import AllianceTask
 from tasks.territory_expansion import TerritoryExpansionTask
+from tasks.torch_chest import TorchChestTask
 from tasks.shield import ShieldTask, SHIELD_TYPES, DURATION_ALIASES
 from tasks.stamina import StaminaTask
 from tasks.skills import SkillsTask, SUPPORTED_SKILLS
@@ -69,9 +71,12 @@ from tasks.savings_bank import SavingsBankTask, SAVINGS_PLANS, DEFAULT_DAYS as D
 from tasks.building import BuildingTask, BUILDING_INFO
 from tasks.prestige import PrestigeTask
 from tasks.prestige_box import PrestigeBoxTask
+from tasks.hero_consign import HeroConsignTask
 from tasks.troy_treasure import TroyTreasureTask
 from tasks.hospital import HospitalTask
+from tasks.mail import MailTask
 from tasks.march_manager import MarchManagerTask
+from tasks.warrior_exchange import WarriorExchangeTask
 
 
 
@@ -109,34 +114,45 @@ class _LogCallbackStream:
 
 
 def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = logging.INFO) -> None:
-    """تنظيف أي StreamHandler سابق وربط callback واحد فقط لمنع تكرار السجلات نهائياً عبر الدورات."""
+    """تنظيف أي StreamHandler سابق وربط callback والطباعة المباشرة لمنع تكرار السجلات نهائياً عبر الدورات مع السماح بالطباعة والانتشار."""
     if not hasattr(task, "log") or not task.log:
         return
-    task.log.propagate = False
+    task.log.propagate = True
+    task.log.setLevel(level)
     try:
         task.log.handlers.clear()
     except Exception:
         task.log.handlers = []
+
+    # ربط StreamHandler للطباعة على stdout مباشرة (journalctl / terminal) لضمان ظهور سجلات منسق الفيالق والمهام
+    try:
+        console_h = logging.StreamHandler(sys.stdout)
+        console_h.setLevel(level)
+        console_h.setFormatter(logging.Formatter("[%(asctime)s][%(levelname)s][%(name)s] %(message)s", datefmt="%H:%M:%S"))
+        task.log.addHandler(console_h)
+    except Exception:
+        pass
+
     if not log_cb:
         return
     try:
         h = logging.StreamHandler(_LogCallbackStream(log_cb))
         h.setLevel(level)
         h.setFormatter(logging.Formatter("%(message)s"))
-        task.log.setLevel(level)
         task.log.addHandler(h)
     except Exception:
         pass
 
 
 def _safe_unbind_task_logger(task: Any) -> None:
-    """إزالة handler الـ callback بعد انتهاء تشغيل المهمة لمنع تراكمه في الذاكرة."""
+    """إزالة handler الـ callback بعد انتهاء تشغيل المهمة لمنع تراكمه في الذاكرة مع الحفاظ على propagate."""
     if not hasattr(task, "log") or not task.log:
         return
     try:
         task.log.handlers.clear()
     except Exception:
         task.log.handlers = []
+    task.log.propagate = True
 
 # تشغيل وضع الحلقة الدائمة من سطر الأوامر:
 #   python bot_manager.py --email "..." --loop
@@ -181,12 +197,20 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "pet_patrol": {
         "enabled": True,             # تفعيل/تعطيل دورية الحيوان الأليف واستلام جوائزها
         "pet": "غزال",               # الحيوان القائم بالدورية: الغزال 1261 دائماً
-        "destination": 1262,         # الحيوان المستهدف: الأسد 1262 افتراضياً
+        "destination": 1350,         # الحيوان المستهدف: الأسد 1350 افتراضياً
     },
 
     # 🚩 7. مهمة جمع جوائز التوسع الإقليمي (Territory Expansion)
     "territory_expansion": {
         "enabled": True,             # تفعيل/تعطيل جمع جوائز حدث التوسع الإقليمي
+    },
+
+    # 🎰 7b. مهمة صندوق مشعل رويال (Royal Torch Chest)
+    "torch_chest": {
+        "enabled": False,            # تفعيل/تعطيل شراء صندوق المشعل من المتجر بالذهب
+    },
+    "open_torch_chest": {
+        "enabled": False,            # تفعيل/تعطيل فتح صندوق المشعل من الحقيبة
     },
 
     # 🛡️ 8. مهمة درع السلام التلقائي وحماية القلعة (Peace Shield)
@@ -328,6 +352,12 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,                   # تفعيل/تعطيل استلام صناديق الهيبة اليومية تلقائياً
     },
 
+    # 🧭 22c2. مهمة رحلات وتكليف الأبطال (Hero Voyage & Consign)
+    # رحلات الأبطال اليومية (10 رحلات) + استلام جوائز التكليف المنجزة + تنفيذ مهام التكليف (5 مهام)
+    "hero_consign": {
+        "enabled": False,                  # تفعيل/تعطيل رحلات وتكليف الأبطال تلقائياً (معطلة افتراضياً حتى يفعلها المستخدم)
+    },
+
     # 🏛️ 22d. مهمة كنز طروادة (Troy Treasure Task)
     # فحص مهام طروادة واستلام جوائز إنجاز المهام المستحقة (CMD 1028 / SUB 5)
     "troy_treasure": {
@@ -338,10 +368,16 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     },
 
     # 🏥 22b. مهمة معالجة الجنود الجرحى في المشفى (Hospital Cure Task)
-
     # تفحص جاهزية المشفى وتعالج كافة الجنود المصابين تلقائياً بالمشفى (mode: 0) قبل تشغيل منسق الفيالق
     "hospital": {
         "enabled": True,                   # تفعيل/تعطيل علاج الجنود بالمشفى تلقائياً
+    },
+
+    # 🛒 22f. مهمة استبدال متجر المحارب في مركز المنافع (Warrior Exchange Task)
+    # استبدال المنتج #910018 بالعدد المطلوب بشرط توفر كامل حصة الـ 15 بالسيرفر
+    "warrior_exchange": {
+        "enabled": False,                  # تفعيل/تعطيل المهمة (افتراضياً معطلة حتى يفعلها المستخدم)
+        "count": 15,                       # عدد مرات الاستبدال المطلوبة (1 إلى 15)
     },
 
     # 🎖️ 23. مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator)
@@ -387,21 +423,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "level": 30,                   # مستوى الهدف المطلوب مهاجمته (للغزاة/المتمردين)
             "formation_id": 1,             # رقم تشكيلة القتال (1 إلى 5)
         },
-        # تخصيص كل هدف قتالي على حدة لدعم واجهات Firebase المتنوعة:
-        "elf": {
-            "enabled": True,               # تفعيل نخبة العفريت
-            "formation_id": 1,             # رقم التشكيلة
-        },
-        "invaders": {
-            "enabled": False,              # تفعيل الغزاة
-            "level": 30,                   # مستوى الغزاة
-            "formation_id": 1,             # رقم التشكيلة
-        },
-        "rebels": {
-            "enabled": False,              # تفعيل المتمردين
-            "level": 30,                   # مستوى المتمردين
-            "formation_id": 1,             # رقم التشكيلة
-        },
+
 
         # [7] إعدادات الهجوم على المعاقل والملاجئ العامة (Stronghold)
         "stronghold": {
@@ -506,13 +528,14 @@ def resolve_target_skills(cfg_or_val: Any) -> List[str]:
 # ════════════════════════════════════════════════════════════════════
 
 SAVINGS_DAYS_ALIASES: Dict[str, int] = {
+    "1": 1, "1d": 1, "1_day": 1, "يوم": 1, "يومي": 1, "daily": 1,
     "7": 7, "7d": 7, "7_days": 7, "أسبوع": 7, "اسبوع": 7, "أسبوعي": 7, "اسبوعي": 7, "weekly": 7,
     "15": 15, "15d": 15, "15_days": 15, "نصف_شهر": 15, "نصف شهر": 15, "biweekly": 15,
     "30": 30, "30d": 30, "30_days": 30, "شهر": 30, "شهري": 30, "monthly": 30,
 }
 
 def parse_savings_days(val: Any) -> int:
-    """تحويل المدة المدخلة إلى أحد الخيارات الثلاثة الصالحة لدار الادخار: 7 أو 15 أو 30 يوماً."""
+    """تحويل المدة المدخلة إلى أحد الخيارات الأربعة الصالحة لدار الادخار: 1 أو 7 أو 15 أو 30 يوماً."""
     if val is None:
         return DEFAULT_SAVINGS_DAYS
     s = str(val).strip().lower()
@@ -806,7 +829,7 @@ class BotManager:
         self,
         account_or_email: Union[str, AccountSession],
         config: Optional[Dict[str, Any]] = None,
-        reconnect_wait_seconds: int = 60,
+        reconnect_wait_seconds: int = 250,
         max_reconnect_attempts: int = 10,
         ignore_schedule: bool = False,
         user_id: Optional[str] = None,
@@ -845,9 +868,27 @@ class BotManager:
         self.max_reconnect_attempts = int(max_reconnect_attempts)
         self._disconnected_event = asyncio.Event()
         self._last_kick_reason: str = ""
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._async_stop_event: Optional[asyncio.Event] = None
+
+        # ── خصائص التشغيل اللحظية الحية في الذاكرة (Direct Thread Monitoring) ──
+        self.start_time: float = time.time()
+        self.iteration: int = 1
+        self.loop_interval_minutes: int = 90
+        self.conn_state: str = "starting"
+        self.status_message: str = "جاري بدء التشغيل..."
+        self.next_run_time: Optional[str] = None
+        self.reconnect_attempt: int = 0
+        self.last_activity_time: float = time.time()
 
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وقاعدة البيانات المحلية بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
+        # تحديث الحالة اللحظية في الذاكرة فوراً
+        self.conn_state = conn_state
+        self.status_message = message
+        self.next_run_time = next_run_time
+        self.last_activity_time = time.time()
+
         # 🛑 حظر صارم ولحظي: إذا طُلب إيقاف البوت، يُمنع منعاً باتاً بث أو تسجيل أي حالة نشطة (connected / reconnecting / waiting)
         if self._stop_event.is_set() and conn_state in ("connected", "reconnecting", "waiting"):
             return
@@ -874,28 +915,85 @@ class BotManager:
         except Exception as e:
             log.debug(f"SQLite conn state update: {e}")
 
+    def get_live_info(self) -> Dict[str, Any]:
+        """
+        استخراج بيانات التشغيل الحية اللحظية من داخل كائن البوت نفسه في الذاكرة (Live Thread Memory).
+        بدون أي استعلام من قاعدة البيانات.
+        """
+        now = time.time()
+        uptime_sec = int(now - getattr(self, "start_time", now))
+
+        state = getattr(self, "conn_state", "unknown")
+        kick_reason = getattr(self, "_last_kick_reason", "")
+        status_msg = getattr(self, "status_message", "")
+
+        # تصنيف دقيق للحالات: شغالة، منتظرة، دخول من جهاز آخر، إعادة اتصال
+        if state == "disconnected" or "جهاز آخر" in status_msg or "تسجيل الدخول" in kick_reason or "other device" in kick_reason.lower():
+            live_category = "other_login"
+            category_label = "دخول من جهاز آخر"
+        elif state == "waiting" or getattr(self, "next_run_time", None):
+            live_category = "waiting"
+            category_label = "بانتظار الدورة التالية"
+        elif state == "reconnecting":
+            live_category = "reconnecting"
+            category_label = "جاري إعادة الاتصال"
+        elif state in ("connected", "running"):
+            live_category = "running"
+            category_label = "شغالة فعلياً"
+        elif state == "starting":
+            live_category = "starting"
+            category_label = "جاري بدء التشغيل"
+        else:
+            live_category = state
+            category_label = state
+
+        return {
+            "castle_id": getattr(self, "castle_id", ""),
+            "email": getattr(self, "email", ""),
+            "user_id": getattr(self, "user_id", ""),
+            "state": state,
+            "live_category": live_category,
+            "category_label": category_label,
+            "status_message": status_msg,
+            "iteration": getattr(self, "iteration", 1),
+            "loop_interval_minutes": getattr(self, "loop_interval_minutes", 90),
+            "next_run_time": getattr(self, "next_run_time", None),
+            "reconnect_attempt": getattr(self, "reconnect_attempt", 0),
+            "max_reconnect_attempts": getattr(self, "max_reconnect_attempts", 10),
+            "last_kick_reason": kick_reason,
+            "uptime_seconds": uptime_sec,
+            "is_connection_alive": bool(self.conn and self.conn.is_connected),
+            "is_stopped": self._stop_event.is_set(),
+            "start_time": getattr(self, "start_time", 0),
+        }
+
     def stop(self) -> None:
         """إيقاف فوري ولحظي للبوت وقطع مقبس الاتصال فوراً لإنهاء أي مهمة أو انتظار دون أي تأخير."""
         self._stop_event.set()
-        if self.conn:
+
+        def _do_abort():
+            if self._async_stop_event is not None and not self._async_stop_event.is_set():
+                self._async_stop_event.set()
+            if self.conn:
+                try:
+                    self.conn.abort()
+                except Exception:
+                    pass
+
+        # إذا كان هناك Event Loop نشط في خيط البوت، أرسل له أمر الإلغاء فوراً عبر call_soon_threadsafe
+        if self._loop and self._loop.is_running():
             try:
-                if hasattr(self.conn, "_gate") and self.conn._gate:
-                    gate = self.conn._gate
-                    gate._explicit_close = True
-                    gate._alive = False
-                    for task in (gate._recv_task, gate._heartbeat_task, gate._init_flow_task):
-                        if task and not task.done():
-                            try:
-                                task.cancel()
-                            except Exception:
-                                pass
-                    if hasattr(gate, "_writer") and gate._writer:
-                        try:
-                            gate._writer.close()
-                        except Exception:
-                            pass
+                self._loop.call_soon_threadsafe(_do_abort)
             except Exception:
                 pass
+
+        # وأيضاً ننفذ abort مباشرة من هذا الخيط لقطع السوكت في 0 مللي ثانية
+        if self.conn:
+            try:
+                self.conn.abort()
+            except Exception:
+                pass
+
         self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
 
     def check_subscription_validity(self) -> Tuple[bool, str]:
@@ -1060,6 +1158,7 @@ class BotManager:
             return False
 
         display_reason = reason or self.get_disconnect_reason()
+        self._last_kick_reason = display_reason
         if not self._log_callback:
             print("\n" + "!" * 70)
         log.warning(f"⚠️ [انقطاع الاتصال] تم رصد انقطاع الاتصال بالحساب (السبب: {display_reason})!")
@@ -1070,6 +1169,7 @@ class BotManager:
         self._update_bot_conn_state("disconnected", f"تم تسجيل الدخول من جهاز آخر: {display_reason}")
 
         for attempt in range(1, self.max_reconnect_attempts + 1):
+            self.reconnect_attempt = attempt
             if self._stop_event.is_set():
                 if self.conn:
                     try:
@@ -1225,7 +1325,13 @@ class BotManager:
                     return False
 
         if not ok:
-            log.error(f"❌ [تسجيل الدخول] فشل الاتصال بالحساب {self.email}!")
+            from core.session_manager import get_last_auth_error
+            auth_err = get_last_auth_error(self.email)
+            if not auth_err:
+                auth_err = "❌ فشل تسجيل الدخول أو الاتصال بسيرفر اللعبة (تحقق من البريد وكلمة المرور)"
+            self.last_auth_error = auth_err
+            log.error(f"❌ [تسجيل الدخول] فشل الاتصال بالحساب {self.email}: {auth_err}")
+            self._update_bot_conn_state("error", auth_err)
             return False
 
         if self._stop_event.is_set():
@@ -1852,6 +1958,13 @@ class BotManager:
                     "remain_seconds": rem,
                     "is_claimable": (rem <= 0)
                 }
+            gifts = sb_ctrl.get("gifts", {})
+            has_1day = False
+            if isinstance(gifts, dict):
+                has_1day = int(gifts.get("71539", gifts.get(71539, 0))) > 0
+            elif isinstance(gifts, (list, set)):
+                has_1day = ("71539" in gifts or 71539 in gifts)
+            ctx.savings_bank_status["has_1day_privilege"] = has_1day
 
         # 20. فحص مهام المجد والنشاط اليومي وصناديق الجوائز (meritoriousTaskCtrl)
         merit = self.conn.init_data.get("meritoriousTaskCtrl", {})
@@ -2183,8 +2296,13 @@ class BotManager:
 
     async def _wait_for_stop_signal(self) -> None:
         """مراقب غير متزامن فائق السرعة يستيقظ فوراً عند طلب إيقاف البوت من خارج الـ Thread."""
+        if self._stop_event.is_set():
+            return
+        if self._async_stop_event is not None:
+            await self._async_stop_event.wait()
+            return
         while not self._stop_event.is_set():
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.05)
 
     async def execute_task_pipeline(self) -> Dict[str, Any]:
         """تنفيذ سلسلة المهام بالترتيب المحدد وفق الجدول الزمني مع استئناف ذكي عند انقطاع الاتصال ودعم الإيقاف الفوري اللحظي."""
@@ -2201,6 +2319,7 @@ class BotManager:
             ("⚔️ مهمة تدريب الجنود (Train Troops)",             self.step_5_train_task,                "train"),
             ("🐾 مهمة دورية الحيوان الأليف (Pet Patrol)",        self.step_6_pet_patrol_task,           "pet_patrol"),
             ("🚩 جوائز التوسع الإقليمي (Territory Expansion)",   self.step_7_territory_expansion_task,  "territory_expansion"),
+            ("🎰 صندوق مشعل رويال (Royal Torch Chest)",         self.step_7b_torch_chest_task,        "torch_chest"),
             ("🛡️ درع السلام وحماية القلعة (Peace Shield)",        self.step_8_shield_task,               "shield"),
             ("⚡ استخدام وشراء الطاقة (Stamina Task)",           self.step_9_stamina_task,              "stamina"),
             ("🎯 تفعيل المهارات التلقائية (Skills Task)",        self.step_10_skills_task,              "skills"),
@@ -2221,8 +2340,11 @@ class BotManager:
             ("🏗️ ترقية المباني (Building Upgrade)",             self.step_20_building_task,            "building"),
             ("🎖️ مهام الهيبة اليومية (Prestige Quests)",        self.step_22_prestige_task,            "prestige"),
             ("🎁 استلام صناديق الهيبة (Prestige Boxes)",         self.step_22c_prestige_box_task,       "prestige_box"),
+            ("🧭 رحلات وتكليف الأبطال (Hero Consign)",          self.step_22c2_hero_consign_task,      "hero_consign"),
             ("🏛️ كنز طروادة (Troy Treasure)",                  self.step_22d_troy_treasure_task,      "troy_treasure"),
             ("🏥 معالجة الجنود بالمشفى (Hospital Cure)",        self.step_22b_hospital_task,           "hospital"),
+            ("📬 جمع وحذف البريد (Mail Collect & Clean)",       self.step_22e_mail_task,               "mail"),
+            ("🛒 استبدال متجر المحارب (Warrior Exchange)",      self.step_22f_warrior_exchange_task,   "warrior_exchange"),
             ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
             # ──────────────────────────────────────────────────────────────────────────────
             # لإضافة مهمة جديدة أضف سطراً: ("📌 اسم المهمة", self.step_N_..., "config_key")
@@ -2253,9 +2375,6 @@ class BotManager:
             # فحص إضافي بعد إعادة الاتصال إن حدثت
             if self._stop_event.is_set():
                 break
-
-            clean_step_name = step_name.split('(')[0].strip()
-            self._update_bot_conn_state("connected", f"جاري تنفيذ: {clean_step_name}")
 
             if not self._log_callback:
                 print("\n" + "─" * 65)
@@ -2366,10 +2485,10 @@ class BotManager:
                 break
 
             # مهلة أمان قصيرة بين المهام مجزأة لفحص الإيقاف
-            for _ in range(3):
+            for _ in range(5):
                 if self._stop_event.is_set():
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.5)
 
         return results
 
@@ -2584,6 +2703,35 @@ class BotManager:
             log.info(f"🎉 نتيجة التوسع الإقليمي: {res.message}")
         else:
             log.warning(f"⚠️ تنبيه في التوسع الإقليمي: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [7b] مهمة صندوق مشعل رويال (شراء وفتح)
+    async def step_7b_torch_chest_task(self) -> Dict[str, Any]:
+        """فحص وشراء وفتح صندوق مشعل رويال في المتجر والحقيبة."""
+        torch_cfg = self.config.get("torch_chest", {})
+        open_cfg = self.config.get("open_torch_chest", {})
+
+        buy_enabled = bool(torch_cfg.get("enabled", False))
+        open_enabled = bool(open_cfg.get("enabled", False))
+
+        if not buy_enabled and not open_enabled:
+            msg = "⏭️ تم تخطي مهمة صندوق مشعل رويال بناءً على رغبة المستخدم (torch_chest و open_torch_chest غير مفعّلين)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        log.info(f"🎰 بدء مهمة صندوق مشعل رويال (الشراء: {'مفعّل' if buy_enabled else 'معطّل'} | الفتح: {'مفعّل' if open_enabled else 'معطّل'})...")
+        combined_cfg = {
+            "buy_enabled": buy_enabled,
+            "open_enabled": open_enabled,
+        }
+        task = TorchChestTask(self.conn, combined_cfg)
+        res = await task.run()
+
+        if res.success:
+            log.info(f"🎉 نتيجة صندوق مشعل رويال: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في صندوق مشعل رويال: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
@@ -3165,40 +3313,45 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
 
-    async def step_22d_troy_treasure_task(self) -> Dict[str, Any]:
+    async def step_22c2_hero_consign_task(self) -> Dict[str, Any]:
         """
-        تنفيذ مهمة كنز طروادة (Troy Treasure Task):
-          - فحص تفعيل المهمة (troy_treasure.enabled).
-          - المرحلة 1: استلام كافة جوائز إنجاز المهام الجاهزة (CMD 1028 / SUB 5).
-          - إنهاء المهمة فوراً إذا لم تكن الفعالية نشطة أو لا توجد جوائز جاهزة.
+        تنفيذ مهمة رحلات وتكليف الأبطال (Hero Voyage & Consign):
+          1. رحلات الأبطال (الترحال حتى 10 مرات يومياً بفاصل ثانيتين).
+          2. استلام جوائز مهام التكليف المنجزة (CMD 3148 / SUB 5).
+          3. إطلاق مهام تكليف الأبطال (حتى 5 مهام يومياً) واستلام الصندوق التراكمي (15 مهمة).
         """
-        cfg = self.config.get("troy_treasure", {})
+        cfg = self.config.get("hero_consign", {})
         if isinstance(cfg, bool):
-            cfg = {"enabled": cfg, "subtasks": {"claim_quests": True}}
+            cfg = {"enabled": cfg}
         elif not isinstance(cfg, dict):
-            cfg = {"enabled": True, "subtasks": {"claim_quests": True}}
+            cfg = {"enabled": False}
 
-        if not bool(cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة كنز طروادة (troy_treasure.enabled = False)."
+        if not bool(cfg.get("enabled", False)):
+            msg = "⏭️ تم تخطي مهمة رحلات وتكليف الأبطال (hero_consign.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
-        log.info("🏛️ بدء مهمة كنز طروادة (Troy Treasure)...")
-        task = TroyTreasureTask(self.conn, cfg)
+        log.info("🧭 بدء مهمة رحلات وتكليف الأبطال (Hero Voyage & Consign)...")
+        task = HeroConsignTask(self.conn, cfg)
         await task.on_start()
         res = await task.run()
 
         if res.success:
-            log.info(f"🎉 نتيجة كنز طروادة: {res.message}")
+            log.info(f"🎉 نتيجة رحلات وتكليف الأبطال: {res.message}")
         else:
-            log.warning(f"⚠️ تنبيه في كنز طروادة: {res.message}")
+            log.warning(f"⚠️ تنبيه في رحلات وتكليف الأبطال: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
+
+
+    async def step_22d_troy_treasure_task(self) -> Dict[str, Any]:
+        return log.info(f"🎉 نتيجة كنز طروادة: ")
 
 
     async def step_22b_hospital_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة فحص ومعالجة الجنود الجرحى في المشفى (Hospital Cure Task):
+          - الاستعلام التلقائي المسبق عن مهمة علاج الجرحى في مهام الهيبة (ID: 4112009) وتخطيها فوراً إذا كانت منجزة.
           - التحقق من وجود مبنى المشفى (bid: 206) ومستواه في القلعة.
           - فحص طابور العلاج (queueCtrl['1202']) والتأكد من إتاحته.
           - استعلام أحدث بيانات الجيش (1005/1) لتحديد كافة الجنود الجرحى.
@@ -3235,6 +3388,79 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
 
+    async def step_22e_mail_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة جمع جوائز بريد القلعة وحذف الرسائل (Mail Collect & Clean Task):
+          - فحص صندوق البريد للتبويب المحدد (افتراضياً 4 = تقارير المعارك والموارد).
+          - استخراج معرفات الرسائل غير المقفلة (midArray).
+          - التخطي التلقائي السريع إذا كان البريد فارغاً.
+          - جمع المكافآت دفعة واحدة عبر (1015/18).
+          - انتظار 3 ثوانٍ قبل أمر الحذف لمحاكاة الإيقاع الطبيعي.
+          - حذف الرسائل بعد الجمع عبر (1015/4).
+        """
+        mail_cfg = {
+            "set_types": [4],
+            "delete_after_collect": True,
+            "wait_seconds": 3.0,
+        }
+        task = MailTask(self.conn, mail_cfg)
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
+        if self._log_callback:
+            self._log_callback(f"📬 {res.message}")
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة البريد: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة البريد: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
+    async def step_22f_warrior_exchange_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة استبدال منتج متجر المحارب في مركز المنافع (Warrior Shop Exchange Task):
+          - فحص تفعيل المهمة في إعدادات الحساب (warrior_exchange.enabled).
+          - فحص المسموح للاستبدال (limitnum - buyNum): إذا كان أقل من 15 يتم التخطي والإنهاء فوراً.
+          - فحص توفر المواد المطلوبة بالحقيبة والاستبدال بأقصى عدد ممكن من العدد المطلوب (1-15).
+        """
+        we_cfg = self.config.get("warrior_exchange", {})
+        if isinstance(we_cfg, bool):
+            we_cfg = {"enabled": we_cfg, "count": 15}
+        elif not isinstance(we_cfg, dict):
+            we_cfg = {"enabled": False, "count": 15}
+
+        if not bool(we_cfg.get("enabled", False)):
+            msg = "⏭️ تم تخطي مهمة متجر المحارب بناءً على رغبة المستخدم (warrior_exchange.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        task = WarriorExchangeTask(self.conn, we_cfg)
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
+        if self._log_callback:
+            self._log_callback(f"🛒 {res.message}")
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة متجر المحارب: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة متجر المحارب: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
     async def step_23_march_manager_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator):
@@ -3248,6 +3474,11 @@ class BotManager:
             mm_cfg = {"enabled": mm_cfg}
         elif not isinstance(mm_cfg, dict):
             mm_cfg = {"enabled": True}
+
+        # ─── الإضافة السحرية هنا: حقن حالة الهيبة الرئيسية داخل المنسق ───
+        p_cfg = self.config.get("prestige", {})
+        mm_cfg["is_main_prestige_enabled"] = p_cfg.get("enabled", True) if isinstance(p_cfg, dict) else True
+        # ─────────────────────────────────────────────────────────────────
 
         if not mm_cfg.get("enabled", True):
             msg = "⏭️ تم تخطي مهمة منسق الفيالق (march_manager.enabled = False)."
@@ -3267,8 +3498,10 @@ class BotManager:
             self._log_callback(f"🎖️ {res.message}")
 
         if res.success:
+            task.log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
             log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
         else:
+            task.log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
             log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
@@ -3297,9 +3530,31 @@ class BotManager:
 
         valid, reason = self.check_subscription_validity()
         if not valid:
-            log.warning(f"🛑 [إيقاف التشغيل] {reason} — لن يتم تشغيل البوت للحساب {self.email}!")
+            log.warning(f"🛑 [إيقاف التشغيل] {reason} — تعطيل القلعة وإيقاف البوت للحساب {self.email}...")
+            try:
+                import core.database as db
+                if getattr(self, "castle_id", None):
+                    db.toggle_castle_active(self.castle_id, is_active=False, user_id=getattr(self, "user_id", None))
+            except Exception as ex:
+                log.warning(f"⚠️ تعذر تعطيل القلعة في قاعدة البيانات: {ex}")
             self._update_bot_conn_state("idle", f"متوقف: {reason}")
+            self.stop()
             return {"success": False, "error": reason}
+
+        # التحقق من أن القلعة لا تزال نشطة في قاعدة البيانات ولم تُعطّل من الواجهة
+        try:
+            import core.database as db
+            cid = getattr(self, "castle_id", None)
+            uid = getattr(self, "user_id", None)
+            if cid:
+                c_rec = db.get_castle_by_id(cid, uid)
+                if c_rec and not c_rec.get("is_active", True):
+                    log.info(f"⏹️ القلعة {self.email} معطلة من لوحة التحكم — إنهاء التشغيل...")
+                    self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                    self.stop()
+                    return {"success": False, "error": "تم تعطيل القلعة"}
+        except Exception:
+            pass
 
         try:
             # 1. تسجيل الدخول
@@ -3308,7 +3563,12 @@ class BotManager:
 
             connected = await self.login_and_connect()
             if not connected or self._stop_event.is_set():
-                return {"success": False, "error": "فشل الاتصال والمصادقة أو تم الإيقاف"}
+                err = getattr(self, "last_auth_error", None) or "فشل الاتصال والمصادقة أو تم الإيقاف"
+                return {
+                    "success": False,
+                    "is_auth_error": bool(getattr(self, "last_auth_error", None)),
+                    "error": err,
+                }
 
             # 2. الاستعلام الشامل
             if self._stop_event.is_set():
@@ -3376,30 +3636,40 @@ class BotManager:
     # ─────────────────────────────────────────────────────────────────
     #  دورة التشغيل المستمر (Loop Mode)
     # ─────────────────────────────────────────────────────────────────
+    
+    # ─────────────────────────────────────────────────────────────────
+    #  دورة التشغيل المستمر (Loop Mode)
+    # ─────────────────────────────────────────────────────────────────
+
     async def run_loop(self, loop_interval_minutes: int = 60) -> None:
         """
-        تشغيل مستمر لا ينتهي — ينفذ دورة كاملة ثم ينتظر المدة المحددة.
+        تشغيل مستمر لا ينتهي — ينفذ دورة كاملة ثم ينتظر مدة ثابتة (Delay) قبل الدورة التالية.
+        هذا يعني أن العداد سيبدأ *بعد* انتهاء الدورة الحالية، وليس من بدايتها.
 
         ⚡ كفاءة عالية (مناسب لـ 1000+ حساب متزامن):
           - asyncio.sleep() لا يستهلك أي CPU أثناء الانتظار
-          - يحفظ حالة الجدول بعد كل دورة لضمان الاستمرارية
           - يكتشف أخطاء الدورة ويستمر للدورة التالية بدلاً من الإيقاف
 
         Args:
-            loop_interval_minutes: المدة بين الدورات بالدقائق (افتراضي: 60)
-
-        التشغيل من سطر الأوامر:
-            python bot_manager.py --email "..." --loop
-            python bot_manager.py --email "..." --loop --loop-interval 30
+            loop_interval_minutes: مدة الانتظار الثابتة بالدقائق بين الدورة والأخرى
         """
         self.is_loop = True
-        iteration     = 0
-        interval_secs = loop_interval_minutes * 60
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
+        self._async_stop_event = asyncio.Event()
 
-        log.info(f"🔁 وضع التشغيل المستمر نشط — دورة كل {loop_interval_minutes} دقيقة")
+        iteration = 0
+        # تحويل مدة الانتظار الثابتة إلى ثوانٍ
+        delay_secs = 25 * 60
 
+        log.info(f"🔁 وضع التشغيل المستمر نشط — انتظار ثابت لمدة {loop_interval_minutes} دقيقة بين الدورات")
+
+        self.loop_interval_minutes = int(loop_interval_minutes)
         while not self._stop_event.is_set():
             iteration += 1
+            self.iteration = iteration
             start_time = datetime.now()
 
             sep_line = "\n" + "═" * 72
@@ -3413,8 +3683,9 @@ class BotManager:
                 print("═" * 72)
             self._update_bot_conn_state("connected", f"بدء دورة رقم #{iteration}")
 
+            cycle_res = None
             try:
-                await self.run_once()
+                cycle_res = await self.run_once()
             except Exception as e:
                 log.error(f"💥 خطأ في الدورة #{iteration}: {e}", exc_info=True)
 
@@ -3422,16 +3693,46 @@ class BotManager:
             if self._stop_event.is_set():
                 break
 
-            # التحقق من صلاحية الاشتراك وحالة الحظر بعد انتهاء الدورة الحالية
-            valid, reason = self.check_subscription_validity()
-            if not valid:
-                log.warning(f"🛑 [إيقاف الدورة المستمرة] {reason}")
-                self._update_bot_conn_state("idle", f"متوقف: {reason}")
-                break
+            # 🛑 حظر فوري وحماية للحساب عند حدوث خطأ في كلمة المرور أو البريد
+            if cycle_res and isinstance(cycle_res, dict) and cycle_res.get("is_auth_error"):
+                auth_msg = cycle_res.get("error") or "خطأ في البريد أو كلمة المرور"
+                log.error(f"🛑 [إيقاف فوري للحساب] {self.email}: {auth_msg} — إيقاف البوت فوراً لمنع حظر الحساب.")
+                self._update_bot_conn_state("error", auth_msg)
+                try:
+                    import core.database as db
+                    if getattr(self, "castle_id", None):
+                        db.upsert_castle_conn_state(
+                            email=self.email,
+                            conn_state="error",
+                            message=auth_msg,
+                            user_id=getattr(self, "user_id", None),
+                            castle_id=getattr(self, "castle_id", None)
+                        )
+                except Exception as ex:
+                    log.warning(f"⚠️ خطأ أثناء تحديث حالة الخطأ في قاعدة البيانات: {ex}")
+                self.stop()
+                break  # إنهاء حلقة التشغيل فوراً وتفادي مؤقت الـ 25 دقيقة!
 
-            # حساب وقت الانتظار المتبقي
-            elapsed   = (datetime.now() - start_time).total_seconds()
-            remaining = max(0.0, interval_secs - elapsed)
+
+            # التحقق مما إذا كانت القلعة عُطّلت أثناء الدورة
+            try:
+                import core.database as db
+                cid = getattr(self, "castle_id", None)
+                uid = getattr(self, "user_id", None)
+                if cid:
+                    c_rec = db.get_castle_by_id(cid, uid)
+                    if c_rec and not c_rec.get("is_active", True):
+                        log.info(f"⏹️ القلعة {self.email} معطلة من لوحة التحكم — إنهاء التشغيل...")
+                        self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
+                        break
+            except Exception:
+                pass
+
+            # حساب الوقت المستغرق في تنفيذ الدورة الحالية للطباعة فقط
+            elapsed = (datetime.now() - start_time).total_seconds()
+            
+            # في هذه الآلية الجديدة، مدة الانتظار (الـ Delay) ثابتة دائماً كما هي محددة في المتغير delay_secs
+            remaining = float(delay_secs)
 
             from datetime import timezone
             next_run_dt = datetime.now(timezone.utc) + timedelta(seconds=remaining)
@@ -3439,7 +3740,7 @@ class BotManager:
             next_run_str = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
             rem_mins = max(1, round(remaining / 60))
 
-            log.info(f"✅ انتهت الدورة #{iteration} في {elapsed:.0f}ث — الدورة القادمة الساعة: {next_run_str} (متبقي {rem_mins} دقيقة)")
+            log.info(f"✅ انتهت الدورة #{iteration} (استغرقت {elapsed:.0f}ث) — الدورة القادمة الساعة: {next_run_str} (بعد {rem_mins} دقيقة ثابتة)")
 
             if remaining > 0:
                 self._update_bot_conn_state(
@@ -3447,7 +3748,7 @@ class BotManager:
                     f"بانتظار الدورة القادمة الساعة {next_run_str} (متبقي {rem_mins} دقيقة)",
                     next_run_time=next_run_iso
                 )
-                log.info(f"💤 انتظار {rem_mins} دقيقة...")
+                log.info(f"💤 بدء انتظار ثابت لمدة {rem_mins} دقيقة...")
                 # نوم مجزأ ليفحص stop_event كل ثانية بدلاً من asyncio.sleep الكامل
                 sleep_step = 1.0
                 slept = 0.0
@@ -3457,14 +3758,14 @@ class BotManager:
             else:
                 self._update_bot_conn_state("connected", f"بدء الدورة التالية فوراً (#{iteration + 1})")
 
-        # إغلاق الاتصال بأمان وتحديث الحالة إلى idle عند الخروج من حلقة التشغيل
+        # إغلاق الاتصال بأمان وتحديث الحالة إلى idle عند الخروج من حلقة التشغيل ما لم تكن الحالة خطأ صريح
         if self.conn:
             try:
                 await self.conn.close()
             except Exception:
                 pass
-        self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
-
+        if getattr(self, "conn_state", "") != "error":
+            self._update_bot_conn_state("idle", "تم إيقاف البوت بواسطة المستخدم")
 
 
 # ════════════════════════════════════════════════════════════════════

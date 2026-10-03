@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import struct
 import sys
 import time
@@ -137,8 +138,10 @@ class GateClient:
     يستخدم نفس كريبتو onemt_bot.py (xor_crypt, pack_request, etc.)
     """
 
-    # ── ثوابت حماية الحساب من الحظر ──────────────────────────────
-    RATE_LIMIT_DELAY = 0.8   # ثانية بين كل طلب API (حماية أساسية من الحظر)
+    # ── ثوابت حماية الحساب من الحظر (محاكاة التردد البشري Dynamic Jitter) ────────
+    RATE_LIMIT_DELAY = 1.0   # القيمة الأساسية
+    RATE_LIMIT_MIN   = 0.85  # الحد الأدنى للفترة الفاصلة بين الطلبات
+    RATE_LIMIT_MAX   = 1.45  # الحد الأقصى للفترة الفاصلة لمحاكاة النقر البشري العشوائي
 
     def __init__(self, creds: GateCredentials):
         self.creds    = creds
@@ -401,11 +404,12 @@ class GateClient:
         str_sub = str(subcmd)
         cmd_key = (str_cmd, str_sub)
 
-        # 🛡️ حماية من الحظر: تأخير تلقائي بين الطلبات
+        # 🛡️ حماية من الحظر: تأخير بشري ديناميكي عشوائي (Jitter) بين الطلبات
         now = time.time()
         elapsed = now - self._last_query_time
-        if elapsed < self.RATE_LIMIT_DELAY:
-            await asyncio.sleep(self.RATE_LIMIT_DELAY - elapsed)
+        target_delay = random.uniform(self.RATE_LIMIT_MIN, self.RATE_LIMIT_MAX)
+        if elapsed < target_delay:
+            await asyncio.sleep(target_delay - elapsed)
         self._last_query_time = time.time()
 
         sess = self._session
@@ -436,8 +440,9 @@ class GateClient:
             self._cmd_pending.pop(cmd_key, None)
 
     def send_nowait(self, cmd: str, subcmd: str, data: dict = None):
-        """إرسال بدون انتظار"""
+        """إرسال بدون انتظار مع تسجيل توقيت الطلب لمنع التداخل"""
         if not self._alive or not self._writer: return
+        self._last_query_time = time.time()
         sess = self._session
         self._session += 1
         if self.spy_mode:
@@ -447,16 +452,46 @@ class GateClient:
     def on_notify(self, notify_id: str, handler: Callable):
         self._notifies[notify_id] = handler
 
+    def abort(self):
+        """إغلاق فوري قسري لمقبس الشبكة وإلغاء كافة المهام دون أي انتظار."""
+        self._explicit_close = True
+        self._alive = False
+        for task in (self._recv_task, self._heartbeat_task, self._init_flow_task):
+            if task and not task.done():
+                try:
+                    task.cancel()
+                except Exception:
+                    pass
+        for fut in list(self._pending.values()):
+            if fut and not fut.done():
+                try:
+                    fut.cancel()
+                except Exception:
+                    pass
+        for fut in list(self._cmd_pending.values()):
+            if fut and not fut.done():
+                try:
+                    fut.cancel()
+                except Exception:
+                    pass
+        self._pending.clear()
+        self._cmd_pending.clear()
+        if self._writer:
+            try:
+                if hasattr(self._writer, "transport") and self._writer.transport:
+                    self._writer.transport.abort()
+            except Exception:
+                pass
+
     async def close(self):
         self._explicit_close = True
         self._alive = False
-        # إلغاء جميع المهام الخلفية فوراً
-        for task in (self._recv_task, self._heartbeat_task, self._init_flow_task):
-            if task and not task.done():
-                task.cancel()
+        self.abort()
         if self._writer:
-            try: self._writer.close(); await self._writer.wait_closed()
-            except: pass
+            try:
+                self._writer.close()
+            except Exception:
+                pass
 
     @property
     def is_connected(self) -> bool:
@@ -544,6 +579,11 @@ class GameConnection:
 
     async def close(self):
         if self._gate: await self._gate.close()
+
+    def abort(self):
+        """قطع فوري قسري للاتصال دون أي انتظار."""
+        if self._gate:
+            self._gate.abort()
 
     @property
     def is_connected(self) -> bool:

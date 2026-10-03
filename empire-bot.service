@@ -13,6 +13,7 @@ StandardOutput=journal
 StandardError=journal
 Environment=PYTHONUNBUFFERED=1
 Environment=CORS_ORIGINS=*
+Environment=REQUIRE_AUTH=1
 
 [Install]
 WantedBy=multi-user.target

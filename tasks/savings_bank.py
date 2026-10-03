@@ -8,9 +8,10 @@ tasks/savings_bank.py — مهمة دار الادخار وبنك التوفير
      - إذا كانت الوديعة مكتملة المدة ← سحب الوديعة مع الأرباح تلقائياً (6023/2).
      - إذا كانت قيد الاستثمار ← حساب المدة المتبقية وتعيين موعد المراجعة.
   2. إذا لم تكن هناك وديعة نشطة (أو بعد سحب الأرباح):
-     - إيداع الذهب تلقائياً بأقصى حد متاح (6023/1) للمدة المختارة (7 أو 15 أو 30 يوماً).
+     - إيداع الذهب تلقائياً بأقصى حد متاح (6023/1) للمدة المختارة (1 أو 7 أو 15 أو 30 يوماً).
 
 الاستخدام كملف مستقل:
+    python tasks/savings_bank.py --email "hichambaraki10@gmail.com" --days 1
     python tasks/savings_bank.py --email "samartilleli@yopmail.com" --days 7
     python tasks/savings_bank.py --email "zzoro8290@gmail.com" --days 30
     python tasks/savings_bank.py --email "ossso5040@gmail.com" --days 15 --deposit 4000
@@ -43,7 +44,10 @@ from game_client import GameConnection
 #  ثوابت وخطط دار الادخار
 # ════════════════════════════════════════════════════════════════════
 
+DAY1_PRIVILEGE_GIFT_ID = 71539
+
 SAVINGS_PLANS: Dict[int, Dict[str, Any]] = {
+    1:  {"name": "خطة يوم واحد (يومية)", "max_deposit": 2000, "days": 1, "gift_id": DAY1_PRIVILEGE_GIFT_ID},
     7:  {"name": "خطة 7 أيام (أسبوعية)",  "max_deposit": 2000, "days": 7},
     15: {"name": "خطة 15 يوماً (نصف شهرية)", "max_deposit": 2000, "days": 15},
     30: {"name": "خطة 30 يوماً (شهرية)",  "max_deposit": 2000, "days": 30},
@@ -65,6 +69,24 @@ class SavingsBankTask(BaseTask):
 
     def __init__(self, conn: GameConnection, config: dict = None):
         super().__init__(conn, config)
+
+    def is_day1_privilege_unlocked(self) -> Optional[bool]:
+        """
+        فحص محلي في بيانات init_data عما إذا كانت باقة امتياز اليوم الواحد (#71539) مفعلة للقلعة.
+        يعود بـ True إذا كانت مؤكدة، أو False إذا كانت قائمة الهدايا متوفرة صراحة وبدون الباقة،
+        أو None إذا لم تكن البيانات متوفرة محلياً ونحتاج لفحص السيرفر المباشر.
+        """
+        sb_ctrl = self.conn.init_data.get('savingsBankAgCtrl', {})
+        if isinstance(sb_ctrl, dict):
+            gifts = sb_ctrl.get('gifts')
+            if isinstance(gifts, dict):
+                if int(gifts.get(str(DAY1_PRIVILEGE_GIFT_ID), gifts.get(DAY1_PRIVILEGE_GIFT_ID, 0))) > 0:
+                    return True
+                if len(gifts) > 0:
+                    return False
+            elif isinstance(gifts, (list, set)):
+                return (str(DAY1_PRIVILEGE_GIFT_ID) in gifts or DAY1_PRIVILEGE_GIFT_ID in gifts)
+        return None
 
     async def run(self) -> TaskResult:
         cfg = self.config
@@ -116,6 +138,15 @@ class SavingsBankTask(BaseTask):
                     remaining_seconds=remaining_sec,
                     retry_after=min(remaining_sec + 60, 86400)
                 )
+
+        # ── التحقق المسبق لخطة اليوم الواحد (إذا تم اختيارها) ──
+        if target_days == 1:
+            self.log.info("🔍 التحقق من صلاحية خطة اليوم الواحد (باقة امتياز دار الادخار #71539)...")
+            priv_status = self.is_day1_privilege_unlocked()
+            if priv_status is False:
+                msg = "⚠️ خطة إيداع اليوم الواحد مقفلة وغير متاحة لهذه القلعة (تتطلب شراء باقة امتياز بنك الادخار #71539)."
+                self.log.warning(msg)
+                return TaskResult.fail(msg, retry_after=86400)
 
         # 2. تحديد مبلغ الإيداع (الافتراضي 2000 أو المحدد صراحة)
         custom_deposit = cfg.get('deposit')
@@ -206,7 +237,11 @@ class SavingsBankTask(BaseTask):
             )
         else:
             err_code = str(r_deposit.get('err', 'unknown')) if r_deposit else 'timeout'
-            if err_code == "6":
+            if target_days == 1 and err_code == "6":
+                msg = "⚠️ خطة إيداع اليوم الواحد مقفلة وغير مصرح بها لهذه القلعة من السيرفر (كود: 6 - تتطلب باقة امتياز #71539)."
+                self.log.warning(msg)
+                return TaskResult.fail(msg, retry_after=86400)
+            elif err_code == "6":
                 self.log.info("ℹ️ توجد وديعة نشطة بالفعل في دار الادخار.")
                 return TaskResult.ok("توجد وديعة نشطة بالفعل", status="investing", retry_after=43200)
             else:
@@ -223,8 +258,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Empire Savings Bank Task — مهمة دار الادخار وبنك التوفير")
     parser.add_argument("--email", "-e", help="البريد الإلكتروني للحساب")
-    parser.add_argument("--days", "-d", type=int, default=7, choices=[7, 15, 30],
-                        help="مدة الإيداع بالأيام: 7 أو 15 أو 30 [افتراضي: 7]")
+    parser.add_argument("--days", "-d", type=int, default=7, choices=[1, 7, 15, 30],
+                        help="مدة الإيداع بالأيام: 1 أو 7 أو 15 أو 30 [افتراضي: 7]")
     parser.add_argument("--deposit", "-m", type=int, default=None,
                         help="مبلغ الذهب المراد إيداعه [افتراضي: أقصى حد متاح للخطة]")
     args = parser.parse_args()

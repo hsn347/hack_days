@@ -48,7 +48,7 @@ export interface Resources {
   last_updated: string
 }
 
-export type BotState = 'running' | 'idle' | 'error' | 'paused' | 'pending' | 'disconnected' | 'reconnecting' | 'waiting'
+export type BotState = 'running' | 'idle' | 'error' | 'paused' | 'pending' | 'disconnected' | 'reconnecting' | 'waiting' | 'deploying'
 
 export interface BotStatus {
   state: BotState
@@ -108,6 +108,9 @@ export interface CastleConfig {
   train: BaseTaskConfig & { levels: TrainLevels }
   pet_patrol: BaseTaskConfig & { pet?: string; destination?: number }
   territory_expansion: BaseTaskConfig
+  torch_chest?: BaseTaskConfig
+  open_torch_chest?: BaseTaskConfig
+  hero_consign?: BaseTaskConfig
   shield: BaseTaskConfig & { duration: '8h' | '24h' | '3d'; allow_gold: boolean }
   stamina: BaseTaskConfig & { gold_buys: number }
   skills: BaseTaskConfig & { target_skills: string[] }
@@ -134,6 +137,7 @@ export interface CastleConfig {
       [key: string]: any
     }
   }
+  warrior_exchange?: BaseTaskConfig & { count: number }
   gold_gather?: { enabled: boolean; locations: GoldLocation[] }
 }
 
@@ -158,8 +162,11 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   alliance: { enabled: false, auto_help: true, gold_donations: 0 },
   port: { enabled: false },
   train: { enabled: false, levels: { infantry: 0, cavalry: 0, archers: 0, chariots: 0 } },
-  pet_patrol: { enabled: false, pet: 'الأسد', destination: 1262 },
+  pet_patrol: { enabled: false, pet: 'الأسد', destination: 1350 },
   territory_expansion: { enabled: false },
+  torch_chest: { enabled: false },
+  open_torch_chest: { enabled: false },
+  hero_consign: { enabled: false },
   shield: { enabled: false, duration: '8h', allow_gold: false },
   stamina: { enabled: false, gold_buys: 0 },
   skills: { enabled: false, target_skills: [] },
@@ -193,6 +200,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
       claim_quests: true,
     },
   },
+  warrior_exchange: { enabled: false, count: 15 },
   march_manager: {
     enabled: true,
     prestige_invaders: { enabled: false },
@@ -208,7 +216,6 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
     gold_gather: { enabled: false, locations: [] },
     gather: { enabled: false, res_type: 2, level: 5, search_range: 20 },
   },
-  gold_gather: { enabled: false, locations: [] },
 }
 
 export const FIXED_PRESET_CONFIG: CastleConfig = {
@@ -248,6 +255,9 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
   port_delegate: { enabled: true, shop_item: 'all' },
   // 12. التوسع الإقليمي
   territory_expansion: { enabled: true },
+  torch_chest: { enabled: false },
+  open_torch_chest: { enabled: false },
+  hero_consign: { enabled: false },
 
   // المهام الأساسية
   city_harvest: { enabled: true },
@@ -280,7 +290,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
       claim_quests: true,
     },
   },
-  gold_gather: { enabled: false, locations: [] },
+  warrior_exchange: { enabled: false, count: 15 },
 }
 
 export interface CastleLog {

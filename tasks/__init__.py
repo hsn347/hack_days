@@ -23,6 +23,7 @@ from .building import BuildingTask
 from .city_harvest import CityHarvestTask
 from .prestige import PrestigeTask
 from .prestige_box import PrestigeBoxTask
+from .hero_consign import HeroConsignTask
 from .treasure_pavilion import TreasurePavilionTask
 from .blacksmith_forge import BlacksmithForgeTask
 from .imperial_mausoleum import ImperialMausoleumTask
@@ -30,6 +31,9 @@ from .alliance_treasure import AllianceTreasureTask
 from .daily_luxury_gift import DailyLuxuryGiftTask
 from .vip_gift import VipGiftTask
 from .troy_treasure import TroyTreasureTask
+from .mail import MailTask
+from .torch_chest import TorchChestTask
+from .warrior_exchange import WarriorExchangeTask
 
 __all__ = [
     'BaseTask', 'TaskResult', 'TaskScheduler',
@@ -38,7 +42,8 @@ __all__ = [
     'MaterialWorkshopTask', 'TacticsHallTask', 'TrainTask', 'FortressTask',
     'MerchantTask', 'SkillsTask', 'FountainTask', 'PortDelegateTask',
     'TerritoryExpansionTask', 'GoldGatherTask', 'ResearchTask', 'BuildingTask',
-    'CityHarvestTask', 'PrestigeTask', 'PrestigeBoxTask', 'TreasurePavilionTask', 'BlacksmithForgeTask',
-    'ImperialMausoleumTask', 'AllianceTreasureTask', 'DailyLuxuryGiftTask', 'VipGiftTask', 'TroyTreasureTask'
+    'CityHarvestTask', 'PrestigeTask', 'PrestigeBoxTask', 'HeroConsignTask', 'TreasurePavilionTask', 'BlacksmithForgeTask',
+    'ImperialMausoleumTask', 'AllianceTreasureTask', 'DailyLuxuryGiftTask', 'VipGiftTask', 'TroyTreasureTask',
+    'MailTask', 'TorchChestTask', 'WarriorExchangeTask'
 ]
 

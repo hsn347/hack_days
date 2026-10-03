@@ -72,7 +72,17 @@ def _get_bot_log_path(email: str) -> str:
 # FastAPI App & Secure CORS
 # ══════════════════════════════════════════════════════════════════
 
-app = FastAPI(title="Empire Bot API", version="2.0.0")
+# تعطيل واجهة التوثيق /docs و /redoc و /openapi.json أمنياً في الإنتاج لمنع كشف مسارات الخادم
+# يمكن تفعيلها مؤقتاً عند الحاجة فقط للتطوير المحلي عبر تعيين المتغير: ENABLE_DOCS=true
+_enable_docs = os.environ.get("ENABLE_DOCS", "false").lower() in ("true", "1", "yes")
+
+app = FastAPI(
+    title="Empire Bot API",
+    version="2.0.0",
+    docs_url="/docs" if _enable_docs else None,
+    redoc_url="/redoc" if _enable_docs else None,
+    openapi_url="/openapi.json" if _enable_docs else None,
+)
 
 # قراءة النطاقات المسموحة من متغيرات البيئة لدعم بيئات الإنتاج والـ VPS
 _cors_origins_env = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,https://ibraabot.online")
@@ -85,6 +95,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def _safe_log_put(q: Optional["queue.Queue[str]"], msg: str) -> None:
+    """إرسال آمن لرسالة اللوق في الـ queue بدون أي تجميد للـ Thread (Non-blocking drop-oldest)."""
+    if q is None:
+        return
+    try:
+        q.put_nowait(msg)
+    except queue.Full:
+        try:
+            q.get_nowait()
+        except Exception:
+            pass
+        try:
+            q.put_nowait(msg)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 
 # ══════════════════════════════════════════════════════════════════
 # إدارة الـ Threads (Thread Pool Architecture)
@@ -100,29 +129,35 @@ _conn_states: Dict[str, str]              = {}    # castle_id → 'connected' | 
 _user_stopped: Set[str]                   = set() # castle_ids التي تم إيقافها يدوياً من المستخدم
 _castle_emails: Dict[str, str]            = {}    # castle_id → email
 _castle_users:  Dict[str, str]            = {}    # castle_id → user_id
+_deleted_castles: Set[str]                = set() # castle_ids المحذوفة لمنع الخيوط من إعادة حفظها في SQLite
+
+# وضع النشر (Deploy Mode) — يمنع تشغيل أي بوت جديد أثناء تحديث السيرفر
+_deploy_mode: bool = False
+# حجم الدفعة والتأخير للاستئناف التدريجي بعد النشر
+_RESUME_BATCH_SIZE: int = 20
+_RESUME_BATCH_DELAY: float = 30.0
 
 # ══════════════════════════════════════════════════════════════════
 # إدارة تسجيل السجلات على القرص (تخفيف الحمل واستهلاك الموارد)
 # ══════════════════════════════════════════════════════════════════
-ALLOWED_LOG_USER_EMAIL = "shreher@gmail.com"
+ALLOWED_LOG_USER_EMAILS = {"shreher@gmail.com", "4rbrb93@gmail.com"}
 
 
 def _is_log_file_allowed(user_id: str, email: str) -> bool:
     """
     التحقق مما إذا كان مسموحاً بحفظ سجل البوت في ملف على القرص (bot_*.log).
-    مسموح فقط لقلاع المستخدم صاحب البريد shreher@gmail.com لتخفيف الحمل واستهلاك موارد السيرفر.
     """
-    target = ALLOWED_LOG_USER_EMAIL.strip().lower()
+    targets = {e.strip().lower() for e in ALLOWED_LOG_USER_EMAILS}
     # 1. فحص إيميل القلعة المباشر
-    if email and email.strip().lower() == target:
+    if email and email.strip().lower() in targets:
         return True
     # 2. فحص معرف المستخدم (UID) أو إيميل مالك القلعة
     if user_id:
-        if user_id.strip().lower() == target:
+        if user_id.strip().lower() in targets:
             return True
         try:
             u = db.get_user(user_id)
-            if u and str(u.get("email", "")).strip().lower() == target:
+            if u and str(u.get("email", "")).strip().lower() in targets:
                 return True
         except Exception:
             pass
@@ -132,24 +167,26 @@ def _is_log_file_allowed(user_id: str, email: str) -> bool:
 def cleanup_unauthorized_bot_logs():
     """
     تنظيف كافة ملفات bot_*.log القديمة غير المصرح بها على القرص لتخفيف الحمل وتوفير المساحة،
-    مع الإبقاء فقط على سجلات قلاع المستخدم shreher@gmail.com وسجل الأخطاء العام bot_errors.log.
+    مع الإبقاء فقط على سجلات قلاع المستخدمين المصرح لهم وسجل الأخطاء العام bot_errors.log.
     """
     try:
         allowed_safe_names = {
-            ALLOWED_LOG_USER_EMAIL.strip().lower().replace("@", "_").replace(".", "_")
+            e.strip().lower().replace("@", "_").replace(".", "_")
+            for e in ALLOWED_LOG_USER_EMAILS
         }
         try:
             with db.get_connection() as conn:
-                cur = conn.execute("""
-                    SELECT cs.email FROM castle_states cs
-                    JOIN users u ON cs.user_id = u.uid
-                    WHERE LOWER(u.email) = ?
-                """, (ALLOWED_LOG_USER_EMAIL.strip().lower(),))
-                for row in cur.fetchall():
-                    if row["email"]:
-                        allowed_safe_names.add(
-                            row["email"].strip().lower().replace("@", "_").replace(".", "_")
-                        )
+                for target_email in ALLOWED_LOG_USER_EMAILS:
+                    cur = conn.execute("""
+                        SELECT cs.email FROM castle_states cs
+                        JOIN users u ON cs.user_id = u.uid
+                        WHERE LOWER(u.email) = ?
+                    """, (target_email.strip().lower(),))
+                    for row in cur.fetchall():
+                        if row["email"]:
+                            allowed_safe_names.add(
+                                row["email"].strip().lower().replace("@", "_").replace(".", "_")
+                            )
         except Exception as e:
             log.warning(f"Error fetching allowed emails for logs: {e}")
 
@@ -182,42 +219,78 @@ def _is_running(castle_id: str) -> bool:
             return False
         if castle_id in _reserved:
             return True
+        ev = _stop_events.get(castle_id)
+        if ev and ev.is_set():
+            return False
         t = _threads.get(castle_id)
         if t is not None and t.is_alive():
             return True
         prefix = f"bot-{castle_id[:10]}"
         for th in threading.enumerate():
             if th.name == prefix and th.is_alive():
+                if ev and ev.is_set():
+                    return False
                 _threads[castle_id] = th
                 return True
         return False
 
 
 def _get_real_status(castle_id: str) -> str:
-    """الحالة الحقيقية: الـ thread + حالة اتصال اللعبة معاً، فورية وبدون أي تأخير عند الإيقاف."""
+    """الحالة الحقيقية: الـ thread + حالة اتصال اللعبة معاً، فورية وبدون أي ارتداد لحالة running."""
     with _lock:
+        conn = _conn_states.get(castle_id)
+        if conn == 'deploying':
+            return 'deploying'
+
         if castle_id in _user_stopped:
             return 'idle'
-        if castle_id in _reserved:
+
+        matched_cid = castle_id
+        if castle_id not in _threads and castle_id not in _castle_users:
+            for cid, em in _castle_emails.items():
+                if em == castle_id or cid == castle_id:
+                    matched_cid = cid
+                    break
+
+        if _conn_states.get(matched_cid) == 'deploying':
+            return 'deploying'
+
+        if matched_cid in _user_stopped:
+            return 'idle'
+
+        if castle_id in _reserved or matched_cid in _reserved:
+            if _deploy_mode:
+                return 'deploying'
             return 'starting'
-        t = _threads.get(castle_id)
+
+        ev = _stop_events.get(matched_cid) or _stop_events.get(castle_id)
+        if ev and ev.is_set():
+            return 'idle'
+
+        t = _threads.get(matched_cid) or _threads.get(castle_id)
         if t is None or not t.is_alive():
-            prefix = f"bot-{castle_id[:10]}"
+            prefix = f"bot-{matched_cid[:10]}"
             found_t = None
             for th in threading.enumerate():
                 if th.name == prefix and th.is_alive():
                     found_t = th
-                    _threads[castle_id] = th
                     break
             if not found_t:
+                # إذا لم يكن هناك Thread شغال، نفحص هل القلعة مسجلة كحالة خطأ في قاعدة البيانات
+                try:
+                    c_rec = db.get_castle_by_id(matched_cid) or db.get_castle_by_id(castle_id)
+                    if c_rec and (c_rec.get("conn_state") == "error" or c_rec.get("state") == "error"):
+                        return 'error'
+                except Exception:
+                    pass
                 return 'idle'
-        conn = _conn_states.get(castle_id, 'connected')
-        if conn == 'disconnected':
-            return 'disconnected'
-        if conn == 'reconnecting':
-            return 'reconnecting'
-        if conn == 'waiting':
-            return 'waiting'
+            if matched_cid in _user_stopped or castle_id in _user_stopped:
+                return 'idle'
+            _threads[matched_cid] = found_t
+
+        conn = _conn_states.get(matched_cid) or _conn_states.get(castle_id, 'connected')
+        if conn in ('disconnected', 'reconnecting', 'waiting', 'idle', 'deploying', 'error'):
+            return conn
         return 'running'
 
 
@@ -318,6 +391,8 @@ _ensure_firebase()
 
 def update_castle_status_db(user_id: str, castle_id: str, state: str, message: str = "", conn_state: Optional[str] = None, next_run_time: Optional[str] = None):
     """تحديث حالة البوت واتصاله محلياً في SQLite فوراً وبسرعة فائقة."""
+    if castle_id in _deleted_castles:
+        return
     try:
         effective_conn = conn_state
         if effective_conn is None:
@@ -343,6 +418,8 @@ def update_castle_status_db(user_id: str, castle_id: str, state: str, message: s
 
 def sync_castle_resources_db(email: str, data: dict, user_id: Optional[str] = None, castle_id: Optional[str] = None):
     """حفظ موارد القلعة ومعلوماتها في SQLite المحلية فوراً."""
+    if castle_id and castle_id in _deleted_castles:
+        return
     try:
         db.upsert_castle_resources(
             email=email,
@@ -383,18 +460,20 @@ def _tail_file(filepath: str, n_lines: int = 100) -> List[str]:
 
 security_scheme = HTTPBearer(auto_error=False)
 
+def is_super_admin(user: Optional[Dict[str, Any]]) -> bool:
+    """التحقق الصارم والموحد من هوية المشرف الأعلى (ibraboths@gmail.com حصراً)."""
+    if not user:
+        return False
+    email = str(user.get("email", "")).strip().lower()
+    return email == "ibraboths@gmail.com" and user.get("role") == "admin"
+
 def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(security_scheme)) -> Dict[str, Any]:
     """
-    التحقق من هوية المستخدم عبر Firebase ID Token المشفر.
-    ثم قراءة بيانات المستخدم وصلاحيته من SQLite المحلية.
-    إذا كان المستخدم جديداً ومسجلاً عبر Firebase، يتم إنشاء سجله تلقائياً في SQLite.
+    التحقق الصارم من هوية المستخدم عبر Firebase ID Token المشفر.
+    لا يمكن لأي مستخدم تجاوز المصادقة إطلاقاً بدون توكن صالح وصادر من Firebase.
     """
-    require_auth = os.environ.get("REQUIRE_AUTH", "0") == "1"
-
     if not credentials or not credentials.credentials:
-        if require_auth:
-            raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-        return {"uid": "local_dev", "role": "admin", "email": "dev@local", "username": "Local Admin"}
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header (Bearer token required)")
 
     token = credentials.credentials
     try:
@@ -403,23 +482,24 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Secur
         from firebase_admin import auth as fb_auth
 
         if not firebase_admin._apps:
-            if not require_auth:
-                return {"uid": "local_dev", "role": "admin", "email": "dev@local", "username": "Local Admin"}
             raise HTTPException(status_code=500, detail="Firebase Admin SDK is not initialized")
 
         decoded = fb_auth.verify_id_token(token)
-        uid = decoded.get("uid", "")
-        email = decoded.get("email", "")
+        uid = str(decoded.get("uid", "")).strip()
+        email = str(decoded.get("email", "")).strip().lower()
+
+        if not uid or not email:
+            raise HTTPException(status_code=401, detail="Invalid token payload: missing UID or email")
 
         # قراءة بيانات المستخدم من SQLite
         user_record = db.get_user(uid)
-        if not user_record and uid and email:
+        if not user_record:
             # إنشاء سجل مبدئي للمستخدم في SQLite إن لم يكن موجوداً
             db.create_or_update_user(
                 uid=uid,
                 email=email,
                 username=decoded.get("name", email.split("@")[0]),
-                role="admin" if email in ("ibraboths@gmail.com", "fahed.k140@gmail.com") else "user"
+                role="admin" if email == "ibraboths@gmail.com" else "user"
             )
             user_record = db.get_user(uid)
 
@@ -428,23 +508,23 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Secur
                 raise HTTPException(status_code=403, detail=f"تم حظر حسابك: {user_record.get('banned_reason') or 'مخالفة الشروط'}")
             return user_record
 
-        return {"uid": uid, "email": email, "role": "user"}
+        return {"uid": uid, "email": email, "role": "admin" if email == "ibraboths@gmail.com" else "user"}
 
     except HTTPException:
         raise
     except Exception as e:
         log.warning(f"🔒 Token verification failed: {e}")
-        if not require_auth:
-            return {"uid": "local_dev", "role": "admin", "email": "dev@local"}
         raise HTTPException(status_code=401, detail=f"Invalid authentication token: {e}")
 
 
 def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """التأكد من أن المستخدم يتمتع بصلاحية المشرف (Admin) من SQLite."""
-    uid = user.get("uid", "")
-    if uid == "local_dev" or user.get("role") == "admin":
+    """التأكد الصارم من أن المستخدم هو المشرف الأعلى الوحيد (ibraboths@gmail.com)."""
+    if is_super_admin(user):
         return user
-    raise HTTPException(status_code=403, detail="هذا الإجراء يتطلب صلاحية المشرف (Admin required)")
+    email = str(user.get("email", "")).strip().lower()
+    uid = user.get("uid", "")
+    log.error(f"🚨 محاولة وصول غير مصرح بها لصفحة الإدارة من الحساب: {email} (UID: {uid})")
+    raise HTTPException(status_code=403, detail="وصول مرفوض: هذه الصفحة والإجراءات مقصورة حصرياً على المشرف الأعلى")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -489,16 +569,17 @@ def _bot_thread(req: StartBotRequest):
             castle_id=castle_id,
         )
         if not account:
-            err_msg = f"الحساب {email} غير موجود في الكاش وتعذر تسجيل دخوله (تأكد من صحة البريد وكلمة المرور)"
+            from core.session_manager import get_last_auth_error
+            err_msg = get_last_auth_error(email) or f"الحساب {email} تعذر تسجيل دخوله (تأكد من صحة البريد وكلمة المرور)"
             log.error(f"❌ [{email}] {err_msg}")
-            log_q.put(f"[{datetime.now():%H:%M:%S}] ❌ {err_msg}")
+            _safe_log_put(log_q, f"[{datetime.now():%H:%M:%S}] ❌ {err_msg}")
             update_castle_status_db(user_id, castle_id, "error", err_msg, conn_state="error")
             return
         else:
             log.info(f"✅ [{email}] تم تأكيد الجلسة بنجاح.")
     except Exception as e:
         log.error(f"💥 [{email}] خطأ أثناء التحقق من الجلسة: {e}")
-        log_q.put(f"[{datetime.now():%H:%M:%S}] 💥 خطأ الجلسة: {e}")
+        _safe_log_put(log_q, f"[{datetime.now():%H:%M:%S}] 💥 خطأ الجلسة: {e}")
         update_castle_status_db(user_id, castle_id, "error", str(e), conn_state="error")
         return
 
@@ -556,14 +637,20 @@ def _bot_thread(req: StartBotRequest):
                 pass
 
     def _log_callback(line: str):
-        if _log_file_handle:
+        # طباعة السجلات إلى الكونسول فوراً: إذا كان الحساب مصرحاً بملف سجل أو كانت الرسالة تخص منسق الفيالق أو المسيرات أو التنبيهات الحرجة
+        should_print = _log_file_handle is not None or any(
+            k in line for k in ("منسق", "مسيرة", "مسيرات", "فيالق", "فيلق", "جمع", "غزاة", "معقل", "أولوية", "🚨", "🎉", "⚠️", "❌", "🎖️", "⚔️", "🌾", "🏰", "march_manager", "gather", "monster", "stronghold")
+        )
+        if should_print:
             print(f"[{email}] {line}", flush=True)
+
+        if _log_file_handle:
             try:
                 _log_file_handle.write(line + "\n")
                 _log_file_handle.flush()
                 _log_line_counter[0] += 1
-                # كل 100 سطر نقص الملف إلى آخر 300 سطر
-                if _log_line_counter[0] >= 100:
+                # تقليم السجل كل 1000 سطر لتفادي ضغط الـ I/O على القرص
+                if _log_line_counter[0] >= 1000:
                     _log_line_counter[0] = 0
                     _trim_log_file()
             except Exception:
@@ -631,31 +718,8 @@ def _bot_thread(req: StartBotRequest):
             except Exception as ex:
                 log.debug(f"Resource sync parse error: {ex}")
 
-    # 5. فحص الاشتراك دورياً محلياً من SQLite بدون أي استعلام شبكة
+    # 5. فحص الاشتراك يتم طبيعياً في بداية كل دورة داخل البوت نفسه بدون أي خيوط إضافية
     forced_stop_reason = ""
-
-    def _subscription_guard():
-        nonlocal forced_stop_reason
-        check_counter = 0
-        while not stop_event.wait(timeout=5):
-            check_counter += 1
-            if check_counter % 6 == 0:  # كل 30 ثانية
-                valid, reason = db.check_user_subscription_db(user_id)
-                if not valid:
-                    forced_stop_reason = reason
-                    log.warning(f"🛑 [{email}] انتهاء اشتراك أو حظر محلياً: {reason}")
-                    stop_event.set()
-                    break
-            if check_counter % 12 == 0:  # كل 60 ثانية
-                # التحقق إذا قام المستخدم بتعطيل القلعة
-                c = db.get_castle_by_id(castle_id, user_id)
-                if c and not c.get("is_active", True):
-                    forced_stop_reason = "تم تعطيل القلعة"
-                    stop_event.set()
-                    break
-
-    guard_t = threading.Thread(target=_subscription_guard, daemon=True, name=f"guard-{castle_id[:10]}")
-    guard_t.start()
 
     # 6. تشغيل BotManager
     try:
@@ -675,7 +739,7 @@ def _bot_thread(req: StartBotRequest):
         manager = BotManager(
             email,
             initial_cfg,
-            reconnect_wait_seconds=60,
+            reconnect_wait_seconds=250,
             user_id=user_id,
             castle_id=castle_id,
             stop_event=stop_event,
@@ -687,7 +751,7 @@ def _bot_thread(req: StartBotRequest):
 
     except Exception as e:
         log.error(f"💥 [{email}] خطأ في البوت: {e}", exc_info=True)
-        log_q.put(f"[{datetime.now():%H:%M:%S}] 💥 خطأ: {e}")
+        _safe_log_put(log_q, f"[{datetime.now():%H:%M:%S}] 💥 خطأ: {e}")
         update_castle_status_db(user_id, castle_id, "error", str(e), conn_state="error")
     finally:
         stop_event.set()
@@ -703,15 +767,29 @@ def _bot_thread(req: StartBotRequest):
             _log_qs.pop(castle_id, None)
             _conn_states.pop(castle_id, None)
             _castle_users.pop(castle_id, None)
-            _user_stopped.discard(castle_id)
+            _reserved.discard(castle_id)
+            if not was_user_stopped:
+                _user_stopped.discard(castle_id)
 
     # 7. تحديث الحالة النهائية في SQLite
-    if forced_stop_reason:
-        log_q.put(f"[{datetime.now():%H:%M:%S}] 🛑 إيقاف إجباري: {forced_stop_reason}")
+    if castle_id in _deleted_castles:
+        log.info(f"🗑️ [{email}] تم حذف القلعة، تخطي تحديث الحالة النهائية.")
+        return
+
+    c_final = db.get_castle_by_id(castle_id, user_id) or {}
+    if not c_final:
+        return
+    is_already_error = (c_final.get("conn_state") == "error" or c_final.get("state") == "error")
+
+    if is_already_error:
+        # إذا كانت القلعة توقفت بسبب خطأ صريح (مثل خطأ كلمة المرور)، نحتفظ بالحالة كما هي ولا نمسحها بـ "اكتمل البوت"
+        log.info(f"🛑 [{email}] الاحتفاظ بحالة الخطأ الصريحة في قاعدة البيانات: {c_final.get('conn_message')}")
+    elif forced_stop_reason:
+        _safe_log_put(log_q, f"[{datetime.now():%H:%M:%S}] 🛑 إيقاف إجباري: {forced_stop_reason}")
         log.info(f"🛑 [{email}] إيقاف إجباري: {forced_stop_reason}")
         update_castle_status_db(user_id, castle_id, "idle", f"متوقف إجبارياً: {forced_stop_reason}", conn_state="idle")
     elif was_user_stopped:
-        log_q.put(f"[{datetime.now():%H:%M:%S}] ⏹️ تم إيقاف البوت بواسطة المستخدم")
+        _safe_log_put(log_q, f"[{datetime.now():%H:%M:%S}] ⏹️ تم إيقاف البوت بواسطة المستخدم")
         log.info(f"⏹️ [{email}] إيقاف يدوي")
         update_castle_status_db(user_id, castle_id, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
     else:
@@ -808,7 +886,7 @@ def list_castles(
 ):
     """جلب قلاع المستخدم الحالي أو مستخدم محدد (للمشرف) من SQLite مع حالات التشغيل الحقيقية."""
     caller_uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or caller_uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     if is_admin and user_id and user_id.strip():
         target_uid = user_id.strip()
@@ -819,16 +897,20 @@ def list_castles(
         target_uid = caller_uid
         castles = db.get_user_castles(target_uid)
 
-    # دمج الحالة الحقيقية للـ thread
+    # دمج الحالة الحقيقية للـ thread مع الاحتفاظ بحالة الخطأ الصريحة
     for c in castles:
         cid = c.get("castle_id", "")
         real_st = _get_real_status(cid)
-        c["state"] = real_st
-        c["conn_state"] = real_st
-        if real_st != "idle" and not c.get("conn_message"):
-            c["conn_message"] = "البوت يعمل الآن..."
-        elif real_st == "idle" and c.get("conn_message") in ("running", "connected", "waiting", "reconnecting"):
-            c["conn_message"] = "جاهز للتشغيل"
+        if real_st == "error" or c.get("conn_state") == "error" or c.get("state") == "error":
+            c["state"] = "error"
+            c["conn_state"] = "error"
+        else:
+            c["state"] = real_st
+            c["conn_state"] = real_st
+            if real_st != "idle" and not c.get("conn_message"):
+                c["conn_message"] = "البوت يعمل الآن..."
+            elif real_st == "idle" and c.get("conn_message") in ("running", "connected", "waiting", "reconnecting"):
+                c["conn_message"] = "جاهز للتشغيل"
 
     return {"castles": castles}
 
@@ -837,17 +919,21 @@ def list_castles(
 def get_castle_details(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """تفاصيل قلعة محددة من SQLite."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     c = db.get_castle_by_id(castle_id, None if is_admin else uid)
     if not c:
         raise HTTPException(status_code=404, detail="القلعة غير موجودة")
 
     real_st = _get_real_status(castle_id)
-    c["state"] = real_st
-    c["conn_state"] = real_st
-    if real_st == "idle" and c.get("conn_message") in ("running", "connected", "waiting", "reconnecting"):
-        c["conn_message"] = "جاهز للتشغيل"
+    if real_st == "error" or c.get("conn_state") == "error" or c.get("state") == "error":
+        c["state"] = "error"
+        c["conn_state"] = "error"
+    else:
+        c["state"] = real_st
+        c["conn_state"] = real_st
+        if real_st == "idle" and c.get("conn_message") in ("running", "connected", "waiting", "reconnecting"):
+            c["conn_message"] = "جاهز للتشغيل"
 
     return {"castle": c}
 
@@ -856,22 +942,36 @@ def get_castle_details(castle_id: str, current_user: Dict[str, Any] = Depends(ge
 def add_castle(req: CastleCreateRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
     """إضافة قلعة جديدة في SQLite مع التحقق من الحد المسموح للاشتراك."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
-    # 1. التحقق من حد القلاع المسموح وحالة الموافقة
+    # 1. التحقق من حد القلاع المسموح وحالة الموافقة والحظر
     is_within_quota = True
+    st = ""
     if not is_admin:
         u = db.get_user(uid)
         if u:
+            # 1.1 فحص حظر الحساب
+            if u.get("is_banned"):
+                raise HTTPException(status_code=403, detail="حسابك محظور من قبل الإدارة، لا يمكنك إضافة قلاع جديدة")
+
             st = (u.get("subscription") or {}).get("status") or u.get("subscription_status")
             if st == "pending_approval":
-                raise HTTPException(status_code=403, detail="الحساب بانتظار موافقة الإدارة أولاً لتفعيل باقة الـ 10 حسابات")
-            active_cnt, _ = db.count_user_castles(uid)
-            max_allowed = (u.get("subscription") or {}).get("max_castles_allowed") or u.get("max_castles_allowed", 0)
-            if active_cnt >= max_allowed:
+                # السماح بإضافة حتى 10 حسابات كحد أقصى أثناء انتظار الموافقة
+                total_cnt = db.count_user_total_castles(uid)
+                if total_cnt >= 10:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="وصلت للحد الأقصى المسموح به أثناء انتظار الموافقة (10 قلاع كحد أقصى)"
+                    )
                 is_within_quota = False
+            else:
+                is_sub_valid, _ = db.check_user_subscription_db(uid)
+                active_cnt, _ = db.count_user_castles(uid)
+                max_allowed = (u.get("subscription") or {}).get("max_castles_allowed") or u.get("max_castles_allowed", 0)
+                if not is_sub_valid or active_cnt >= max_allowed:
+                    is_within_quota = False
 
-    castle_id = req.castle_id or f"c_{uuid.uuid4().hex[:12]}"
+    castle_id = f"c_{uuid.uuid4().hex[:12]}"
     clean_email = req.email.strip().lower()
 
     # التحقق من عدم تكرار البريد الإلكتروني للقلعة لأي مستخدم
@@ -892,7 +992,9 @@ def add_castle(req: CastleCreateRequest, current_user: Dict[str, Any] = Depends(
         "is_active": 1 if is_within_quota else 0,
         "state": "idle" if is_within_quota else "pending",
         "conn_state": "idle" if is_within_quota else "pending",
-        "conn_message": "جاهز للتشغيل" if is_within_quota else "بانتظار موافقة الإدارة (تم تجاوز الحد المسموح)",
+        "conn_message": "جاهز للتشغيل" if is_within_quota else (
+            "بانتظار موافقة الإدارة لتفعيل باقة التجربة" if st == "pending_approval" else "بانتظار موافقة الإدارة (تم تجاوز الحد المسموح)"
+        ),
         "created_at": now_iso,
         "last_updated": now_iso,
     }
@@ -901,6 +1003,9 @@ def add_castle(req: CastleCreateRequest, current_user: Dict[str, Any] = Depends(
     if not ok:
         raise HTTPException(status_code=500, detail="تعذر حفظ القلعة في قاعدة البيانات")
 
+    # مزامنة الحساب والحدود
+    db.sync_user_castles_and_quota(uid)
+
     return {"status": "success", "castle": db.get_castle_by_id(castle_id, uid)}
 
 
@@ -908,7 +1013,7 @@ def add_castle(req: CastleCreateRequest, current_user: Dict[str, Any] = Depends(
 def update_castle(castle_id: str, req: CastleUpdateRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
     """تحديث إعدادات أو اسم القلعة في SQLite."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     c = db.get_castle_by_id(castle_id, None if is_admin else uid)
     if not c:
@@ -935,7 +1040,7 @@ def update_castle(castle_id: str, req: CastleUpdateRequest, current_user: Dict[s
 def update_castle_creds(castle_id: str, req: CastleCredentialsUpdateRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
     """تحديث البريد وكلمة المرور للقلعة في SQLite."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     c = db.get_castle_by_id(castle_id, None if is_admin else uid)
     if not c:
@@ -957,9 +1062,35 @@ def update_castle_creds(castle_id: str, req: CastleCredentialsUpdateRequest, cur
 
 @app.post("/api/castles/{castle_id}/toggle-active")
 def toggle_castle_active_endpoint(castle_id: str, req: CastleToggleActiveRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
-    """تفعيل أو تعطيل القلعة في SQLite."""
+    """تفعيل أو تعطيل القلعة في SQLite مع التحقق من الباقة والحد الأقصى المسموح."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
+
+    if not is_admin:
+        u = db.get_user(uid)
+        if u:
+            if u.get("is_banned"):
+                raise HTTPException(status_code=403, detail="الحساب محظور من قبل الإدارة")
+
+            st = (u.get("subscription") or {}).get("status") or u.get("subscription_status")
+            if st == "pending_approval":
+                raise HTTPException(status_code=403, detail="الحساب بانتظار موافقة الإدارة أولاً لتفعيل باقة التجربة")
+
+            # إذا كان المستخدم يريد تفعيل القلعة
+            if req.is_active:
+                is_sub_valid, sub_msg = db.check_user_subscription_db(uid)
+                if not is_sub_valid:
+                    raise HTTPException(status_code=403, detail=sub_msg)
+
+                active_cnt, _ = db.count_user_castles(uid)
+                max_allowed = (u.get("subscription") or {}).get("max_castles_allowed") or u.get("max_castles_allowed", 0)
+                c = db.get_castle_by_id(castle_id, uid)
+                if c and not c.get("is_active"):
+                    if active_cnt >= max_allowed:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"وصلت للحد الأقصى من القلاع المسموح بها في باقتك ({max_allowed}). يرجى إيقاف قلعة أخرى أولاً أو ترقية الباقة."
+                        )
 
     ok = db.toggle_castle_active(castle_id, req.is_active, None if is_admin else uid)
     if not ok:
@@ -976,14 +1107,38 @@ def toggle_castle_active_endpoint(castle_id: str, req: CastleToggleActiveRequest
             if ev:
                 ev.set()
 
+    # إذا تم تفعيلها، نحدث حالة الرسالة و state إلى idle
+    if req.is_active:
+        try:
+            with db.get_connection() as conn:
+                conn.execute(
+                    "UPDATE castle_states SET state = 'idle', conn_state = 'idle', conn_message = 'جاهز للتشغيل' WHERE castle_id = ?",
+                    (castle_id,)
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+    # مزامنة الحساب
+    db.sync_user_castles_and_quota(uid)
+
     return {"status": "success", "is_active": req.is_active}
 
 
 @app.delete("/api/castles/{castle_id}")
 def delete_castle_endpoint(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
-    """حذف القلعة نهائياً من SQLite."""
+    """حذف القلعة نهائياً من SQLite وتصفية عملياتها وسجلاتها."""
     uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or uid == "local_dev")
+    is_admin = is_super_admin(current_user)
+
+    # معرفة إيميل القلعة قبل حذفها لتنظيف ملف اللوق والجلسة
+    c_rec = db.get_castle(castle_id) or {}
+    c_email = str(c_rec.get("email", "")).strip().lower()
+
+    # تسجيل القلعة فوراً في قائمة المحذوفات
+    with _lock:
+        _deleted_castles.add(castle_id)
+        _user_stopped.add(castle_id)
 
     # إيقاف البوت إن كان شغالاً
     if _is_running(castle_id):
@@ -995,6 +1150,34 @@ def delete_castle_endpoint(castle_id: str, current_user: Dict[str, Any] = Depend
                 except Exception: pass
             if ev:
                 ev.set()
+
+    # تنظيف الذاكرة
+    with _lock:
+        _threads.pop(castle_id, None)
+        _stop_events.pop(castle_id, None)
+        _bot_managers.pop(castle_id, None)
+        _reserved.discard(castle_id)
+        _log_qs.pop(castle_id, None)
+        _conn_states.pop(castle_id, None)
+        _castle_emails.pop(castle_id, None)
+        _castle_users.pop(castle_id, None)
+        _user_stopped.discard(castle_id)
+
+    # تنظيف ملف اللوق الخاص بالقلعة من القرص
+    if c_email:
+        try:
+            bot_log_path = os.path.join(_LOGS_DIR, f"bot_{c_email.replace('@','_').replace('.','_')}.log")
+            if os.path.exists(bot_log_path):
+                os.remove(bot_log_path)
+        except Exception:
+            pass
+
+        # تنظيف الجلسة من session_cache.json
+        try:
+            from core.session_manager import SessionManager
+            SessionManager().remove_session(c_email)
+        except Exception:
+            pass
 
     ok = db.delete_castle_by_id(castle_id, uid) if not is_admin else db.delete_castle(castle_id)
     if not ok:
@@ -1013,12 +1196,171 @@ def get_admin_dashboard_stats(admin: Dict[str, Any] = Depends(require_admin)):
         active_cids = {cid for cid, t in _threads.items() if t.is_alive()}
         for t in threading.enumerate():
             if t.name.startswith("bot-") and t.is_alive():
+                if t.name == "auto-resume" or t.name.startswith("sys-"):
+                    continue
                 prefix = t.name[4:]
                 for cm in db.find_castles_by_id_prefix(prefix):
                     if cm.get("castle_id"):
                         active_cids.add(cm["castle_id"])
         stats["activeBots"] = len(active_cids)
     return stats
+
+
+@app.get("/api/admin/live-processes")
+def get_admin_live_processes(admin: Dict[str, Any] = Depends(require_admin)):
+    """
+    ⚡ مراقبة العمليات الحية (Live Runtime Threads & Processes):
+    استعلام فوري ومباشر عن كافة عمليات البوت الحية الشغالة حالياً في الذاكرة (Thread Pool).
+    - تأتي البيانات مباشرة ولحظياً من الـ Threads وكائنات BotManager في الذاكرة (NOT from database).
+    - تعكس الحالات الحقيقية:
+      1) شغالة فعلياً (Running Now - تنفذ مهمة محددة)
+      2) منتظرة بين الدورات (Waiting - بانتظار الدورة التالية)
+      3) تسجيل دخول من شخص آخر (Other Device Logged In - تم إيقافها مؤقتاً وبانتظار إعادة الاتصال)
+      4) جاري إعادة الاتصال (Reconnecting - محاولات الاتصال النشطة)
+    """
+    active_list = []
+    registered_idents = set()
+
+    # خريطة مساعدة سريعة لإيميلات المستخدمين أصحاب القلاع
+    user_emails_cache: Dict[str, str] = {}
+
+    def _resolve_user_email(uid: str) -> str:
+        if not uid:
+            return ""
+        if uid in user_emails_cache:
+            return user_emails_cache[uid]
+        try:
+            u = db.get_user(uid)
+            em = str(u.get("email", "")) if u else ""
+            user_emails_cache[uid] = em
+            return em
+        except Exception:
+            return ""
+
+    with _lock:
+        # 1. فحص جميع القلاع المسجلة في _threads
+        for cid, th in list(_threads.items()):
+            if not th.is_alive():
+                continue
+
+            registered_idents.add(th.ident)
+            mgr = _bot_managers.get(cid)
+            conn_state = _conn_states.get(cid, "running")
+            email = _castle_emails.get(cid, "")
+            user_id = _castle_users.get(cid, "")
+
+            if mgr and hasattr(mgr, "get_live_info"):
+                try:
+                    info = mgr.get_live_info()
+                except Exception as ex:
+                    log.warning(f"Error getting live info from mgr for {cid}: {ex}")
+                    info = {}
+                info["castle_id"] = cid
+                info["thread_id"] = th.ident
+                info["thread_name"] = th.name
+                info["thread_alive"] = True
+                if not info.get("email"):
+                    info["email"] = email
+                if not info.get("user_id"):
+                    info["user_id"] = user_id
+                info["user_email"] = _resolve_user_email(info.get("user_id", ""))
+                active_list.append(info)
+            else:
+                # Thread نشط لكن في مرحلة التهيئة الأولية قبل اكتمال ربط manager
+                active_list.append({
+                    "castle_id": cid,
+                    "email": email or cid,
+                    "user_id": user_id,
+                    "user_email": _resolve_user_email(user_id),
+                    "thread_id": th.ident,
+                    "thread_name": th.name,
+                    "thread_alive": True,
+                    "state": conn_state or "starting",
+                    "live_category": "starting",
+                    "category_label": "جاري بدء التشغيل",
+                    "status_message": "جاري التحضير في الذاكرة...",
+                    "iteration": 1,
+                    "loop_interval_minutes": 90,
+                    "next_run_time": None,
+                    "reconnect_attempt": 0,
+                    "max_reconnect_attempts": 10,
+                    "last_kick_reason": "",
+                    "uptime_seconds": 0,
+                    "is_connection_alive": False,
+                    "is_stopped": False,
+                    "start_time": time.time(),
+                })
+
+        # 2. فحص أي Thread إضافي باسم bot- في الـ runtime (مع استثناء خيوط النظام الداخلية)
+        for th in threading.enumerate():
+            if th.name.startswith("bot-") and th.is_alive() and th.ident not in registered_idents:
+                if th.name == "auto-resume" or th.name.startswith("sys-"):
+                    continue
+                prefix = th.name[4:]
+                registered_idents.add(th.ident)
+                active_list.append({
+                    "castle_id": prefix,
+                    "email": prefix,
+                    "user_id": "",
+                    "user_email": "",
+                    "thread_id": th.ident,
+                    "thread_name": th.name,
+                    "thread_alive": True,
+                    "state": "running",
+                    "live_category": "running",
+                    "category_label": "شغالة (Thread مباشر)",
+                    "status_message": "Thread نشط يعمل مباشرة",
+                    "iteration": 1,
+                    "loop_interval_minutes": 90,
+                    "next_run_time": None,
+                    "reconnect_attempt": 0,
+                    "max_reconnect_attempts": 10,
+                    "last_kick_reason": "",
+                    "uptime_seconds": 0,
+                    "is_connection_alive": True,
+                    "is_stopped": False,
+                    "start_time": time.time(),
+                })
+
+    # ترتيب العمليات: العمليات المتأثرة بدخول آخر أولاً، ثم الشغالة، ثم المنتظرة
+    def _sort_priority(p: Dict[str, Any]) -> int:
+        cat = p.get("live_category", "")
+        if cat == "other_login":
+            return 0
+        if cat == "reconnecting":
+            return 1
+        if cat == "running":
+            return 2
+        if cat == "starting":
+            return 3
+        if cat == "waiting":
+            return 4
+        return 5
+
+    active_list.sort(key=lambda p: (_sort_priority(p), -p.get("uptime_seconds", 0)))
+
+    # إحصائيات حية دقيقة
+    total_active = len(active_list)
+    running_cnt = sum(1 for p in active_list if p.get("live_category") == "running")
+    waiting_cnt = sum(1 for p in active_list if p.get("live_category") == "waiting")
+    other_login_cnt = sum(1 for p in active_list if p.get("live_category") == "other_login")
+    reconnecting_cnt = sum(1 for p in active_list if p.get("live_category") == "reconnecting")
+    starting_cnt = sum(1 for p in active_list if p.get("live_category") == "starting")
+
+    return {
+        "status": "success",
+        "source": "live_threads_memory",
+        "timestamp": datetime.now().isoformat(),
+        "summary": {
+            "total_active": total_active,
+            "running": running_cnt,
+            "waiting": waiting_cnt,
+            "other_login": other_login_cnt,
+            "reconnecting": reconnecting_cnt,
+            "starting": starting_cnt,
+        },
+        "processes": active_list,
+    }
 
 
 @app.get("/api/admin/users")
@@ -1030,7 +1372,7 @@ def get_admin_users(admin: Dict[str, Any] = Depends(require_admin)):
 
 @app.post("/api/admin/user/{uid}/subscription")
 def update_user_sub(uid: str, req: AdminSubscriptionUpdateRequest, admin: Dict[str, Any] = Depends(require_admin)):
-    """تحديث باقة واشتراك المستخدم في SQLite."""
+    """تحديث باقة واشتراك المستخدم في SQLite وإيقاف أي قلاع جرى استبعادها بسبب تقليص الباقة."""
     ok = db.update_user_subscription(
         uid=uid,
         plan_id=req.plan_id,
@@ -1041,6 +1383,21 @@ def update_user_sub(uid: str, req: AdminSubscriptionUpdateRequest, admin: Dict[s
     )
     if not ok:
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+    # فحص وإيقاف أي قلاع جرى إيقافها إذا كانت تعمل حالياً
+    sync_res = db.sync_user_castles_and_quota(uid)
+    for d_cid in sync_res.get("demoted_ids", []):
+        if _is_running(d_cid):
+            with _lock:
+                _user_stopped.add(d_cid)
+                ev = _stop_events.get(d_cid)
+                mgr = _bot_managers.get(d_cid)
+                if mgr:
+                    try: mgr.stop()
+                    except Exception: pass
+                if ev:
+                    ev.set()
+
     return {"status": "success", "user": db.get_user(uid)}
 
 
@@ -1105,12 +1462,41 @@ def ban_user_endpoint(uid: str, req: AdminBanUserRequest, admin: Dict[str, Any] 
 
 @app.delete("/api/admin/user/{uid}")
 def delete_user_endpoint(uid: str, admin: Dict[str, Any] = Depends(require_admin)):
-    """حذف مستخدم وجميع قلاعه من SQLite."""
-    # إيقاف جميع بوتاته الجارية أولاً
+    """حذف مستخدم وجميع قلاعه تماماً من النظام."""
+    clean_uid = uid.strip()
+    user = db.get_user(clean_uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+    # حماية المشرف الأعلى من الحذف
+    user_email = str(user.get("email", "")).strip().lower()
+    if user.get("role") == "admin" or user_email == "ibraboths@gmail.com":
+        if user_email == "ibraboths@gmail.com":
+            raise HTTPException(status_code=400, detail="لا يمكن حذف حساب المشرف الأعلى")
+
+    # 1. جلب جميع قلاع المستخدم من قاعدة البيانات
+    user_castles = db.get_user_castles(clean_uid)
+    target_cids = {c.get("castle_id") for c in user_castles if c.get("castle_id")}
+    target_emails = {str(c.get("email", "")).strip().lower() for c in user_castles if c.get("email")}
+
+    # إضافة أي قلاع في الذاكرة تابعة لهذا المستخدم (بالمعرف أو بالبريد)
     with _lock:
-        targets = [cid for cid, u in _castle_users.items() if u == uid]
-        for cid in targets:
+        for cid, u in list(_castle_users.items()):
+            if u == clean_uid or (user_email and str(u).strip().lower() == user_email):
+                target_cids.add(cid)
+        for cid, em in list(_castle_emails.items()):
+            if str(em).strip().lower() in target_emails:
+                target_cids.add(cid)
+
+    # 2. تسجيل القلاع فوراً في قائمة المحذوفات لمنع أي Thread جاري من إعادة تسجيلها أو حفظ حالتها
+    with _lock:
+        for cid in target_cids:
+            _deleted_castles.add(cid)
             _user_stopped.add(cid)
+
+    # 3. إيقاف جميع البوتات الجارية لهذه القلاع فوراً
+    for cid in target_cids:
+        with _lock:
             ev = _stop_events.get(cid)
             mgr = _bot_managers.get(cid)
             if mgr:
@@ -1119,10 +1505,56 @@ def delete_user_endpoint(uid: str, admin: Dict[str, Any] = Depends(require_admin
             if ev:
                 ev.set()
 
-    ok = db.delete_user(uid)
+    # 4. تنظيف هياكل الذاكرة لجميع القلاع
+    with _lock:
+        for cid in target_cids:
+            _threads.pop(cid, None)
+            _stop_events.pop(cid, None)
+            _bot_managers.pop(cid, None)
+            _reserved.discard(cid)
+            _log_qs.pop(cid, None)
+            _conn_states.pop(cid, None)
+            _castle_emails.pop(cid, None)
+            _castle_users.pop(cid, None)
+            _user_stopped.discard(cid)
+
+    # 5. تنظيف ملفات السجلات bot_*.log على القرص
+    for em in target_emails:
+        try:
+            bot_log_path = os.path.join(_LOGS_DIR, f"bot_{em.replace('@','_').replace('.','_')}.log")
+            if os.path.exists(bot_log_path):
+                os.remove(bot_log_path)
+        except Exception as e:
+            log.warning(f"⚠️ تعذر حذف ملف اللوق لـ {em}: {e}")
+
+    # 6. تنظيف جلسات الحسابات من session_cache.json
+    try:
+        from core.session_manager import SessionManager
+        sm = SessionManager()
+        for em in target_emails:
+            sm.remove_session(em)
+    except Exception as e:
+        log.warning(f"⚠️ تعذر تنظيف session_cache.json: {e}")
+
+    # 7. حذف المستخدم وجميع قلاعه من SQLite
+    ok = db.delete_user(clean_uid)
     if not ok:
-        raise HTTPException(status_code=404, detail="تعذر حذف المستخدم")
-    return {"status": "success", "message": "تم حذف المستخدم وجميع قلاعه بنجاح"}
+        raise HTTPException(status_code=500, detail="تعذر حذف المستخدم وقلاعه من قاعدة البيانات")
+
+    # 8. محاولة حذف المستخدم من Firebase Auth أيضاً (حتى لا يتمكن من تسجيل الدخول مجدداً)
+    try:
+        import firebase_admin
+        from firebase_admin import auth as fb_auth
+        if firebase_admin._apps:
+            fb_auth.delete_user(clean_uid)
+            log.info(f"✅ تم حذف المستخدم من Firebase Auth: {clean_uid}")
+    except Exception as e:
+        log.debug(f"تخطي حذف مستخدم Firebase Auth: {e}")
+
+    return {
+        "status": "success",
+        "message": f"تم حذف المستخدم وجميع قلاعه ({len(target_cids)} قلعة) بنجاح"
+    }
 
 
 @app.post("/api/admin/castle/{castle_id}/approve")
@@ -1143,6 +1575,9 @@ def reject_castle_endpoint(castle_id: str, req: AdminCastleActionRequest, admin:
     return {"status": "success", "message": "تم رفض القلعة"}
 
 
+
+
+
 # ── 🤖 Bot Control Endpoints ──────────────────────────────────────
 
 def _start_bot_internal(req: StartBotRequest) -> bool:
@@ -1151,6 +1586,8 @@ def _start_bot_internal(req: StartBotRequest) -> bool:
         _user_stopped.discard(req.castle_id)
         if _is_running(req.castle_id):
             return False
+        _threads.pop(req.castle_id, None)
+        _stop_events.pop(req.castle_id, None)
         _reserved.add(req.castle_id)
 
     t = threading.Thread(target=_bot_thread, args=(req,), daemon=True, name=f"bot-{req.castle_id[:10]}")
@@ -1162,43 +1599,71 @@ def _start_bot_internal(req: StartBotRequest) -> bool:
 
 @app.post("/api/internal/save-running-state")
 def save_running_state_endpoint():
-    """حفظ قائمة جميع البوتات النشطة حالياً في auto_resume.json قبل عمل ريستارت للسيرفر."""
+    """حفظ قائمة جميع البوتات النشطة حالياً في auto_resume.json قبل عمل ريستارت للسيرفر ووسمها بـ deploying."""
+    global _deploy_mode
+    _deploy_mode = True
+
     active_cids = set()
     with _lock:
         for cid, t in _threads.items():
-            if t.is_alive() and cid not in _user_stopped:
+            ev = _stop_events.get(cid)
+            if t.is_alive() and cid not in _user_stopped and not (ev and ev.is_set()):
                 active_cids.add(cid)
         for cid in list(_castle_users.keys()):
             if cid not in active_cids and cid not in _user_stopped:
                 t = _threads.get(cid)
-                if t and t.is_alive():
+                ev = _stop_events.get(cid)
+                if t and t.is_alive() and not (ev and ev.is_set()):
                     active_cids.add(cid)
 
     # فحص أي threads نشطة تبدأ بـ bot- في بايثون
     for t in threading.enumerate():
         if t.name.startswith("bot-") and t.is_alive():
+            if t.name == "auto-resume" or t.name.startswith("sys-"):
+                continue
             prefix = t.name[4:]
             castles_match = db.find_castles_by_id_prefix(prefix)
             for cm in castles_match:
                 cid = cm.get("castle_id")
-                if cid and cid not in _user_stopped:
+                ev = _stop_events.get(cid)
+                if cid and cid not in _user_stopped and not (ev and ev.is_set()):
                     active_cids.add(cid)
 
     saved_list = []
+    deploy_msg = "جاري رفع التغييرات إلى السيرفر... سيتم استئناف البوت تلقائياً"
     for cid in active_cids:
         c = db.get_castle_by_id(cid)
         if c:
+            uid = c.get("user_id", "")
             saved_list.append({
                 "castle_id": cid,
-                "user_id": c.get("user_id", ""),
+                "user_id": uid,
                 "email": c.get("email", ""),
             })
+            with _lock:
+                _conn_states[cid] = "deploying"
+                _reserved.add(cid)
+            try:
+                update_castle_status_db(uid, cid, "deploying", deploy_msg, conn_state="deploying")
+            except Exception:
+                pass
+
+    # إيقاف مديري البوتات والمقابس بأمان
+    with _lock:
+        for cid in active_cids:
+            mgr = _bot_managers.get(cid)
+            ev = _stop_events.get(cid)
+            if mgr:
+                try: mgr.stop()
+                except Exception: pass
+            if ev:
+                ev.set()
 
     auto_resume_file = os.path.join(_ROOT, "auto_resume.json")
     with open(auto_resume_file, "w", encoding="utf-8") as f:
         json.dump(saved_list, f, ensure_ascii=False, indent=2)
 
-    log.info(f"💾 [Auto-Resume Prep] تم حفظ حالة {len(saved_list)} بوت نشط لإعادة استئنافهم تلقائياً بعد الريستارت.")
+    log.info(f"💾 [Auto-Resume Prep] تم حفظ حالة {len(saved_list)} بوت نشط ووسمهم بـ deploying لإعادة استئنافهم تلقائياً بعد الريستارت.")
     return {"status": "success", "count": len(saved_list), "castles": [x["castle_id"] for x in saved_list]}
 
 
@@ -1216,11 +1681,121 @@ def debug_state():
         }
 
 
+@app.post("/api/internal/deploy-lock")
+def deploy_lock():
+    """
+    قفل وضع النشر (Deploy Mode) — يمنع أي مستخدم من تشغيل بوت جديد.
+    يُستدعى من deploy.py قبل رفع الملفات وإعادة تشغيل الخدمة.
+    """
+    global _deploy_mode
+    _deploy_mode = True
+    log.warning("🔒 [Deploy Lock] وضع النشر مُفعّل — تم تعليق تشغيل أي بوت جديد حتى انتهاء النشر.")
+    return {"status": "locked", "deploy_mode": True}
+
+
+@app.post("/api/internal/deploy-unlock")
+def deploy_unlock():
+    """
+    فتح وضع النشر (Deploy Mode) — يسمح للمستخدمين بتشغيل البوتات مرة أخرى.
+    يُستدعى من deploy.py بعد إعادة تشغيل الخدمة وتأكيد الصحة.
+    """
+    global _deploy_mode
+    _deploy_mode = False
+    log.info("🔓 [Deploy Unlock] وضع النشر أُلغي — يمكن للمستخدمين تشغيل البوتات مجدداً.")
+    return {"status": "unlocked", "deploy_mode": False}
+
+
+@app.post("/api/internal/resume-all-from-db")
+def resume_all_from_db():
+    """
+    استئناف طارئ: يُعيد تشغيل جميع القلاع النشطة من قاعدة البيانات مباشرة.
+    يُستخدم عند فشل auto_resume.json أو بعد أي انقطاع غير متوقع.
+    """
+    def _do_resume():
+        try:
+            all_users = db.get_all_users()
+        except Exception as ex:
+            log.error(f"❌ [Resume-All] فشل جلب المستخدمين: {ex}")
+            return
+
+        started = 0
+        skipped = 0
+        total = 0
+        for user in all_users:
+            uid = user.get("user_id", "")
+            if not uid:
+                continue
+            valid, reason = db.check_user_subscription_db(uid)
+            if not valid:
+                continue
+            try:
+                castles = db.get_user_castles(uid)
+            except Exception:
+                continue
+            for c in castles:
+                cid = c.get("castle_id", "")
+                if not cid or not c.get("is_active", 1):
+                    continue
+                status = c.get("status", "")
+                if status in ("pending", "rejected"):
+                    continue
+                total += 1
+                if _is_running(cid):
+                    skipped += 1
+                    continue
+                with _lock:
+                    _user_stopped.discard(cid)
+                try:
+                    req_obj = StartBotRequest(
+                        castle_id=cid,
+                        user_id=uid,
+                        email=c.get("email", ""),
+                        config=c.get("config", {}),
+                        loop_interval=c.get("loop_interval", 55)
+                    )
+                    _start_bot_internal(req_obj)
+                    log.info(f"✅ [Resume-All] بدأ: {c.get('email', cid[:8])}")
+                    started += 1
+                    time.sleep(0.4)
+                except Exception as ex:
+                    log.warning(f"⚠️ [Resume-All] فشل {cid}: {ex}")
+
+        log.info(f"🎉 [Resume-All] اكتمل: {started} بوت شُغِّل، {skipped} كان يعمل، من أصل {total}")
+
+    threading.Thread(target=_do_resume, daemon=True, name="resume-all").start()
+    return {"status": "started", "message": "جاري استئناف جميع البوتات من قاعدة البيانات في الخلفية"}
+
+
+@app.post("/api/internal/direct-start")
+def internal_direct_start(req: StartBotRequest):
+    """
+    تشغيل مباشر للبوت بدون JWT — للاستخدام الداخلي فقط من سكريبتات الاستئناف الطارئ.
+    يُقبل فقط من localhost (127.0.0.1).
+    """
+    with _lock:
+        _user_stopped.discard(req.castle_id)
+    ok = _start_bot_internal(req)
+    if ok:
+        log.info(f"✅ [Direct-Start] {req.email} ({req.castle_id[:8]})")
+        return {"status": "started", "castle_id": req.castle_id}
+    else:
+        return {"status": "already_running", "castle_id": req.castle_id}
+
+
+
 @app.post("/api/bot/start")
 def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
     """تشغيل بوت لقلعة معينة مع التحقق من صلاحية الاشتراك محلياً في SQLite."""
+    global _deploy_mode
     caller_uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or caller_uid == "local_dev")
+    is_admin = is_super_admin(current_user)
+
+    # 🔒 رفض أي تشغيل أثناء وضع النشر (Deploy Mode) — حماية من تشغيل مزدوج
+    if _deploy_mode:
+        raise HTTPException(
+            status_code=503,
+            detail="🚧 السيرفر في وضع التحديث حالياً. يرجى الانتظار قليلاً حتى يكتمل النشر وتستأنف البوتات تلقائياً."
+        )
 
     if not is_admin and caller_uid != req.user_id:
         raise HTTPException(status_code=403, detail="غير مصرح بتشغيل قلاع مستخدم آخر")
@@ -1229,8 +1804,19 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
     valid, reason = db.check_user_subscription_db(req.user_id)
     if not valid:
         log.warning(f"🛑 [{req.email}] تم رفض بدء التشغيل محلياً: {reason}")
+        db.toggle_castle_active(req.castle_id, is_active=False, user_id=req.user_id)
         update_castle_status_db(req.user_id, req.castle_id, "idle", f"متوقف: {reason}")
         raise HTTPException(status_code=403, detail=f"لا يمكن تشغيل البوت: {reason}")
+
+    # 2. التحقق من أن القلعة مفعلة وليست معلقة أو مجمدة
+    c_info = db.get_castle_by_id(req.castle_id, None if is_admin else caller_uid)
+    if not c_info:
+        raise HTTPException(status_code=404, detail="القلعة غير موجودة")
+    if not is_admin and (not c_info.get("is_active") or c_info.get("state") == "pending"):
+        raise HTTPException(
+            status_code=403,
+            detail="لا يمكن تشغيل هذه القلعة لأنها معلقة أو غير مفعلة ضمن باقتك الحالية"
+        )
 
     started = _start_bot_internal(req)
     if not started:
@@ -1245,7 +1831,7 @@ def start_bot(req: StartBotRequest, current_user: Dict[str, Any] = Depends(get_c
 def stop_bot(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """إيقاف بوت قلعة معينة وتصفير حالتها في SQLite فوراً."""
     caller_uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or caller_uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     with _lock:
         owner_uid = _castle_users.get(castle_id)
@@ -1261,9 +1847,13 @@ def stop_bot(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_
         raise HTTPException(status_code=403, detail="غير مصرح بإيقاف قلاع مستخدم آخر")
 
     with _lock:
-        ev = _stop_events.get(matched_cid)
-        mgr = _bot_managers.get(matched_cid)
+        ev = _stop_events.get(matched_cid) or _stop_events.get(castle_id)
+        mgr = _bot_managers.get(matched_cid) or _bot_managers.get(castle_id)
         _user_stopped.add(matched_cid)
+        _user_stopped.add(castle_id)
+        # إزالة من الحجز التدريجي إذا كان البوت لم يصل دوره بعد في الاستئناف
+        _reserved.discard(matched_cid)
+        _reserved.discard(castle_id)
 
     # 1. إيقاف مدير البوت فوراً وقطع مقبس الاتصال لحظياً
     if mgr:
@@ -1278,8 +1868,10 @@ def stop_bot(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_
 
     # تصفير حالة القلعة دائماً في SQLite لضمان عدم بقائها عالقة
     try:
-        email = _castle_emails.get(matched_cid) or matched_cid
-        update_castle_status_db(caller_uid, matched_cid, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
+        effective_uid = owner_uid or caller_uid
+        update_castle_status_db(effective_uid, matched_cid, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
+        if matched_cid != castle_id:
+            update_castle_status_db(effective_uid, castle_id, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
     except Exception as e:
         log.warning(f"⚠️ خطأ أثناء تصفير حالة القلعة محلياً: {e}")
 
@@ -1288,8 +1880,13 @@ def stop_bot(castle_id: str, current_user: Dict[str, Any] = Depends(get_current_
 
 
 @app.post("/api/bot/stop-user/{user_id}")
-def stop_user_bots(user_id: str, admin: Dict[str, Any] = Depends(require_admin)):
-    """إيقاف جميع بوتات المستخدم فوراً (خاص بالمشرف)."""
+def stop_user_bots(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """إيقاف جميع بوتات المستخدم فوراً دفعة واحدة (مسموح للمشرف وللمستخدم نفسه)."""
+    caller_uid = current_user.get("uid", "")
+    is_admin = is_super_admin(current_user)
+    if not is_admin and caller_uid != user_id:
+        raise HTTPException(status_code=403, detail="غير مصرح بإيقاف قلاع مستخدم آخر")
+
     stopped = []
     with _lock:
         targets = [cid for cid, uid in _castle_users.items() if uid == user_id]
@@ -1306,10 +1903,22 @@ def stop_user_bots(user_id: str, admin: Dict[str, Any] = Depends(require_admin))
                 ev.set()
             stopped.append(cid)
             try:
-                update_castle_status_db(user_id, cid, "idle", "تم إيقاف البوت بواسطة المشرف", conn_state="idle")
+                update_castle_status_db(user_id, cid, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
             except Exception:
                 pass
-    log.info(f"🛑 [Force Stop] تم إيقاف {len(stopped)} بوت للمستخدم {user_id}")
+
+    try:
+        user_castles = db.get_user_castles(user_id)
+        for c in user_castles:
+            cid = c.get("castle_id")
+            if cid:
+                with _lock:
+                    _user_stopped.add(cid)
+                update_castle_status_db(user_id, cid, "idle", "تم إيقاف البوت بواسطة المستخدم", conn_state="idle")
+    except Exception as ex:
+        log.debug(f"stop_user_bots db cleanup: {ex}")
+
+    log.info(f"🛑 [Batch Stop] تم إيقاف جميع بوتات المستخدم {user_id} ({len(stopped)} نشط)")
     return {"status": "ok", "stopped_count": len(stopped), "stopped_castles": stopped}
 
 
@@ -1510,7 +2119,7 @@ def get_error_log(lines: int = 100, admin: Dict[str, Any] = Depends(require_admi
 def get_castle_logs(castle_id: str, lines: int = 100, current_user: Dict[str, Any] = Depends(get_current_user)):
     """قراءة آخر N سطر من ملف log الخاص بالقلعة محلياً من القرص."""
     caller_uid = current_user.get("uid", "")
-    is_admin = (current_user.get("role") == "admin" or caller_uid == "local_dev")
+    is_admin = is_super_admin(current_user)
 
     with _lock:
         owner_uid = _castle_users.get(castle_id)
@@ -1611,7 +2220,7 @@ async def ws_status(websocket: WebSocket, castle_id: str):
 
     try:
         while True:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.8)
             current = _get_real_status(castle_id)
             if current != last_status:
                 last_status = current
@@ -1622,41 +2231,40 @@ async def ws_status(websocket: WebSocket, castle_id: str):
         pass
 
 
-# ══════════════════════════════════════════════════════════════════
-# الحارس الأمني والدوري لخادم API (Watchdog)
-# ══════════════════════════════════════════════════════════════════
+@app.websocket("/ws/user-status/{user_id}")
+async def ws_user_status(websocket: WebSocket, user_id: str):
+    """WebSocket موحد لبث حالات جميع قلاع المستخدم دفعة واحدة بكفاءة عالية واستهلاك ضئيل."""
+    await websocket.accept()
 
-def _watchdog_loop():
-    """حارس دوري يفحص كل 45 ثانية جميع العمليات الجارية للتأكد من عدم وجود بوتات لحسابات محظورة أو منتهية."""
-    while True:
-        time.sleep(45)
+    def _collect_statuses() -> Dict[str, str]:
+        res = {}
         try:
-            with _lock:
-                active_items = list(_castle_users.items())
-            
-            for cid, uid in active_items:
-                try:
-                    valid, reason = db.check_user_subscription_db(uid)
-                    if not valid:
-                        log.warning(f"🛡️ [Watchdog] كشف قلعة غير مصرح بها {cid[:10]} (المستخدم: {uid}): {reason}")
-                        with _lock:
-                            _user_stopped.add(cid)
-                            ev = _stop_events.get(cid)
-                            mgr = _bot_managers.get(cid)
-                            if mgr:
-                                try: mgr.stop()
-                                except Exception: pass
-                            if ev:
-                                ev.set()
-                        update_castle_status_db(uid, cid, "idle", f"متوقف إجبارياً: {reason}", conn_state="idle")
-                except Exception:
-                    pass
-        except Exception as ex:
-            log.debug(f"Watchdog exception: {ex}")
+            castles = db.get_user_castles(user_id)
+            for c in castles:
+                cid = c.get("castle_id")
+                if cid:
+                    res[cid] = _get_real_status(cid)
+        except Exception:
+            pass
+        return res
+
+    last_data = _collect_statuses()
+    try:
+        await websocket.send_json(last_data)
+        while True:
+            await asyncio.sleep(0.8)
+            curr_data = _collect_statuses()
+            if curr_data != last_data:
+                last_data = curr_data
+                await websocket.send_json(curr_data)
+    except (WebSocketDisconnect, Exception):
+        pass
+
 
 def _handle_auto_resume():
     """استئناف تشغيل البوتات التي كانت شغالة قبل إعادة تشغيل السيرفر تلقائياً وبدون أي وميض أو تأخير في الواجهة."""
     def _bg_resume():
+        global _deploy_mode
         time.sleep(1)
         auto_resume_file = os.path.join(_ROOT, "auto_resume.json")
         to_resume: List[Dict[str, Any]] = []
@@ -1670,57 +2278,98 @@ def _handle_auto_resume():
 
         resume_cids = {x.get("castle_id") for x in to_resume if x.get("castle_id")}
 
-        # إعادة ضبط الحالات العالقة في القاعدة مع استثناء القلاع التي سيتم استئنافها فوراً
-        cnt = db.reset_stuck_castles_db(exclude_castle_ids=list(resume_cids) if resume_cids else None)
-        if cnt > 0:
-            log.info(f"🧹 [Startup Reset] تم تنظيف {cnt} قلعة عالقة من التشغيل السابق.")
+        try:
+            if resume_cids:
+                _deploy_mode = True  # قفل وضع النشر طوال فترة الاستئناف
+                with _lock:
+                    for cid in resume_cids:
+                        _reserved.add(cid)
+                        _conn_states[cid] = "deploying"
+                log.info(f"🔒 [Auto-Resume] تم حجز {len(resume_cids)} قلعة فوراً في _reserved — وضع النشر مُفعّل.")
 
-        # استئناف البوتات التي كانت نشطة تلقائياً وبسلاسة
-        if to_resume and isinstance(to_resume, list):
-            log.info(f"🔄 [Auto-Resume] جاري استئناف تشغيل {len(to_resume)} بوت تلقائياً وبسلاسة...")
-            for item in to_resume:
-                cid = item.get("castle_id", "")
-                uid = item.get("user_id", "")
-                if not cid or not uid:
-                    continue
-                try:
-                    valid, reason = db.check_user_subscription_db(uid)
-                    if not valid:
-                        log.warning(f"⏩ [Auto-Resume] تخطي القلعة {cid[:8]} لانتهاء اشتراك المستخدم: {reason}")
-                        continue
-                    c = db.get_castle_by_id(cid, uid)
-                    if not c or not c.get("is_active", 1):
-                        continue
+            # إعادة ضبط الحالات العالقة في القاعدة مع استثناء القلاع التي سيتم استئنافها فوراً
+            cnt = db.reset_stuck_castles_db(exclude_castle_ids=list(resume_cids) if resume_cids else None)
+            if cnt > 0:
+                log.info(f"🧹 [Startup Reset] تم تنظيف {cnt} قلعة عالقة من التشغيل السابق.")
 
-                    # وضع حالة التشغيل فوراً في الذاكرة والقاعدة حتى تظهر في الواجهة كـ running فوراً دون أي ثانية تأخير
-                    with _lock:
-                        _conn_states[cid] = "connected"
-                        _castle_users[cid] = uid
-                        _castle_emails[cid] = c.get("email", item.get("email", ""))
-                    update_castle_status_db(uid, cid, "running", "جاري الاتصال واستئناف العمل...", conn_state="connected")
+            if to_resume and isinstance(to_resume, list):
+                total = len(to_resume)
+                log.info(f"🔄 [Auto-Resume] استئناف {total} بوت بشكل متدرج ({_RESUME_BATCH_SIZE} كل {_RESUME_BATCH_DELAY}ث)...")
 
-                    req = StartBotRequest(
-                        castle_id=cid,
-                        user_id=uid,
-                        email=c.get("email", item.get("email", "")),
-                        config=c.get("config", {}),
-                        loop_interval=55
-                    )
-                    _start_bot_internal(req)
-                    log.info(f"✅ [Auto-Resume] استؤنف تشغيل البوت تلقائياً: {c.get('email')} ({cid[:8]})")
-                    time.sleep(1.0)  # فاصل زمني لتوزيع الحمل بسلاسة
-                except Exception as ex:
-                    log.warning(f"⚠️ فشل استئناف البوت للقلعة {cid}: {ex}")
+                for batch_start in range(0, total, _RESUME_BATCH_SIZE):
+                    batch = to_resume[batch_start: batch_start + _RESUME_BATCH_SIZE]
+                    batch_num = (batch_start // _RESUME_BATCH_SIZE) + 1
+                    total_batches = (total + _RESUME_BATCH_SIZE - 1) // _RESUME_BATCH_SIZE
+                    log.info(f"📦 [Auto-Resume] دفعة {batch_num}/{total_batches} — {len(batch)} بوت")
+
+                    for item in batch:
+                        cid = item.get("castle_id", "")
+                        uid = item.get("user_id", "")
+                        if not cid or not uid:
+                            continue
+                        try:
+                            valid, reason = db.check_user_subscription_db(uid)
+                            if not valid:
+                                log.warning(f"⏩ [Auto-Resume] تخطي {cid[:8]}: {reason}")
+                                with _lock:
+                                    _reserved.discard(cid)
+                                    _conn_states.pop(cid, None)
+                                update_castle_status_db(uid, cid, "idle", f"متوقف: {reason}", conn_state="idle")
+                                continue
+                            c = db.get_castle_by_id(cid, uid)
+                            if not c or not c.get("is_active", 1):
+                                with _lock:
+                                    _reserved.discard(cid)
+                                    _conn_states.pop(cid, None)
+                                update_castle_status_db(uid, cid, "idle", "غير نشط", conn_state="idle")
+                                continue
+
+                            # وضع حالة التشغيل فوراً في الذاكرة حتى تظهر في الواجهة دون تأخير
+                            with _lock:
+                                _conn_states[cid] = "connected"
+                                _castle_users[cid] = uid
+                                _castle_emails[cid] = c.get("email", item.get("email", ""))
+                            update_castle_status_db(uid, cid, "running", "جاري الاتصال واستئناف العمل...", conn_state="connected")
+
+                            req = StartBotRequest(
+                                castle_id=cid,
+                                user_id=uid,
+                                email=c.get("email", item.get("email", "")),
+                                config=c.get("config", {}),
+                                loop_interval=55
+                            )
+                            with _lock:
+                                _reserved.discard(cid)
+                            _start_bot_internal(req)
+                            log.info(f"✅ [Auto-Resume] {c.get('email', cid[:8])} ({batch_num}/{total_batches})")
+                            time.sleep(0.5)  # فاصل صغير بين كل بوت داخل الدفعة
+                        except Exception as ex:
+                            log.warning(f"⚠️ فشل استئناف البوت {cid}: {ex}")
+                            with _lock:
+                                _reserved.discard(cid)
+                                _conn_states.pop(cid, None)
+
+                    # انتظار بين الدفعات (ما عدا الدفعة الأخيرة)
+                    if batch_start + _RESUME_BATCH_SIZE < total:
+                        log.info(f"⏳ [Auto-Resume] انتظار {_RESUME_BATCH_DELAY}ث قبل الدفعة التالية...")
+                        time.sleep(_RESUME_BATCH_DELAY)
+
+                log.info(f"🎉 [Auto-Resume] اكتمل استئناف جميع {total} بوت بنجاح.")
+        finally:
+            _deploy_mode = False
+            with _lock:
+                _reserved.clear()
+            log.info("🔓 [Auto-Resume] انتهى الاستئناف التدريجي — وضع النشر أُلغي، البوتات متاحة للمستخدمين.")
 
     threading.Thread(target=_bg_resume, daemon=True, name="auto-resume").start()
+
 
 
 @app.on_event("startup")
 def on_startup():
     """تهيئة خدمات السيرفر واستئناف البوتات عند إقلاع تطبيق FastAPI."""
-    log.info("🚀 [Startup Event] بدء حارس العمليات واستئناف البوتات النشطة...")
+    log.info("🚀 [Startup Event] استئناف البوتات النشطة...")
     cleanup_unauthorized_bot_logs()
-    threading.Thread(target=_watchdog_loop, daemon=True, name="bot-watchdog").start()
     _handle_auto_resume()
 
 

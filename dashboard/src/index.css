@@ -55,6 +55,62 @@
   50%       { box-shadow: 0 0 20px rgba(16,185,129,0.30); }
 }
 
+/* ─── Batch Luxury Glowing Effect (توهج فخم، هادئ وأنيق) ───────── */
+@keyframes batchLuxGlow {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.50), 0 0 4px rgba(52, 211, 153, 0.25);
+  }
+}
+
+.batch-lux-btn {
+  animation: batchLuxGlow 2.4s ease-in-out infinite;
+}
+
+/* ─── Batch Action Bar Theme Compatibility (وضع النهار ووضع الليل) ─ */
+.batch-action-bar {
+  background-color: rgba(17, 24, 39, 0.95);
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+html.light .batch-action-bar,
+body.light .batch-action-bar {
+  background-color: #ffffff !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .batch-action-bar .batch-count-text,
+body.light .batch-action-bar .batch-count-text {
+  color: #334155 !important;
+}
+
+html.light .batch-action-bar .batch-count-num,
+body.light .batch-action-bar .batch-count-num {
+  color: #059669 !important;
+}
+
+html.light .batch-action-bar .batch-cancel-btn,
+body.light .batch-action-bar .batch-cancel-btn {
+  color: #64748b !important;
+}
+html.light .batch-action-bar .batch-cancel-btn:hover,
+body.light .batch-action-bar .batch-cancel-btn:hover {
+  color: #0f172a !important;
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Ensure Save button text is crisp white in both light and dark modes */
+html.light .batch-lux-btn,
+body.light .batch-lux-btn,
+html.light .batch-lux-btn *,
+body.light .batch-lux-btn * {
+  color: #ffffff !important;
+}
+
 /* ─── Root Variables ───────────────────────────────────────── */
 :root {
   --glass-bg: rgba(255, 255, 255, 0.06);
@@ -129,8 +185,9 @@ body {
   background-color: #16a34a;
   color: white;
   font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   transition: all 0.2s;
   border: none;
   cursor: pointer;
@@ -150,8 +207,9 @@ body {
   background: rgba(255,255,255,0.10);
   color: white;
   font-weight: 500;
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   border: 1px solid rgba(255,255,255,0.10);
   transition: all 0.2s;
   cursor: pointer;
@@ -166,8 +224,9 @@ body {
   background: rgba(220,38,38,0.8);
   color: white;
   font-weight: 500;
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   transition: all 0.2s;
   cursor: pointer;
 }
@@ -201,8 +260,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
   font-size: 0.75rem;
   font-weight: 500;
   white-space: nowrap;
@@ -219,10 +278,10 @@ body {
   width: 100%;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 0.75rem;
-  padding-block: 0.625rem;
-  padding-inline: 1rem;
-  font-size: 0.875rem;
+  border-radius: 0.5rem;
+  padding-block: 0.4rem;
+  padding-inline: 0.75rem;
+  font-size: 0.8125rem;
   color: white;
   transition: all 0.2s;
   outline: none;
@@ -1145,6 +1204,22 @@ html.light .task-prestige-title {
 }
 
 /* Task Row Cards */
+.task-row-card.coming-soon {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  border-style: dashed !important;
+}
+.task-row-card.coming-soon .task-row-header {
+  cursor: not-allowed !important;
+}
+.task-row-card.coming-soon .task-row-header:hover {
+  background-color: transparent !important;
+}
+.task-row-card.coming-soon img,
+.task-row-card.coming-soon span:first-child {
+  filter: grayscale(60%) opacity(0.85);
+}
+
 html.light .task-row-card.disabled {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
@@ -1158,7 +1233,7 @@ html.light .task-row-card.enabled {
 html.light .task-row-card.coming-soon {
   background-color: #f8fafc !important;
   border: 1px dashed #cbd5e1 !important;
-  opacity: 0.75 !important;
+  opacity: 0.55 !important;
 }
 html.light .task-row-header:hover {
   background-color: rgba(0, 0, 0, 0.02) !important;
@@ -1168,6 +1243,11 @@ html.light .task-row-label {
   font-weight: 600 !important;
 }
 html.light .task-row-card.coming-soon .task-row-label {
+  color: #64748b !important;
+}
+html.light .task-coming-soon-badge {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
   color: #64748b !important;
 }
 html.light .task-row-children {

@@ -65,9 +65,8 @@ class AllianceTask(BaseTask):
 
     def _find_recommended_science(self) -> Optional[int]:
         """
-        يكتشف التقنية الموصى بها للتحالف تلقائياً من بيانات السيرفر:
-        1. التقنية التي تحمل recommend = True
-        2. التقنية النشطة قيد التطوير (point > 0)
+        يطبع جميع تقنيات التحالف المتاحة للتطوير أولاً للتحقق، 
+        ثم يكتشف التقنية الأنسب للتبرع بناءً على (التوصية -> قيد التطوير -> أي تقنية غير مكتملة).
         """
         scilist = None
         for k, v in self.conn.init_data.items():
@@ -76,7 +75,37 @@ class AllianceTask(BaseTask):
                 break
 
         if not scilist or not isinstance(scilist, dict):
+            self.log.warning("لم يتم العثور على بيانات علوم التحالف في الحساب.")
             return None
+
+        # ─── كود الفحص والطباعة للعلوم غير المكتملة ───
+        self.log.info("📋 قائمة بكل علوم التحالف الغير مكتملة (أقل من مستوى 20):")
+        incomplete_count = 0
+        
+        for cat, items in scilist.items():
+            if isinstance(items, list):
+                for item in items:
+                    lv = int(item.get('lv', 0))
+                    # طباعة أي تقنية مستواها أقل من 20 (غير مكتملة)
+                    if lv < 20:
+                        sci_id = int(item.get('id', 0))
+                        point = int(item.get('point', 0))
+                        is_rec = bool(item.get('recommend'))
+                        
+                        # تحديد حالة التقنية للشاشة
+                        if is_rec:
+                            status = "⭐ موصى بها من القائد"
+                        elif point > 0:
+                            status = "⏳ قيد التطوير حالياً"
+                        else:
+                            status = "🔘 متاحة للتطوير"
+                            
+                        self.log.info(f"   • التقنية #{sci_id} | المستوى: {lv}/20 | النقاط المودعة: {point:,} | الحالة: {status}")
+                        incomplete_count += 1
+                        
+        self.log.info(f"📊 إجمالي العلوم المتاحة للتطوير في التحالف: {incomplete_count}")
+        self.log.info("─" * 60)
+        # ──────────────────────────────────────────────
 
         # 1. البحث عن التقنية الموصى بها
         for cat, items in scilist.items():
@@ -85,17 +114,27 @@ class AllianceTask(BaseTask):
                     if isinstance(item, dict) and item.get('recommend'):
                         sci_id = int(item.get('id', 0))
                         if sci_id > 0:
-                            self.log.info(f"🎯 تم العثور على التقنية الموصى بها: ID={sci_id} (المستوى={item.get('lv')})")
+                            self.log.info(f"🎯 تم اختيار التقنية الموصى بها للتبرع: ID={sci_id} (المستوى={item.get('lv')})")
                             return sci_id
 
         # 2. البحث عن تقنية قيد التطوير النشط (point > 0)
         for cat, items in scilist.items():
             if isinstance(items, list):
                 for item in items:
-                    if isinstance(item, dict) and item.get('point', 0) > 0 and item.get('lv', 0) < 20:
+                    if isinstance(item, dict) and item.get('point', 0) > 0 and int(item.get('lv', 0)) < 20:
                         sci_id = int(item.get('id', 0))
                         if sci_id > 0:
-                            self.log.info(f"🔬 تم اختيار تقنية قيد التطوير: ID={sci_id} (المستوى={item.get('lv')})")
+                            self.log.info(f"🔬 لم توجد توصية، تم اختيار تقنية قيد التطوير كبديل: ID={sci_id} (المستوى={item.get('lv')})")
+                            return sci_id
+
+        # 3. البحث عن أي تقنية غير مكتملة (كملاذ أخير)
+        for cat, items in scilist.items():
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict) and int(item.get('lv', 0)) < 20:
+                        sci_id = int(item.get('id', 0))
+                        if sci_id > 0:
+                            self.log.info(f"💡 لم توجد توصية أو تطوير نشط، تم اختيار تقنية غير مكتملة كبديل أخير: ID={sci_id} (المستوى={item.get('lv')})")
                             return sci_id
 
         return None

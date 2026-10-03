@@ -34,9 +34,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
-
-# ── ملف تاريخ الاستبعاد ──────────────────────────────────────────
-HISTORY_FILE = os.path.join(_ROOT_DIR, "exclude_history.json")
+from tasks.exclude_manager import get_manager as _get_exclude_manager
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -54,41 +52,9 @@ DEFAULT_TROOPS_COUNT       = 1000             # عدد الجنود الافتر
 
 
 # ════════════════════════════════════════════════════════════════════
-#  إدارة استبعاد الأهداف المكررة
+#  إدارة استبعاد الأهداف المكررة (مدير مركزي موحد)
+#  → تم نقلها إلى tasks/exclude_manager.py
 # ════════════════════════════════════════════════════════════════════
-
-def _get_exclude(uid: Any) -> Dict[str, bool]:
-    if not os.path.exists(HISTORY_FILE):
-        return {}
-    try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return {str(i): True for i in data.get(str(uid), [])}
-    except Exception:
-        return {}
-
-
-def _add_exclude(uid: Any, target_id: Any):
-    data: dict = {}
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
-
-    key = str(uid)
-    arr = data.setdefault(key, [])
-    t   = str(target_id)
-    if t not in arr:
-        arr.append(t)
-    while len(arr) > 20:
-        arr.pop(0)
-    try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -169,6 +135,7 @@ class RuinsTask(BaseTask):
         self._heroes    : list     = []
         self._busy      : Set[int] = set()
         self._used_army : Dict[int, int] = {}
+        self._exclude_mgr = _get_exclude_manager()
 
     async def on_start(self):
         for _ in range(20):
@@ -284,30 +251,9 @@ class RuinsTask(BaseTask):
         cx = r_castle['retData'].get('x')
         cy = r_castle['retData'].get('y')
 
-        # 2. البحث عن الأطلال (mapType: 7, subType: 0)
-        r_search = await self.conn.query('2011', '3', {
-            "mapType": 7,
-            "subType": 0,
-            "num": 1,
-            "y": cy,
-            "x": cx,
-            "exclude": _get_exclude(self.uid),
-            "range": search_range
-        })
-        if not r_search or not r_search.get('result'):
-            self.log.warning(f"⚠️ لا توجد أطلال متاحة في نطاق {search_range}!")
-            return "NO_TARGET"
-
-        target    = r_search['result'][0]
-        target_id = target.get('id')
-        tx, ty    = target.get('x'), target.get('y')
-        t_lv      = target.get('level', '?')
-        self.log.info(f"🎯 هدف الأطلال: ID={target_id} عند ({tx}, {ty}) لفل={t_lv}")
-        _add_exclude(self.uid, target_id)
-
-        # 3. جلب معرف المملكة (kingdom_id)
+        # 2. جلب معرف المملكة (kingdom_id)
         kingdom_id = 0
-        if self.conn.kingdom_id:
+        if getattr(self.conn, 'kingdom_id', None):
             try: kingdom_id = int(self.conn.kingdom_id)
             except: pass
         if not kingdom_id:
@@ -316,6 +262,33 @@ class RuinsTask(BaseTask):
                 kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
         if not kingdom_id:
             kingdom_id = 4
+
+        # 3. البحث عن الأطلال (mapType: 7, subType: 0)
+        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
+        r_search = await self.conn.query('2011', '3', {
+            "mapType": 7,
+            "subType": 0,
+            "num": 1,
+            "y": cy,
+            "x": cx,
+            "exclude": exclude_map,
+            "range": search_range
+        })
+        if not r_search or not r_search.get('result'):
+            self.log.warning(f"⚠️ لا توجد أطلال متاحة في نطاق {search_range}!")
+            return "NO_TARGET"
+
+        target = r_search['result'][0]
+        target_id = target.get('id')
+        if target_id and str(target_id) in exclude_map:
+            self.log.warning(f"⚠️ تم تخطي الأطلال {target_id} لأنها مستبعدة مسبقاً في المملكة {kingdom_id}.")
+            return "NO_TARGET"
+
+        tx, ty    = target.get('x'), target.get('y')
+        t_lv      = target.get('level', '?')
+        self.log.info(f"🎯 هدف الأطلال: ID={target_id} عند ({tx}, {ty}) لفل={t_lv}")
+        # حجز مؤقت في الذاكرة المشتركة للمملكة — لن يُثبت في الملف إلا بعد نجاح الإرسال
+        await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
 
         # 4. جلب القوات المتوفرة بالقلعة
         available: Dict[int, int] = {}
@@ -505,11 +478,14 @@ class RuinsTask(BaseTask):
 
         r_attack = await self.conn.query('1007', '2', attack_payload)
         if not r_attack:
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "ERROR"
 
         err = str(r_attack.get('err', '0'))
         if err == '0':
             self.log.info(f"✅ تم إرسال مسيرة الأطلال بنجاح! → {target_id} | أبطال={chosen_heroes} | جنود={total_troops:,}")
+            # ✅ نجاح — تثبيت الاستبعاد في الملف
+            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
             for hid in chosen_heroes:
                 self._busy.add(hid)
             for item in army_list:
@@ -517,23 +493,29 @@ class RuinsTask(BaseTask):
             return "SUCCESS"
         elif err in ('8004', '9007004'):
             self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (كود {err})")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "QUEUE_FULL"
         elif err == '8037':
             self.log.info(f"🛑 القلعة لديها مسيرة استكشاف أطلال نشطة بالفعل حالياً (كود {err})")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "QUEUE_FULL"
         elif err == '8009':
             self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "NO_ARMY"
-
         elif err == '9007020':
             for hid in chosen_heroes:
                 self._busy.add(hid)
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "HERO_BUSY"
         elif err in ('8062', '8063', '8060', '8035', '8002', '9007062') or (err.isdigit() and 8000 <= int(err) < 8100):
             self.log.warning(f"⚠️ الأطلال {target_id} مشغولة أو سبق استهدافها (كود {err}) — سيتم تجاوزها")
+            # الأطلال مشغولة فعلاً — نثبت الاستبعاد
+            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
             return "TARGET_OCCUPIED"
         else:
             self.log.error(f"❌ خطأ غير معروف: {err} | الهدف={target_id}")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "ERROR"
 
 

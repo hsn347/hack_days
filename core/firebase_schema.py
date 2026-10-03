@@ -176,7 +176,7 @@ def check_user_subscription(user_doc: Dict[str, Any]) -> Tuple[bool, str]:
         return False, "المستخدم غير موجود"
 
     # المشرف الأعلى يملك صلاحية مطلقة دائمة ولا يخضع لانتهاء الاشتراك أو الحظر
-    if user_doc.get("role") == "admin" or str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
+    if user_doc.get("role") == "admin" and str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
         return True, "المشرف الأعلى - صلاحية مطلقة غير محدودة مدى الحياة"
 
     if user_doc.get("is_banned"):
@@ -209,7 +209,7 @@ def can_user_add_castle(user_doc: Dict[str, Any], current_count: Optional[int] =
     يعيد: (مسموح_أم_لا, عدد_القلاع_الحالي, الحد_الأقصى_المسموح)
     """
     # المشرف الأعلى يملك صلاحية مطلقة لإضافة عدد غير محدود من القلاع
-    if user_doc.get("role") == "admin" or str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
+    if user_doc.get("role") == "admin" and str(user_doc.get("email", "")).strip().lower() == "ibraboths@gmail.com":
         curr = int(user_doc.get("subscription", {}).get("current_castles_count", 0)) if current_count is None else int(current_count)
         return True, curr, 999999
 

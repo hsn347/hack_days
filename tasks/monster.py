@@ -48,9 +48,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
-
-# ── ملف تاريخ الاستبعاد ──────────────────────────────────────────
-HISTORY_FILE = os.path.join(_ROOT_DIR, "exclude_history.json")
+from tasks.exclude_manager import get_manager as _get_exclude_manager
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -73,41 +71,9 @@ MONSTER_TYPES = {
 
 
 # ════════════════════════════════════════════════════════════════════
-#  إدارة استبعاد الأهداف المكررة
+#  إدارة استبعاد الأهداف المكررة (مدير مركزي موحد)
+#  → تم نقلها إلى tasks/exclude_manager.py
 # ════════════════════════════════════════════════════════════════════
-
-def _get_exclude(uid: Any) -> Dict[str, bool]:
-    if not os.path.exists(HISTORY_FILE):
-        return {}
-    try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return {str(i): True for i in data.get(str(uid), [])}
-    except Exception:
-        return {}
-
-
-def _add_exclude(uid: Any, target_id: Any):
-    data: dict = {}
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
-
-    key = str(uid)
-    arr = data.setdefault(key, [])
-    t   = str(target_id)
-    if t not in arr:
-        arr.append(t)
-    while len(arr) > 20:
-        arr.pop(0)
-    try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -427,6 +393,7 @@ class MonsterTask(BaseTask):
         self._busy      : Set[int] = set()
         self._used_army : Dict[int, int] = {}
         self._used_pets : Set[int] = set()
+        self._exclude_mgr = _get_exclude_manager()
 
     async def on_start(self):
         for _ in range(20):
@@ -692,26 +659,9 @@ class MonsterTask(BaseTask):
             cx = int(cx)
             cy = int(cy)
 
-        # 2. البحث عن الأهداف (متمردين 35 أو غزاة 6)
-        r_search = await self.conn.query('2011', '3', {
-            "mapType": map_type,
-            "num": 5,
-            "subType": sub_type,
-            "y": cy,
-            "x": cx,
-            "exclude": _get_exclude(self.uid),
-            "minLv": min_lv,
-            "maxLv": max_lv,
-            "range": search_range
-        })
-        candidates = r_search.get('result', []) if r_search else []
-        if not candidates:
-            self.log.warning(f"⚠️ لا توجد أهداف متاحة من هذا النوع في نطاق {search_range}!")
-            return "NO_TARGET"
-
-        # 3. جلب معرف المملكة (kingdom_id)
+        # 2. جلب معرف المملكة (kingdom_id)
         kingdom_id = 0
-        if self.conn.kingdom_id:
+        if getattr(self.conn, 'kingdom_id', None):
             try: kingdom_id = int(self.conn.kingdom_id)
             except: pass
         if not kingdom_id:
@@ -720,6 +670,25 @@ class MonsterTask(BaseTask):
                 kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
         if not kingdom_id:
             kingdom_id = 4
+
+        # 3. البحث عن الأهداف (متمردين 35 أو غزاة 6)
+        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
+        r_search = await self.conn.query('2011', '3', {
+            "mapType": map_type,
+            "num": 5,
+            "subType": sub_type,
+            "y": cy,
+            "x": cx,
+            "exclude": exclude_map,
+            "minLv": min_lv,
+            "maxLv": max_lv,
+            "range": search_range
+        })
+        raw_candidates = r_search.get('result', []) if r_search else []
+        candidates = [c for c in raw_candidates if str(c.get('id', '')) not in exclude_map]
+        if not candidates:
+            self.log.warning(f"⚠️ لا توجد أهداف متاحة من هذا النوع في نطاق {search_range}!")
+            return "NO_TARGET"
 
         # 4. جلب القوات المتوفرة بالقلعة
         available: Dict[int, int] = {}
@@ -938,7 +907,8 @@ class MonsterTask(BaseTask):
             tx, ty    = target.get('x'), target.get('y')
             t_lv      = target.get('level', '?')
             self.log.info(f"🎯 محاولة استهداف: ID={target_id} عند ({tx}, {ty}) لفل={t_lv}")
-            _add_exclude(self.uid, target_id)
+            # حجز مؤقت في الذاكرة فقط — لن يُثبت في الملف إلا بعد نجاح الهجوم
+            await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
 
             if map_type == 35:
                 # 🏴‍☠️ المتمردين: مسيرة حشد (Mass / Rally - moveLineType 7)
@@ -987,11 +957,14 @@ class MonsterTask(BaseTask):
 
             r_attack = await self.conn.query('1007', '2', attack_payload)
             if not r_attack:
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
 
             err = str(r_attack.get('err', '0'))
             if err == '0':
                 self.log.info(f"✅ هجوم ناجح! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                # ✅ نجاح — تثبيت الاستبعاد في الملف
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 for hid in chosen_heroes:
                     self._busy.add(hid)
                 for item in army_list:
@@ -999,16 +972,20 @@ class MonsterTask(BaseTask):
                 return "SUCCESS"
             elif err in ('8004', '9007004'):
                 self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "QUEUE_FULL"
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "NO_ARMY"
             elif err in ('8032', '10002', '10003'):
                 self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "STAMINA_EMPTY"
             elif err == '9007020':
                 for hid in chosen_heroes:
                     self._busy.add(hid)
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 return "HERO_BUSY"
             elif err == '8035':
                 current_total = sum(item['num'] for item in army_list)
@@ -1023,18 +1000,22 @@ class MonsterTask(BaseTask):
                     r_retry = await self.conn.query('1007', '2', attack_payload)
                     if r_retry and str(r_retry.get('err', '0')) == '0':
                         self.log.info(f"✅ هجوم ناجح بعد ضبط القوات! → {target_id} (لفل {t_lv}) | أبطال={chosen_heroes} | جنود={total_troops:,}")
+                        await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                         for hid in chosen_heroes:
                             self._busy.add(hid)
                         for item in army_list:
                             self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
                         return "SUCCESS"
                 self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
             elif err in ('8062', '8063', '8060', '8013', '8002', '8026', '8003', '9007062') or (err.startswith('80') and err not in ('8004', '8009', '8032')):
                 self.log.warning(f"⚠️ الهدف {target_id} غير متاح أو مشغول بمعركة أخرى (كود {err}) — فحص هدف بديل فوراً...")
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
             else:
                 self.log.warning(f"⚠️ تعذر استهداف {target_id} (كود {err}) — تجربة هدف بديل...")
+                await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
                 continue
 
         return "TARGET_OCCUPIED"

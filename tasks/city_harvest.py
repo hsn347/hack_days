@@ -40,6 +40,7 @@ if _ROOT_DIR not in sys.path:
 
 import asyncio
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -179,8 +180,8 @@ class CityHarvestTask(BaseTask):
             else:
                 self.log.warning(f"   ⚠️ تعذر جني محصول {f_meta['name']} (رقم {iid})")
 
-            # تأخير قصير جداً لمحاكاة النقر البشري الطبيعي
-            await asyncio.sleep(0.25)
+            # تأخير بشري عشوائي لمحاكاة النقر الطبيعي
+            await asyncio.sleep(round(random.uniform(0.6, 1.2), 2))
 
         # تجهيز ملخص النتيجة
         summary_parts = []

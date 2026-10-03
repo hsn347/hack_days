@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather.py --email "sumo-1234@hotmil.com" --res 2 --level 2
+python tasks/gather.py --email "hmzawyha44@gmail.com" --res 2 --level 5 --range 100
 
 الميزات المطورة:
   1. لا تعتمد على أي تشكيلة مسبقة من المستخدم (تحديد ذاتي كامل 100%).
@@ -23,7 +23,7 @@ python tasks/gather.py --email "sumo-1234@hotmil.com" --res 2 --level 2
   - 1 أو gold أو ذهب  → الذهب (Gold / Mithril) [subType = 1]
   - 2 أو food أو قمح  → مزارع القمح (Food)      [subType = 2]
   - 3 أو wood أو خشب  → مناشر الخشب (Wood)      [subType = 3]
-  - 4 أو stone أو حجر → مناجم الحجر/الفضة       [subType = 4]
+  - 4 أو stone أو حجر → مناجم الحجر/الكوارنز       [subType = 4]
   - 5 أو iron أو حديد → مناجم الحديد (Iron)     [subType = 5]
 """
 
@@ -45,9 +45,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
+from tasks.exclude_manager import get_manager as _get_exclude_manager
 
-# ── ملف تاريخ الاستبعاد ──────────────────────────────────────────
-HISTORY_FILE = os.path.join(_ROOT_DIR, "exclude_history.json")
+
+DEFAULT_SEARCH_RANGE: int = 100  # نطاق البحث الثابت عن الموارد على الخريطة
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -87,17 +88,22 @@ RESOURCE_CONFIGS: Dict[Any, Dict[str, Any]] = {
     "الحديد":  {"sub_type": 4, "name": "مناجم الحديد (Iron)",   "icon": "⛏️", "res_code": 1004, "multiplier": 6.0},
     "منجم":    {"sub_type": 4, "name": "مناجم الحديد (Iron)",   "icon": "⛏️", "res_code": 1004, "multiplier": 6.0},
 
-    # 🪙 5. مناجم الفضة / ميثريل (Silver / Mithril) — كود الخريطة: 5 | كود المورد: 1005 | مضاعف الوزن: 24.0
-    5:         {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "5":       {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "silver":  {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "فضة":     {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "الفضة":   {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "mithril": {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "ميثريل":  {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "stone":   {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "حجر":     {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
-    "الحجر":   {"sub_type": 5, "name": "مناجم الفضة (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    # 🪙 5. مناجم الكوارنز / ميثريل (Silver / Mithril) — كود الخريطة: 5 | كود المورد: 1005 | مضاعف الوزن: 24.0
+    5:         {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "5":       {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "silver":  {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "فضة":     {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "الكوارنز":   {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "mithril": {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "ميثريل":  {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "stone":   {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "حجر":     {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "الحجر":   {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "الماس":   {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "ألماس":   {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "الالماس": {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "الألماس": {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
+    "diamond": {"sub_type": 5, "name": "مناجم الكوارنز (Silver)", "icon": "🪙", "res_code": 1005, "multiplier": 24.0},
 }
 
 
@@ -116,94 +122,83 @@ def resolve_resource(res_input: Any) -> Dict[str, Any]:
     return RESOURCE_CONFIGS[1]
 
 
-# معدل حمولة الموارد لكل جندي حسب الصنف (Load Rates)
+# معدل حمولة الموارد الأساسية لكل صنف في كود اللعبة (armyinfo.lua: freeWeight)
 UNIT_LOAD_RATES: Dict[int, int] = {
-    7: 35,  # عربات الحصار والنقل (أعلى حمولة لجمع الموارد)
-    4: 15,  # مشاة
-    5: 12,  # فرسان
-    6: 14,  # رماة
+    8: 20,  # عربات النقل والإمداد (armyType 8: تبدأ من 20 إلى 30 - الأعلى في اللعبة ومزودة بمهارة الحمولة 8001)
+    7: 13,  # منجنيق وحصار (armyType 7: 13 إلى 18)
+    1: 10,  # مشاة (armyType 1 & 2: 8 إلى 13)
+    4: 10,  # مشاة
+    3: 8,   # فرسان (armyType 3 & 4: 6 إلى 11)
+    5: 8,   # فرسان
+    6: 10,  # رماة (armyType 5 & 6: 7 إلى 13)
 }
 
 
 # ════════════════════════════════════════════════════════════════════
-#  إدارة استبعاد الأهداف المكررة
+#  إدارة استبعاد الأهداف المكررة (مدير مركزي موحد)
+#  → تم نقلها إلى tasks/exclude_manager.py
 # ════════════════════════════════════════════════════════════════════
-
-def _get_exclude(uid: Any) -> Dict[str, bool]:
-    if not os.path.exists(HISTORY_FILE):
-        return {}
-    try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return {str(i): True for i in data.get(str(uid), [])}
-    except Exception:
-        return {}
-
-
-def _add_exclude(uid: Any, target_id: Any):
-    data: dict = {}
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
-
-    key = str(uid)
-    arr = data.setdefault(key, [])
-    t   = str(target_id)
-    if t not in arr:
-        arr.append(t)
-    while len(arr) > 20:
-        arr.pop(0)
-    try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 
 # ════════════════════════════════════════════════════════════════════
 #  اختيار أبطال الجمع التلقائي (محاكاة واجهة اللعبة)
 # ════════════════════════════════════════════════════════════════════
 
-def _score_gather_hero(hero: dict) -> Tuple[int, int, int]:
-    """
-    تقييم البطل لاختيار الأنسب لجمع الموارد وفق الترتيب الصارم:
-    - Tier 3: بطل تنمية وجمع (5502) يمتلك مهارات جمع (5620)
-    - Tier 2: بطل تنمية وجمع (5502) آخر حتى لو بدون مهارات جمع محددة
-    - Tier 1: أي بطل حربي أو بديل متاح بالقلعة (5501 وغيره)
-    - المفاضلة الإضافية: النجوم ثم المستوى
-    """
-    hid = str(hero.get('id', ''))
-    skills = hero.get('skillList', {})
-    has_gather_skill = False
-    if isinstance(skills, dict):
-        has_gather_skill = any(
-            str(s.get('id', '')).startswith('5620')
-            for s in skills.values() if isinstance(s, dict)
-        )
+# تكوين ترتيب مهارات أبطال الجمع المستخرج من كود اللعبة الأصلي (expedition_sort.lua)
+GATHER_SORT_CONFIG: Dict[int, List[int]] = {
+    3: [5650007, 5650002, 5650004, 5620002, 5620004, 5620009],  # الخشب (Wood)
+    2: [5650007, 5650002, 5650004, 5620002, 5620004, 5620012],  # القمح (Food)
+    4: [5650007, 5650002, 5650004, 5620002, 5620004, 5620010],  # الحديد (Iron)
+    5: [5650007, 5650002, 5650004, 5620002, 5620004, 5620011],  # الكوارنز / الألماس (Mithril)
+    1: [5650007, 5650002, 5650004, 5620002, 5620004, 5620003],  # الذهب (Gold)
+}
+LOAD_SKILL = 5620001  # مهارة زيادة حمولة القوات (Load skill)
 
-    tier = 1
-    if hid.startswith('5502'):
-        tier = 3 if has_gather_skill else 2
-    elif hid.startswith('5501'):
-        tier = 1
-    else:
-        tier = 1
+
+def _score_gather_hero(hero: dict, sub_type: int = 1) -> Tuple[int, int, int, int, int]:
+    """
+    تقييم وترتيب الأبطال وفق كود اللعبة الأصلي 100% (expeditionTypeltCtrl.sortHeros):
+    1. specialSkillWeights: عدد مهارات الجمع المتطابقة مع مهارات الفرز للمورد.
+    2. additionWeights: مستوى مهارة المورد التخصصية المستهدفة (الخشب/القمح/الحديد/الألماس).
+    3. valueWeights: مستوى البطل ورتبته.
+    4. معيار كسر التعادل: معرف البطل الأصغر (6000000 - hid).
+    """
+    hid_raw = hero.get('id', 0)
+    try:
+        hid = int(hid_raw)
+    except Exception:
+        hid = 0
+
+    sort_skills = GATHER_SORT_CONFIG.get(sub_type, [5650007, 5650002, 5650004, 5620002, 5620004])
+
+    skills_dict = hero.get('skillList', {})
+    sids: List[int] = []
+    skill_lvs: Dict[int, int] = {}
+    if isinstance(skills_dict, dict):
+        for s in skills_dict.values():
+            if isinstance(s, dict) and s.get('id'):
+                try:
+                    sid = int(s['id'])
+                    sids.append(sid)
+                    skill_lvs[sid] = int(s.get('lv', 1))
+                except Exception:
+                    pass
+
+    sp_weight = sum(1 for s in sids if s in sort_skills)
+    target_res_skill = sort_skills[-1] if sort_skills else 0
+    add_weight = skill_lvs.get(target_res_skill, 0)
 
     level = int(hero.get('level') or hero.get('lv') or 1)
     star = int(hero.get('star') or 0)
-    return (tier, star, level)
+    return (sp_weight, add_weight, level, star, 6000000 - hid)
 
 
-def pick_best_gather_hero(heroes: list, busy: Set[int]) -> Optional[int]:
+def pick_best_gather_heroes(heroes: list, busy: Set[int], max_heroes: int = 2, sub_type: int = 1) -> List[int]:
     """
-    اختيار أفضل بطل جمع متاح في القلعة وغير مشغول:
-    1. أبطال الجمع والتنمية (5502) ذوو مهارات الجمع بالأعلى نجوماً ومستوى.
-    2. أبطال التنمية الآخرون (5502) بدون مهارات جمع.
-    3. الأبطال الحربيون والاحتياطيون بالقلعة (5501 وغيرهم).
-    4. يعيد None عند انشغال كافة الأبطال للسماح بإرسال المسيرة بدون بطل (عربات وجنود فقط).
+    اختيار أفضل أبطال جمع متاحين بالقلعة وغير مشغولين لنوع المورد المستهدف (حتى بطلين):
+    1. فرز الأبطال وفق معايير اللعبة الأصلية (expeditionTypeltCtrl.sortHeros).
+    2. استبعاد الأبطال المشغولين في مسيرات حربية أو مسيرات أخرى (status.state != 0).
+    3. السماح بالإرسال بدون أبطال عند عدم توفرهم.
     """
     available_heroes = []
     for hero in heroes:
@@ -212,18 +207,21 @@ def pick_best_gather_hero(heroes: list, busy: Set[int]) -> Optional[int]:
         hid = hero.get('id')
         if not hid or int(hid) in busy:
             continue
-        # التأكد أن البطل موجود بالقلعة وليس في مسيرة
         if hero.get('status', {}).get('state', 0) != 0:
             continue
         available_heroes.append(hero)
 
     if not available_heroes:
-        return None
+        return []
 
-    # ترتيب الأبطال حسب كفاءة الجمع
-    available_heroes.sort(key=_score_gather_hero, reverse=True)
-    chosen_id = int(available_heroes[0]['id'])
-    return chosen_id
+    available_heroes.sort(key=lambda h: _score_gather_hero(h, sub_type), reverse=True)
+    return [int(h['id']) for h in available_heroes[:max_heroes]]
+
+
+def pick_best_gather_hero(heroes: list, busy: Set[int], sub_type: int = 1) -> Optional[int]:
+    """للتوافق العكسي: يعيد أول بطل."""
+    res = pick_best_gather_heroes(heroes, busy, max_heroes=1, sub_type=sub_type)
+    return res[0] if res else None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -235,7 +233,7 @@ RESOURCE_WEIGHT_MULTIPLIERS: Dict[int, float] = {
     1002: 1.0,     # القمح (Food): 1.0
     1003: 1.0,     # الخشب (Wood): 1.0
     1004: 6.0,     # الحديد (Iron): 6.0
-    1005: 24.0,    # الفضة / ميثريل (Silver/Mithril): 24.0
+    1005: 24.0,    # الكوارنز / ميثريل (Silver/Mithril): 24.0
 }
 
 # سعات الحقول الافتراضية لكل مستوى في حال لم يُرجع السيرفر currentSourceNum
@@ -244,7 +242,7 @@ DEFAULT_NODE_CAPACITY: Dict[int, Dict[int, int]] = {
     2: {1: 50000, 2: 100000, 3: 180000, 4: 400000, 5: 800000, 6: 1200000, 7: 1800000, 8: 2500000}, # القمح
     3: {1: 50000, 2: 100000, 3: 180000, 4: 400000, 5: 800000, 6: 1200000, 7: 1800000, 8: 2500000}, # الخشب
     4: {1: 5000, 2: 10000, 3: 18000, 4: 30000, 5: 50000, 6: 80000, 7: 120000, 8: 180000},          # الحديد
-    5: {1: 1500, 2: 3000, 3: 5000, 4: 8000, 5: 12000, 6: 20000, 7: 30000, 8: 45000},               # الفضة
+    5: {1: 1500, 2: 3000, 3: 5000, 4: 8000, 5: 12000, 6: 20000, 7: 30000, 8: 45000},               # الكوارنز
 }
 
 def get_resource_multiplier(res_code: int = 0, sub_type: int = 1) -> float:
@@ -260,38 +258,143 @@ def get_resource_multiplier(res_code: int = 0, sub_type: int = 1) -> float:
 # ════════════════════════════════════════════════════════════════════
 
 UNIT_FREE_WEIGHTS: Dict[int, int] = {
-    # عربات نقل القمح (Grain Carts / Rams) — الأرقام الفردية حصراً
-    701: 20,  # عربة نقل قمح لفل 1
-    703: 21,  # عربة نقل قمح لفل 2
-    705: 22,  # عربة نقل قمح لفل 3
-    707: 27,  # عربة نقل قمح لفل 4
-    709: 28,  # عربة نقل قمح لفل 5
-    711: 30,  # عربة نقل قمح لفل 6
-    713: 32,  # عربة نقل قمح لفل 7
-    # المشاة (Fallback فقط إذا نفدت عربات نقل القمح بالكامل)
+    # عربات الإمداد ونقل الموارد (أرقام فردية - armyType 8)
+    701: 20,  # عربة نقل المستوى 1 (Tier 1) - حمولة أساسية 20
+    703: 21,  # عربة نقل المستوى 3 (Tier 3) - حمولة أساسية 21
+    705: 22,  # عربة نقل المستوى 5 (Tier 5) - حمولة أساسية 22
+    707: 27,  # عربة نقل المستوى 7 (Tier 7) - حمولة أساسية 27
+    709: 28,  # عربة نقل / ورشة هجوم المستوى 9 (Tier 9) - حمولة أساسية 28
+    711: 30,  # عربة نقل المستوى 11 (Tier 11) - حمولة أساسية 30
+
+    # منجنيق وعربات الهجوم (أرقام زوجية - armyType 7)
+    702: 13,  # منجنيق المستوى 2 (Tier 2) - حمولة أساسية 13
+    704: 14,  # منجنيق المستوى 4 (Tier 4) - حمولة أساسية 14
+    706: 15,  # منجنيق المستوى 6 (Tier 6) - حمولة أساسية 15
+    708: 16,  # منجنيق المستوى 8 (Tier 8) - حمولة أساسية 16
+    710: 17,  # منجنيق المستوى 10 (Tier 10) - حمولة أساسية 17
+    712: 18,  # منجنيق المستوى 12 (Tier 12) - حمولة أساسية 18
+
+    # المشاة (Infantry - armyType 1 & 2)
     412: 13, 411: 13, 410: 12, 409: 12, 408: 11, 407: 11, 406: 10, 405: 10, 404: 9, 403: 9, 402: 8, 401: 8,
-    # الفرسان (Fallback)
+    # الفرسان (Cavalry - armyType 3 & 4)
     512: 11, 511: 11, 510: 10, 509: 10, 508: 9, 507: 9, 506: 8, 505: 8, 504: 7, 503: 7, 502: 6, 501: 6,
-    # الرماة (Fallback)
+    # الرماة (Archers - armyType 5 & 6)
     612: 13, 611: 12, 610: 12, 609: 11, 608: 11, 607: 10, 606: 10, 605: 9, 604: 9, 603: 8, 602: 8, 601: 7,
+}
+
+
+def calculate_unit_capacity(
+    army_id: int,
+    res_type: int = 1002,
+    load_bonus: float = 0.0,
+    hero_bonus: float = 0.0
+) -> float:
+    """
+    حساب سعة حمل أي وحدة لأي مورد ديناميكياً لكل حساب وفق كود اللعبة الأصلي (kingdomMapCtrl:getArmyWeightPlus):
+    السعة = الوزن الأساسي للوحدة * (1 + بونص الحساب الإجمالي + بونص الأبطال)
+    تحويل نوع المورد المستخرج من كود اللعبة الأصلي (worldDispatchArmyView.lua):
+      - القمح والخشب (1002, 1003): سعة القمح ÷ 1.0 (مضاعف الوزن = 1.0)
+      - الحديد (1004): سعة القمح ÷ 6.0 (مضاعف الوزن = 6.0)
+      - الكوارنز / الميثريل (1005): سعة القمح ÷ 24.0 (مضاعف الوزن = 24.0)
+      - الذهب (1001, 1006): سعة القمح ÷ 1000.0 (مضاعف الوزن = 1000.0)
+    """
+    base_w = float(UNIT_FREE_WEIGHTS.get(army_id, 10))
+    total_mult = 1.0 + load_bonus + hero_bonus
+    wheat_cap = base_w * total_mult
+
+    if res_type == 1004:
+        return wheat_cap / 6.0
+    elif res_type == 1005:
+        return wheat_cap / 24.0
+    elif res_type in (1001, 1006):
+        return wheat_cap / 1000.0
+    return wheat_cap
+
+
+async def fetch_war_boe_pload(conn: GameConnection) -> float:
+    """
+    استعلام سمات الحرب الحقيقية من السيرفر (CMD 1019 / SUB 6 أو SUB 5)
+    لاستخراج بونص P_LOAD (11) بدقة دون أي تخمين وحفظه في كاش الاتصال.
+    """
+    if not conn or not getattr(conn, "_alive", False):
+        return 0.0
+
+    cached = getattr(conn, "_cached_boe_pload", None)
+    if cached is not None:
+        return cached
+
+    pload_bonus = 0.0
+    try:
+        # تجربة SUB 6 مباشرة: cond=1 (ALL_WAR), target=1 (ALL_ARMY), attr=11 (P_LOAD)
+        res6 = await conn.query("1019", "6", {"cond": 1, "target": 1, "attr": 11}, timeout=4.0)
+        if res6 and isinstance(res6, dict):
+            data = res6.get("data", {})
+            if isinstance(data, dict):
+                rate = float(data.get("rate", 0))
+                value = float(data.get("value", 0))
+                if rate > 0:
+                    pload_bonus = rate / 1000.0
+                elif value > 0:
+                    pload_bonus = value / 1000.0
+    except Exception:
+        pass
+
+    setattr(conn, "_cached_boe_pload", pload_bonus)
+    return pload_bonus
+
+
+# ════════════════════════════════════════════════════════════════════
+#  جداول تعزيز وصقل عتاد اللورد (أحذية النقل EID 6520000 - السمة 32 SOLDIER_LOAD)
+#  مستخرجة مباشرة من كود اللعبة الأصلي (equipment_strengthen.lua & equipment_refine.lua)
+# ════════════════════════════════════════════════════════════════════
+
+STRENGTHEN_6520000: List[int] = [
+    0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280,
+    300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 540, 580, 620, 660, 700, 740, 780, 820, 860,
+    900, 940, 980, 1020, 1060, 1100, 1140, 1180, 1220, 1260, 1300, 1360, 1420, 1480, 1540, 1600, 1660, 1720, 1780, 1840,
+    1900, 1960, 2020, 2080, 2140, 2200, 2260, 2320, 2380, 2440, 2500, 2580, 2660, 2740, 2820, 2900, 2980, 3060, 3140, 3220,
+    3300, 3380, 3460, 3540, 3620, 3700, 3780, 3860, 3940, 4020, 4100, 4190, 4280, 4370, 4460, 4550, 4640, 4730, 4820, 4910, 5000
+]
+
+REFINE_6520000: Dict[int, Tuple[int, int]] = {
+    0: (0, 0), 1: (100, 5), 2: (300, 9), 3: (500, 14), 4: (700, 18), 5: (900, 23),
+    6: (1100, 27), 7: (1300, 32), 8: (1500, 36), 9: (1700, 41), 10: (1900, 45),
+    11: (2100, 50), 12: (2300, 54), 13: (2500, 59), 14: (2700, 63), 15: (2900, 68),
+    16: (3100, 72), 17: (3300, 77), 18: (3500, 81), 19: (3700, 86), 20: (3900, 90),
+    21: (4100, 99), 22: (4300, 108), 23: (4500, 117), 24: (4700, 126), 25: (4900, 135)
 }
 
 
 def calculate_load_bonus(
     conn: GameConnection,
     sub_type: int = 1,
+    hero_list: Optional[List[int]] = None,
     has_gather_hero: bool = False
 ) -> float:
     """
-    حساب بونص سعة حمولة القوات الحقيقي من بيانات الحساب:
-    - فحص أبحاث المعهد في technologyCtrl (21007, 24006, 24106) بالأرقام والمفاتيح النصية
-    - إذا لم تكن التقنية موجودة، يكون البونص 0.0 ولا يتم افتراض أي بونص وهمي مطلقاً
-    - إضافة بونص بطل الجمع لموارد القمح والخشب (+17.36%) فقط عند وجود بطل جمع مخصص
+    حساب بونص سعة حمولة القوات الحقيقي لأي حساب وفق كود اللعبة الأصلي (kingdomMapCtrl:getArmyWeightPlus):
+    1. أبحاث المعهد (technologyCtrl):
+       - 22001 (عربة الإمداد I): +0.01 (+1%) لكل لفل (حتى +10%).
+       - 22010 (عربة الإمداد II): +0.02 (+2%) لكل لفل (حتى +30%).
+    2. مهارة اللورد (lordInfoCtrl / lordSkillCtrl):
+       - 11001 (الحمولة القسرية): +0.02 (+2%) لكل لفل في شجرة اللورد العسكرية (حتى +10%).
+    3. امتيازات الـ VIP (vipCtrl):
+       - التأثير 117 (SOLDIER_LOAD_BOOST): يمنح 20 في الألف (+2%) لكل مستوى VIP.
+    4. عتاد اللورد المرتدى (equipmentCtrl):
+       - أحذية النقل EID 6520000 تمنح السمة 32 (SOLDIER_LOAD) بنسبة مئوية محسوبة بدقة من
+         مستوى التعزيز (slv) ومستوى الصقل (rlv) وفق صيغة اللعبة الأصلية (equipmentCell:getCurEquipRefineSkillResult).
+    5. بونصات العناصر والتعزيزات النشطة (buffCtrl):
+       - التأثير 117 (SOLDIER_LOAD_BOOST مقسوماً على 1000).
+    6. بونص السمات العامة للحرب (boeAttributeCtrl):
+       - سمة P_LOAD (11) تحت الشرط ALL_WAR (1) والهدف ALL_ARMY (1) مقسومة على 1000.
+    7. بونص أبطال المسيرة المختارين (مهارة الحمولة 5620001 تمنح حتى +14.312% عند لفل 40).
     """
-    tech_data = getattr(conn, "init_data", {}).get('technologyCtrl', {})
-    if not isinstance(tech_data, dict):
-        tech_data = {}
+    init_data = getattr(conn, "init_data", {})
+    if not isinstance(init_data, dict):
+        init_data = {}
 
+    # 1. أبحاث المعهد الحقيقية للحمولة (TechnologyCtrl)
+    tech_data = init_data.get('technologyCtrl', {})
     tech_bonus = 0.0
 
     def _get_tech_lv(tid_int: int) -> int:
@@ -299,36 +402,164 @@ def calculate_load_bonus(
             if k in tech_data:
                 val = tech_data[k]
                 try:
-                    if isinstance(val, list) and len(val) > 1:
-                        return int(val[1])
-                    elif isinstance(val, dict):
-                        return int(val.get('lv', val.get('level', 0)))
+                    if isinstance(val, list) and len(val) > 1: return int(val[1])
+                    elif isinstance(val, dict): return int(val.get('lv', val.get('level', 0)))
                     return int(val)
-                except Exception:
-                    pass
+                except Exception: pass
         return 0
 
-    # 21007: سعة الحمولة 1 (+5% لكل مستوى)
-    lv_21007 = _get_tech_lv(21007)
-    if lv_21007 > 0:
-        tech_bonus += lv_21007 * 0.05
+    # 22001: عربة الإمداد 1 (Supply Cart) - 1% لكل مستوى
+    lv_22001 = _get_tech_lv(22001)
+    if lv_22001 > 0:
+        tech_bonus += lv_22001 * 0.01
 
-    # 24006: سعة الحمولة 2 (+7% لكل مستوى)
-    lv_24006 = _get_tech_lv(24006)
-    if lv_24006 > 0:
-        tech_bonus += lv_24006 * 0.07
+    # 22010: عربة الإمداد 2 (Supply Cart II) - 2% لكل مستوى
+    lv_22010 = _get_tech_lv(22010)
+    if lv_22010 > 0:
+        tech_bonus += lv_22010 * 0.02
 
-    # 24106: سعة الحمولة 3 (+7.5% لكل مستوى)
-    lv_24106 = _get_tech_lv(24106)
-    if lv_24106 > 0:
-        tech_bonus += lv_24106 * 0.075
+    # 2. مهارات اللورد (lordInfoCtrl / lordSkillCtrl)
+    lord_skills = init_data.get('lordInfoCtrl', {}).get('skill', {}).get('skillBasic', {})
+    lord_bonus = 0.0
 
+    val_11001 = lord_skills.get('11001') or lord_skills.get(11001)
+    if not val_11001:
+        # فحص شجرة مهارات اللورد النشطة في lordSkillCtrl
+        ls_ctrl = init_data.get('lordSkillCtrl', {})
+        active_set = str(ls_ctrl.get('activeSetID', '1'))
+        sdata = ls_ctrl.get('setListData', {}).get(active_set, {})
+        val_11001 = sdata.get('list', {}).get('11001')
+
+    lv_11001 = 0
+    if isinstance(val_11001, list) and len(val_11001) > 1:
+        lv_11001 = int(val_11001[1])
+    elif isinstance(val_11001, dict):
+        lv_11001 = int(val_11001.get('lv', val_11001.get('level', 0)))
+    elif val_11001:
+        try:
+            lv_11001 = int(val_11001)
+        except Exception:
+            pass
+
+    # 11001: مهارة حمولة القوات في شجرة اللورد - 2% لكل مستوى
+    if lv_11001 > 0:
+        lord_bonus += lv_11001 * 0.02
+
+    # 3. امتيازات الـ VIP (vipCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    # كل مستوى VIP يمنح 20 في الألف (0.02) لحمولة القوات
+    vip_lv = int(init_data.get('vipCtrl', {}).get('vipLv', 0))
+    vip_bonus = (vip_lv * 20.0) / 1000.0
+
+    # 4. عتاد اللورد المرتدى (equipmentCtrl - السمة 32 SOLDIER_LOAD)
+    equip_bonus = 0.0
+    eq_ctrl = init_data.get('equipmentCtrl', {})
+    if isinstance(eq_ctrl, dict):
+        for item in eq_ctrl.get('equipment_array', []):
+            if isinstance(item, dict) and item.get('isWear') and item.get('eid') == 6520000:
+                slv = int(item.get('slv', 0))
+                rlv = int(item.get('rlv', 0))
+                st_val = STRENGTHEN_6520000[min(max(slv, 0), len(STRENGTHEN_6520000) - 1)]
+                rf_base, rf_skill = REFINE_6520000.get(min(max(rlv, 0), 25), (0, 0))
+                all_prop = 100 + st_val + rf_base
+                skill_val = 400 + rf_skill
+                res_val = math.floor(all_prop / 100.0 * skill_val) / 100.0  # في الألف
+                equip_bonus += res_val / 1000.0
+
+    # 5. بونصات العناصر النشطة (buffCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    buff_bonus = 0.0
+    buffs = init_data.get('buffCtrl', [])
+    if isinstance(buffs, list):
+        for b in buffs:
+            if isinstance(b, dict) and b.get('effect') == 117:
+                try: buff_bonus += float(b.get('val', 0)) / 1000.0
+                except Exception: pass
+
+    # 6. بونص سمات الحرب boeAttributeCtrl (السمة 11 - P_LOAD تحت الشرط 1)
+    boe_bonus = 0.0
+    cached_boe = getattr(conn, "_cached_boe_pload", None)
+    if cached_boe is not None and isinstance(cached_boe, (int, float)) and cached_boe > 0:
+        boe_bonus = float(cached_boe)
+    else:
+        boe = init_data.get('boeAttributeCtrl', {})
+        if isinstance(boe, dict):
+            c1 = boe.get('1', {}).get('1', {}).get('11', {})
+            if isinstance(c1, dict) and '1' in c1:
+                try:
+                    raw = float(c1['1'])
+                    boe_bonus = raw / 1000.0
+                except Exception: pass
+
+    # الحساب الديناميكي الدقيق الخالي من أي أرقام تخمينية ثابتة (kingdomMapCtrl:getArmyWeightPlus)
+    base_bonus = tech_bonus + lord_bonus + vip_bonus + equip_bonus + buff_bonus + boe_bonus
+
+    # 5. بونص أبطال الجمع والتنمية المختارين للمسيرة (مهارة 5620001 - سعة الحمولة)
     hero_bonus = 0.0
-    # عند جمع القمح أو الخشب مع بطل جمع متاح
-    if has_gather_hero and sub_type in (2, 3):
-        hero_bonus = 0.17365
+    h_ctrl = init_data.get('heroCtrl', {})
+    h_map: Dict[Any, dict] = {}
+    if isinstance(h_ctrl, dict):
+        h_map = h_ctrl.get('heroList', h_ctrl.get('heroMap', {}))
+    elif isinstance(h_ctrl, list):
+        for h in h_ctrl:
+            if isinstance(h, dict) and 'id' in h:
+                h_map[h['id']] = h
 
-    return max(0.0, tech_bonus + hero_bonus)
+    if hero_list:
+        for hid in hero_list:
+            h_obj = h_map.get(hid) or h_map.get(str(hid))
+            if h_obj and isinstance(h_obj, dict):
+                skills = h_obj.get('skillList', {})
+                load_lv = 0
+                if isinstance(skills, dict):
+                    for s in skills.values():
+                        if isinstance(s, dict) and s.get('id') == LOAD_SKILL:
+                            try: load_lv = int(s.get('lv', 0))
+                            except Exception: pass
+                if load_lv > 0:
+                    hero_bonus += 0.143123 * (load_lv / 40.0)
+            elif has_gather_hero:
+                hero_bonus += 0.143123
+    elif has_gather_hero:
+        hero_bonus = 0.143123
+
+    return max(0.0, base_bonus + hero_bonus)
+
+
+
+def calculate_estimated_march_capacity(init_data: dict) -> int:
+    """
+    تقدير سعة مسيرة اللورد ومعسكر التجمع (Drill Ground - bid 111) القصوى:
+    - البحث عن مبنى معسكر التجمع (bid: 111) في cityCtrl.blist
+    - احتساب سعة المسيرة الحقيقية الكافية دون خنق عدد العربات
+    """
+    city_ctrl = init_data.get("cityCtrl", {}) if isinstance(init_data, dict) else {}
+    blist = city_ctrl.get("blist", []) if isinstance(city_ctrl, dict) else []
+    drill_lv = 0
+    castle_lv = 0
+    for b in blist:
+        if not isinstance(b, dict): continue
+        binfo = b.get("binfo", {}) if isinstance(b.get("binfo"), dict) else {}
+        bid = str(binfo.get("bid", ""))
+        try: lv = int(binfo.get("lv", 0))
+        except: lv = 0
+        if bid == "111":
+            drill_lv = max(drill_lv, lv)
+        elif bid == "101":
+            castle_lv = max(castle_lv, lv)
+
+    effective_lv = drill_lv if drill_lv > 0 else (castle_lv if castle_lv > 0 else 25)
+
+    if effective_lv <= 10:
+        base_cap = effective_lv * 2500
+    elif effective_lv <= 20:
+        base_cap = 25000 + (effective_lv - 10) * 3500
+    elif effective_lv <= 30:
+        base_cap = 60000 + (effective_lv - 20) * 4500
+    else:
+        base_cap = 105000 + (effective_lv - 30) * 6000
+
+    # سعة كافية لمعسكر التجمع ومسيرة اللورد
+    safe_cap = int(base_cap * 1.1)
+    return max(20000, safe_cap)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -339,67 +570,78 @@ def select_gathering_army(
     available: Dict[int, int],
     target_load: int,
     load_bonus: float = 0.0,
-    allow_partial: bool = False
+    hero_bonus: float = 0.0,
+    allow_partial: bool = False,
+    min_ratio: float = 0.25,
+    max_march_troops: Optional[int] = None,
 ) -> Tuple[List[Dict[str, int]], int]:
     """
-    اختيار تشكيلة الجيش تلقائياً لجمع الموارد وفق كود اللعبة الأصلي (worldDispatchArmyView.lua):
-    1. الأولوية المطلقة لعربات نقل القمح (Grain Carts):
-       - 701 (عربة نقل القمح لفل 1) أولاً كما في اللعبة تماماً.
-       - ثم باقي عربات نقل القمح (الأرقام الفردية 713, 711, 709, 707, 705, 703) بالأعلى حمولة.
-    2. استكمال باقي الحمولة من المشاة (4xx) ثم الفرسان (5xx) ثم الرماة (6xx) ثم عربات القتال (702..714).
-    3. تطبيق هامش أمان طفيف (+2% على الأقل 20 عربة) لضمان مسح الحقل بنسبة 100% وعدم ترك أي بقايا موارد.
-    4. منع إرسال مسيرة ناقصة أو هزيلة (أقل من 85% من سعة الحقل) إذا كانت القوات بالقلعة غير كافية لمسح الحقل بالكامل.
+    اختيار تشكيلة الجيش تلقائياً لجمع الموارد وفق كود اللعبة الأصلي (worldDispatchArmyView:sortArmyListByWeight):
+    1. الأولوية المطلقة لعربة نقل المستوى 1 (701) أولاً دائماً.
+    2. فرز باقي القوات والورشة تنازلياً حسب سعة الحمولة الحرة (freeWeight):
+       - عربات الإمداد الأعلى (711، 709، 707، 705، 703) تأتي مباشرة لتغطية أي نقص.
+       - ثم المنجنيق وعربات الهجوم (712..702) والمشاة والفرسان والرماة عند الحاجة.
+    3. حساب سعة كل وحدة بدقة بالغة عبر calculate_unit_capacity ديناميكياً لكل حساب وفق عتاده ومستوى VIP وأبحاثه.
+    4. السماح بإرسال مسيرة جزئية طالما السعة المتوفرة تغطي ربع الحقل (25%) كحد أدنى.
+    5. الالتزام الصارم بسقف سعة معسكر التجمع ومسيرة اللورد (max_march_troops) لمنع تجاوز السعة وتجنب خطأ 8035.
     """
-    # 1. تجميع عربات نقل القمح المتاحة (الأرقام الفردية حصراً)
-    grain_carts: List[int] = []
-    for tid in available.keys():
-        if 700 <= tid < 800 and tid % 2 == 1:
-            grain_carts.append(tid)
+    # الترتيب المطابق تماماً لدالة sortArmyListByWeight في worldDispatchArmyView.lua
+    def _troop_sort_key(tid: int):
+        if tid == 701:
+            return (0, 0, 0, 0)  # 701 أولاً دائماً
+        w = UNIT_FREE_WEIGHTS.get(tid, 0)
+        tid_mod = tid % 1000
+        lv_mod = tid_mod % 100
+        # فرز تنازلي حسب الحمولة، ثم الرتبة/المستوى، ثم تصاعدي حسب المعرف
+        return (1, -w, -lv_mod, tid_mod)
 
-    # الترتيب المطابق لكود اللعبة: 701 أولاً، ثم باقي الرتب من الأعلى للأدنى
-    grain_carts.sort(key=lambda tid: (0 if tid == 701 else 1, -UNIT_FREE_WEIGHTS.get(tid, 20), -tid))
-
-    # باقي القوات كـ fallback عند الحاجة
-    infantry = sorted([tid for tid in available if 400 <= tid < 500], key=lambda tid: -tid)
-    cavalry  = sorted([tid for tid in available if 500 <= tid < 600], key=lambda tid: -tid)
-    archers  = sorted([tid for tid in available if 600 <= tid < 700], key=lambda tid: -tid)
-    chariots = sorted([tid for tid in available if 700 <= tid < 800 and tid % 2 == 0], key=lambda tid: -tid)
-
-    ordered_tids = grain_carts + infantry + cavalry + archers + chariots
+    # استبعاد الفخاخ (8xx) والوحدات ذات الحمولة 0
+    ordered_tids = sorted(
+        [tid for tid, cnt in available.items() if cnt > 0 and tid < 800 and UNIT_FREE_WEIGHTS.get(tid, 0) > 0],
+        key=_troop_sort_key
+    )
 
     # فحص إجمالي السعة المتاحة بالقلعة
     total_avail_cap = 0.0
     for tid in ordered_tids:
         cnt = available.get(tid, 0)
         if cnt > 0:
-            bw = float(UNIT_FREE_WEIGHTS.get(tid, 10))
-            total_avail_cap += cnt * (bw * (1.0 + load_bonus))
+            eff_w = calculate_unit_capacity(tid, load_bonus=load_bonus, hero_bonus=hero_bonus)
+            total_avail_cap += cnt * eff_w
 
-    # حماية من "الهجوم بجنود قليل": إذا كانت السعة الإجمالية بالقلعة لا تكفي لتغطية 85% من الحقل، لا نرسل مسيرة هزيلة تترك الحقل ناقصاً
-    if not allow_partial and target_load > 1000 and total_avail_cap < (target_load * 0.85):
+    # السماح بالجمع طالما القوات بالقلعة تغطي ربع الحقل (25%) كحد أدنى أو مسيرة جزئية
+    min_acceptable_cap = target_load * min_ratio
+    if not allow_partial and target_load > 1000 and total_avail_cap < min_acceptable_cap:
         return [], int(round(total_avail_cap))
 
-    # إضافة هامش أمان طفيف لضمان مسح المورد 100% دون ترك أي كسر
-    safety_buffer = max(1000.0, target_load * 0.02)
-    effective_target = float(target_load) + safety_buffer
-    rem_load = effective_target
+    # حساب سعة الحمولة المطلوبة بدقة مطابقة لمحرك اللعبة (curResCount / armyWeight)
+    rem_load = float(target_load)
     total_carried = 0.0
     army_list: List[Dict[str, int]] = []
+    current_total_troops = 0
 
     for tid in ordered_tids:
         avail = available.get(tid, 0)
         if avail <= 0:
             continue
 
-        base_w = float(UNIT_FREE_WEIGHTS.get(tid, 10))
-        unit_weight = base_w * (1.0 + load_bonus)
+        unit_weight = calculate_unit_capacity(tid, load_bonus=load_bonus, hero_bonus=hero_bonus)
         needed = min(avail, math.ceil(rem_load / unit_weight))
+
+        # كبح عدد القوات بحيث لا يتجاوز سعة معسكر التجمع ومسيرة اللورد (لمنع خطأ 8035)
+        if max_march_troops and max_march_troops > 0:
+            remaining_quota = max_march_troops - current_total_troops
+            if remaining_quota <= 0:
+                break
+            needed = min(needed, remaining_quota)
+
         if needed > 0:
             army_list.append({"id": tid, "num": needed})
             available[tid] -= needed
             load_added = needed * unit_weight
             rem_load = max(0.0, rem_load - load_added)
             total_carried += load_added
+            current_total_troops += needed
             if rem_load <= 0:
                 break
 
@@ -410,9 +652,17 @@ def select_gathering_army(
             if avail > 0:
                 base_w = float(UNIT_FREE_WEIGHTS.get(tid, 10))
                 unit_weight = base_w * (1.0 + load_bonus)
-                army_list.append({"id": tid, "num": avail})
-                available[tid] = 0
-                total_carried += avail * unit_weight
+                take = avail
+                if max_march_troops and max_march_troops > 0:
+                    remaining_quota = max_march_troops - current_total_troops
+                    if remaining_quota <= 0:
+                        break
+                    take = min(take, remaining_quota)
+                if take > 0:
+                    army_list.append({"id": tid, "num": take})
+                    available[tid] -= take
+                    total_carried += take * unit_weight
+                    current_total_troops += take
 
     return army_list, int(round(total_carried))
 
@@ -467,7 +717,8 @@ class GatherTask(BaseTask):
         self._busy_heroes  : Set[int]      = set()
         self._used_army    : Dict[int, int] = {}
         self._used_pets    : Set[int]      = set()
-        self._excluded_now : Set[str]      = set()
+        self._exclude_mgr  = _get_exclude_manager()
+        self._learned_max_march_troops: Optional[int] = None
 
     async def on_start(self):
         for _ in range(20):
@@ -547,7 +798,7 @@ class GatherTask(BaseTask):
         # 2. استخراج مستوى الحقل المستهدف (مستوى واحد فقط)
         target_lv = int(cfg.get('level') or cfg.get('lv') or cfg.get('min_lv') or 6)
 
-        search_range = int(cfg.get('search_range', 100))
+        search_range = 100 # ثابت 100 كم بشكل مباشر ودائم
         max_marches_safety = int(cfg.get('max_marches') or 10)  # سقف أمان أقصى
 
         self.log.info("🌾" + "═" * 58)
@@ -590,7 +841,7 @@ class GatherTask(BaseTask):
         self._busy_heroes  = set(int(h) for h in cfg.get('busy_heroes', []))
         self._used_army    = {}
         self._used_pets    = set(int(p) for p in cfg.get('used_pets', []))
-        self._excluded_now = set()
+        # الذاكرة المؤقتة للاستبعاد مدمجة الآن في ExcludeManager
         last_status = None
 
         while sent_count < target_marches and attempts < max_attempts:
@@ -603,7 +854,7 @@ class GatherTask(BaseTask):
                 cx=cx,
                 cy=cy,
                 kingdom_id=kingdom_id,
-                search_range=search_range
+                search_range=100
             )
             last_status = status
 
@@ -675,9 +926,7 @@ class GatherTask(BaseTask):
         uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
 
         # 1. البحث عن حقل المورد (النزول تدريجياً من المستوى المطلوب حتى مستوى 2)
-        exclude_map = _get_exclude(self.uid)
-        for tid in self._excluded_now:
-            exclude_map[tid] = True
+        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
 
         min_fallback_lv = min(2, target_lv)
         found_target = None
@@ -693,11 +942,16 @@ class GatherTask(BaseTask):
                 "exclude": exclude_map,
                 "minLv": cur_try_lv,
                 "maxLv": cur_try_lv,
-                "range": search_range
+                "range": 100
             }, timeout=6)
 
             if r_search and r_search.get('result'):
-                found_target = r_search['result'][0]
+                cand = r_search['result'][0]
+                cand_id = cand.get('id')
+                if cand_id and str(cand_id) in exclude_map:
+                    self.log.warning(f"   ⚠️ تم تخطي الحقل {cand_id} لأن السيرفر أعاده رغم استبعاده في المملكة {kingdom_id}.")
+                    continue
+                found_target = cand
                 actual_found_lv = cur_try_lv
                 if cur_try_lv < target_lv:
                     self.log.info(f"   ℹ️ لم يتوفر حقل لفل {target_lv} — تم العثور على بديل لفل {cur_try_lv}")
@@ -710,38 +964,39 @@ class GatherTask(BaseTask):
         target_id = target.get('id')
         tx, ty    = target.get('x'), target.get('y')
         self.log.info(f"🎯 تم العثور على حقل {res_info['name']} لفل {actual_found_lv}: {target_id} عند ({tx}, {ty})")
-        self._excluded_now.add(str(target_id))
-        _add_exclude(self.uid, target_id)
+        # حجز مؤقت في الذاكرة المشتركة للمملكة — لن يُثبت في الملف إلا بعد نجاح الإرسال
+        await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
 
-        # 2. فحص حمولة الحقل الهدف ونوع المورد الفعلي (1006/22 أولاً ثم 1006/15)
+        # 2. فحص أمني شامل ومباشر للحقل (1006/22 + مزامنة مسيرات الخريطة 1006/1000 واعتراض 1009/201)
         cur_res = 0
         actual_res_code = res_info["res_code"]
 
-        # استعلام 1006/22 المباشر والموثوق
-        try:
-            r22 = await self.conn.query('1006', '22', {"x": tx, "y": ty, "id": str(target_id)}, timeout=3.0)
-            if r22 and isinstance(r22, dict):
-                ret22 = r22.get('retData', {})
-                c_num = int(ret22.get('currentCollectNum', 0))
-                c_spd = float(ret22.get('collectSpeed', 0))
-                if c_num > 0 or c_spd > 0:
-                    self.log.warning(f"⚠️ الحقل {target_id} يجمعه لاعب آخر حالياً (currentCollectNum={c_num})")
-                    return "TARGET_OCCUPIED"
+        is_busy, busy_reason, ret22 = await self.check_target_busy_or_marched(
+            target_id=target_id,
+            tx=tx,
+            ty=ty,
+            kingdom_id=kingdom_id,
+            is_stronghold=False
+        )
+        if is_busy:
+            self.log.warning(f"⚠️ الحقل {target_id} مستبعد فوراً: {busy_reason}")
+            # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
+            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            return "TARGET_OCCUPIED"
 
-                fresh_rem = int(ret22.get('remainSourceNum', 0))
-                fresh_tot = int(ret22.get('totalSourceNum', 0))
-                if fresh_rem > 0:
-                    cur_res = fresh_rem
-                elif fresh_tot > 0:
-                    cur_res = fresh_tot
+        if ret22 and isinstance(ret22, dict):
+            fresh_rem = int(ret22.get('remainSourceNum', 0))
+            fresh_tot = int(ret22.get('totalSourceNum', 0))
+            if fresh_rem > 0:
+                cur_res = fresh_rem
+            elif fresh_tot > 0:
+                cur_res = fresh_tot
 
-                if ret22.get('resourceType'):
-                    try:
-                        actual_res_code = int(ret22.get('resourceType'))
-                    except Exception:
-                        pass
-        except Exception as e:
-            self.log.debug(f"استعلام 1006/22 لم يكتمل: {e}")
+            if ret22.get('resourceType'):
+                try:
+                    actual_res_code = int(ret22.get('resourceType'))
+                except Exception:
+                    pass
 
         # خطة بديلة عبر 1006/15
         if cur_res <= 0:
@@ -787,42 +1042,75 @@ class GatherTask(BaseTask):
         if not self._heroes:
             await self._load_heroes()
 
-        chosen_hero = pick_best_gather_hero(self._heroes, self._busy_heroes)
-        chosen_heroes_list = [chosen_hero] if chosen_hero else []
-        if chosen_hero:
-            h_obj = next((h for h in self._heroes if isinstance(h, dict) and int(h.get('id', 0)) == chosen_hero), {})
-            h_tier, h_star, h_lv = _score_gather_hero(h_obj)
-            h_type_desc = "بطل تنمية بمهارات جمع" if h_tier == 3 else ("بطل تنمية عام" if h_tier == 2 else "بطل حربي/بديل")
-            self.log.info(f"   🦸 البطل المختار تلقائياً: بطل #{chosen_hero} [{h_type_desc}] (نجوم: {h_star}★ | لفل: {h_lv})")
+        max_heroes_cfg = int(self.config.get("max_heroes", 1))
+        chosen_heroes_list = pick_best_gather_heroes(self._heroes, self._busy_heroes, max_heroes=max_heroes_cfg, sub_type=res_info["sub_type"])
+        if chosen_heroes_list:
+            hero_descs = []
+            for hid in chosen_heroes_list:
+                h_obj = next((h for h in self._heroes if isinstance(h, dict) and int(h.get('id', 0)) == hid), {})
+                sp_w, add_w, h_lv, h_star, _ = _score_gather_hero(h_obj, sub_type=res_info["sub_type"])
+                h_type_desc = "بطل تنمية بميزة المورد" if add_w > 0 else ("بطل تنمية عام" if sp_w > 0 else "بطل حربي/بديل")
+                hero_descs.append(f"#{hid} [{h_type_desc}] ({h_star}★/L{h_lv})")
+            self.log.info(f"   🦸 الأبطال المختارون تلقائياً ({len(chosen_heroes_list)}): {', '.join(hero_descs)}")
         else:
-            self.log.info("   🦸 تم إرسال المسيرة بدون بطل (عربات وجنود فقط لعدم توفر أبطال شاغرين بالقلعة)")
+            self.log.info("   🦸 تم إرسال المسيرة بدون أبطال (عربات وجنود فقط لعدم توفر أبطال شاغرين بالقلعة)")
 
         pets_list = select_gathering_pet(self.conn, self._used_pets)
         if pets_list:
             self.log.info(f"   🐾 الحيوان الأليف المختار: حيوان #{pets_list[0]}")
 
-        # 5. حساب بونص سعة الحمولة الحقيقي وتشكيل الجيش بدقة لمسح الحقل بالكامل
-        has_gather_hero = bool(chosen_hero and str(chosen_hero).startswith("5502"))
+        # استعلام سمات الحرب للحمولة من السيرفر وتحديث الكاش إن لم تكن متوفرة
+        try:
+            await fetch_war_boe_pload(self.conn)
+        except Exception:
+            pass
+
+        # 5. حساب بونص سعة الحمولة الحقيقي وتشكيل الجيش
         load_bonus = calculate_load_bonus(
             self.conn,
             sub_type=res_info["sub_type"],
-            has_gather_hero=has_gather_hero
+            hero_list=chosen_heroes_list
         )
+
+        min_load_ratio = float(self.config.get("min_load_ratio", 0.25))
+        allow_partial = bool(self.config.get("allow_partial", False))
+
+        # تحديد سعة مسيرة اللورد ومعسكر التجمع القصوى (لمنع خطأ 8035)
+        max_march_troops = self._learned_max_march_troops
+        if not max_march_troops:
+            cfg_troops = self.config.get("max_march_troops")
+            if cfg_troops:
+                try: max_march_troops = int(cfg_troops)
+                except Exception: pass
+        if not max_march_troops:
+            max_march_troops = calculate_estimated_march_capacity(getattr(self.conn, 'init_data', {}))
 
         army_list, carried_load = select_gathering_army(
             available,
             target_load=target_load,
             load_bonus=load_bonus,
-            allow_partial=False
+            allow_partial=allow_partial,
+            min_ratio=min_load_ratio,
+            max_march_troops=max_march_troops
         )
         if not army_list:
-            self.log.warning(f"⚠️ القوات المتاحة بالقلعة لا تكفي لمسح حقل {res_info['name']} لفل {actual_found_lv} بالكامل (سعة متوفرة: {carried_load:,} / مطلوب: {target_load:,}) — تجنب إرسال مسيرة ناقصة.")
+            self.log.warning(
+                f"⚠️ القوات المتاحة بالقلعة أقل من الحد الأدنى المقبول ({int(min_load_ratio * 100)}% - ربع الحقل) "
+                f"لمسح حقل {res_info['name']} لفل {actual_found_lv} (سعة متوفرة: {carried_load:,} / مطلوب: {target_load:,}) — تجنب إرسال مسيرة هزيلة جداً."
+            )
             return "NO_ARMY"
 
         total_troops = sum(item['num'] for item in army_list)
-        carts_troops = sum(item['num'] for item in army_list if 700 <= item['id'] < 800 and item['id'] % 2 == 1)
-        eff_cart_w = UNIT_FREE_WEIGHTS.get(701, 20) * (1.0 + load_bonus)
-        self.log.info(f"   🛡️ القوات المختارة: {total_troops:,} جندي (منها {carts_troops:,} عربة نقل قمح) | سعة العربة: {eff_cart_w:.2f} (بونص +{load_bonus*100:.1f}%) | حمولة المسيرة: {carried_load:,} / مطلوب: {target_load:,}")
+        carts_troops = sum(item['num'] for item in army_list if 700 <= item['id'] < 800)
+        eff_cart1_w = calculate_unit_capacity(701, load_bonus=load_bonus)
+        eff_cart9_w = calculate_unit_capacity(709, load_bonus=load_bonus)
+        coverage_pct = (carried_load / target_load * 100) if target_load > 0 else 100.0
+        march_note = f" (مسيرة جزئية: تغطي {coverage_pct:.1f}% من الحقل)" if coverage_pct < 98.0 else " (مسح كامل 100%)"
+        cap_note = f" [سقف معسكر التجمع: {max_march_troops:,}]" if (max_march_troops and total_troops >= max_march_troops) else ""
+        self.log.info(
+            f"   🛡️ القوات المختارة{march_note}{cap_note}: {total_troops:,} جندي (منها {carts_troops:,} عربة) | "
+            f"سعة ع1: {eff_cart1_w:.1f} | سعة ع9: {eff_cart9_w:.1f} (بونص حساب: +{load_bonus*100:.1f}%) | حمولة المسيرة: {carried_load:,} / مطلوب: {target_load:,}"
+        )
 
         # محاكاة بشرية طبيعية قبل إطلاق المسيرة (تجهيز الجيش والعتاد 2.0 - 3.5 ثانية)
         prep_wait = round(random.uniform(2.2, 3.8), 2)
@@ -859,33 +1147,108 @@ class GatherTask(BaseTask):
         err = str(r_march.get('err', '0'))
         if err == '0':
             self.log.info(f"   ✅ انطلقت المسيرة بنجاح إلى الحقل {target_id}!")
-            if chosen_hero:
-                self._busy_heroes.add(chosen_hero)
+            # ✅ نجاح — تثبيت الاستبعاد في الملف على مستوى المملكة والـ UID
+            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            for hid in chosen_heroes_list:
+                self._busy_heroes.add(hid)
             for item in army_list:
                 self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
             return "SUCCESS"
         elif err in ('8004', '9007004'):
             self.log.info(f"   🛑 طوابير الفيالق ممتلئة بالكامل (كود {err})")
+            # ❌ فشل — إزالة الحجز المؤقت
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "QUEUE_FULL"
         elif err == '8009':
             self.log.warning(f"   ⚠️ نقص في القوات المتاحة بالقلعة (كود {err})")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "NO_ARMY"
         elif err in ('9007020', '8014', '9007014'):
-            if chosen_hero:
-                self._busy_heroes.add(chosen_hero)
-            self.log.warning(f"   ⚠️ البطل #{chosen_hero} مشغول في مسيرة أخرى (كود {err}) — استبعاده فوراً واختيار بديل")
+            for hid in chosen_heroes_list:
+                self._busy_heroes.add(hid)
+            self.log.warning(f"   ⚠️ أبطال المسيرة مشغولون في مسيرة أخرى (كود {err}) — استبعادهم واختيار بديل")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "HERO_BUSY"
         elif err in ('8015', '9007021'):
             if pets_list:
                 self._used_pets.add(pets_list[0])
             self.log.warning(f"   ⚠️ الحيوان الأليف #{pets_list[0]} مشغول (كود {err}) — استبعاده فوراً واختيار بديل")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "HERO_BUSY"
         elif err in ('8062', '8063', '8060', '9007062'):
             self.log.warning(f"   ⚠️ الحقل {target_id} مشغول أو تغيرت حالته (كود {err})")
+            # الحقل مشغول فعلاً — نثبت الاستبعاد لأنه مشغول من لاعب آخر على مستوى المملكة
+            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
             return "TARGET_OCCUPIED"
+        elif err == '8035':
+            current_total = sum(item['num'] for item in army_list)
+            reduced_target = max(500, int(current_total * 0.85))
+            self.log.warning(
+                f"   ⚠️ خطأ 8035 (تجاوز سعة مسيرة اللورد/معسكر التجمع: {current_total:,} جندي) — "
+                f"إعادة المحاولة فوراً بضبط القوات إلى {reduced_target:,} جندي..."
+            )
+            self._learned_max_march_troops = reduced_target
+
+            scale = reduced_target / float(current_total) if current_total > 0 else 1.0
+            for item in army_list:
+                item['num'] = max(1, int(item['num'] * scale))
+
+            new_total = sum(item['num'] for item in army_list)
+            while new_total > reduced_target and army_list:
+                diff = new_total - reduced_target
+                army_list[-1]['num'] = max(1, army_list[-1]['num'] - diff)
+                new_total = sum(item['num'] for item in army_list)
+                if army_list[-1]['num'] <= 1 and new_total > reduced_target:
+                    break
+
+            march_payload['data']['army'] = army_list
+            await asyncio.sleep(1.2)
+
+            r_retry = await self.conn.query('1007', '2', march_payload)
+            err_retry = str(r_retry.get('err', '0')) if r_retry else 'ERROR'
+            if err_retry == '0':
+                self.log.info(f"   ✅ انطلقت المسيرة بنجاح بعد ضبط القوات وفق سعة معسكر التجمع ({new_total:,} جندي)!")
+                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+                for hid in chosen_heroes_list:
+                    self._busy_heroes.add(hid)
+                for item in army_list:
+                    self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
+                return "SUCCESS"
+            elif err_retry == '8035':
+                reduced_second = max(500, int(new_total * 0.85))
+                self.log.warning(
+                    f"   ⚠️ تكرر خطأ 8035 — محاولة ثانية وأخيرة بضبط القوات إلى {reduced_second:,} جندي..."
+                )
+                self._learned_max_march_troops = reduced_second
+                scale2 = reduced_second / float(new_total) if new_total > 0 else 1.0
+                for item in army_list:
+                    item['num'] = max(1, int(item['num'] * scale2))
+                new_total2 = sum(item['num'] for item in army_list)
+                while new_total2 > reduced_second and army_list:
+                    diff = new_total2 - reduced_second
+                    army_list[-1]['num'] = max(1, army_list[-1]['num'] - diff)
+                    new_total2 = sum(item['num'] for item in army_list)
+                    if army_list[-1]['num'] <= 1 and new_total2 > reduced_second:
+                        break
+                march_payload['data']['army'] = army_list
+                await asyncio.sleep(1.5)
+                r_retry2 = await self.conn.query('1007', '2', march_payload)
+                if r_retry2 and str(r_retry2.get('err', '0')) == '0':
+                    self.log.info(f"   ✅ انطلقت المسيرة بنجاح في المحاولة الثانية بعد ضبط القوات ({new_total2:,} جندي)!")
+                    await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+                    for hid in chosen_heroes_list:
+                        self._busy_heroes.add(hid)
+                    for item in army_list:
+                        self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
+                    return "SUCCESS"
+
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
+            return "ERROR"
         else:
             self.log.error(f"   ❌ خطأ غير متوقع أثناء إطلاق المسيرة: كود {err} | الحقل={target_id}")
+            await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
             return "ERROR"
+
 
 
 # ════════════════════════════════════════════════════════════════════

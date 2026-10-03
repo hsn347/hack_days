@@ -38,7 +38,7 @@ import json
 import logging
 import random
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional , Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection

@@ -25,7 +25,7 @@ tasks/building.py — مهمة ترقية القلعة ومباني الموار
      - التسريع مخصص للقلعة فقط ولا يُطبّق على باقي المباني.
 
 خيارات التشغيل:
-    python tasks/building.py --email "samartilleli@yopmail.com" --castle --buildings
+    python tasks/building.py --email "johan2003@yopmail.com" --castle --buildings
     python tasks/building.py --email "burcudemr@gmail.com" --castle --speedup
     python tasks/building.py --email "johan2003@yopmail.com" --no-castle --buildings
     python tasks/building.py --email "king7moe1990@gmail.com" --check-only
@@ -56,23 +56,52 @@ from game_client import GameConnection
 
 
 # ════════════════════════════════════════════════════════════════════
-#  تعريفات المباني وأدوات التسريع
+#  تعريفات المباني وأدوات التسريع والمتطلبات المسبقة
 # ════════════════════════════════════════════════════════════════════
 
 BUILDING_INFO: Dict[str, Dict[str, Any]] = {
     "101": {"name": "🏰 القلعة (Castle)", "category": "castle", "harvest": False},
     "102": {"name": "🧱 الأسوار (Walls)", "category": "walls", "harvest": False},
+    "103": {"name": "🛡️ البرج الدفاعي (Turret)", "category": "defense", "harvest": False},
+    "104": {"name": "🔭 برج المراقبة (Watchtower)", "category": "watchtower", "harvest": False},
+    "105": {"name": "📦 المستودع (Depot)", "category": "depot", "harvest": False},
+    "107": {"name": "💰 التاجر (Merchant)", "category": "merchant", "harvest": False},
+    "108": {"name": "⚓ الميناء (Port)", "category": "port", "harvest": False},
+    "111": {"name": "🏛️ السفارة (Embassy)", "category": "embassy", "harvest": False},
+    "112": {"name": "⚖️ السوق (Market)", "category": "market", "harvest": False},
+    "113": {"name": "🎓 المعهد / الأكاديمية (College)", "category": "college", "harvest": False},
+    "114": {"name": "⛲ نافورة الأمنيات (Wishing Well)", "category": "wishing", "harvest": False},
+    "115": {"name": "⚒️ الحداد (Blacksmith)", "category": "blacksmith", "harvest": False},
     "116": {"name": "🐎 معسكر الخيالة (Cavalry Barracks)", "category": "camp", "harvest": False},
     "117": {"name": "🏹 معسكر الرماة (Archer Barracks)", "category": "camp", "harvest": False},
     "118": {"name": "🛡️ معسكر المشاة (Infantry Barracks)", "category": "camp", "harvest": False},
     "119": {"name": "🚜 معسكر العربات (Chariot Barracks)", "category": "camp", "harvest": False},
+    "120": {"name": "🏰 الحصن (Fortress)", "category": "fortress", "harvest": False},
+    "122": {"name": "⚔️ قاعة الحرب (Hall of War)", "category": "warhall", "harvest": False},
     "201": {"name": "🌾 مزرعة القمح (Farm)", "category": "resource", "harvest": True},
     "202": {"name": "🪵 منشرة الخشب (Sawmill)", "category": "resource", "harvest": True},
     "203": {"name": "⛏️ منجم الحديد (Iron Mine)", "category": "resource", "harvest": True},
     "204": {"name": "🪙 منجم الكوارتز (Quartz Mine)", "category": "resource", "harvest": True},
     "205": {"name": "⛺ الخيمة العسكرية (Military Tent)", "category": "tent", "harvest": False},
     "206": {"name": "🏥 المركز الطبي / المشفى (Hospital)", "category": "hospital", "harvest": False},
+    "301": {"name": "🎖️ قاعة المجد والشرف (Honor Hall)", "category": "honor", "harvest": False},
 }
+
+RES_NAMES: Dict[int, str] = {
+    1002: "القمح (Food)",
+    1003: "الخشب (Wood)",
+    1004: "الحديد (Iron)",
+    1005: "الكوارتز (Quartz/Mithril)",
+}
+
+# تحميل جدول المتطلبات المسبقة الرسمي للقلعة من ملف اللعبة (build101.lua / castle_prereqs.json)
+_CASTLE_PREREQS_FILE = os.path.join(_ROOT_DIR, "castle_prereqs.json")
+try:
+    with open(_CASTLE_PREREQS_FILE, "r", encoding="utf-8") as _cpf:
+        CASTLE_PREREQS_DATA: Dict[int, Dict[str, Any]] = {int(k): v for k, v in json.load(_cpf).items()}
+except Exception as _e:
+    logging.getLogger("building").warning(f"⚠️ تعذر تحميل castle_prereqs.json: {_e}")
+    CASTLE_PREREQS_DATA = {}
 
 # المباني الداعمة المستهدفة للتفصيل والتحديد
 SUPPORT_BUILDINGS_DEF: Dict[str, Dict[str, Any]] = {
@@ -240,10 +269,16 @@ class BuildingTask(BaseTask):
         super().__init__(conn, config)
 
     async def get_city_buildings(self) -> List[Dict[str, Any]]:
-        """الاستعلام عن جميع مباني المدينة عبر 1001/1."""
-        resp = await self.conn.query("1001", "1", {}, timeout=10)
-        blist = resp.get("data", {}).get("blist", [])
-        return blist
+        """الاستعلام عن جميع مباني المدينة عبر 1001/1 مع محاولة إعادة إذا تأخر الرد."""
+        for attempt in range(2):
+            resp = await self.conn.query("1001", "1", {}, timeout=15)
+            if resp and isinstance(resp, dict):
+                blist = resp.get("data", {}).get("blist", [])
+                if isinstance(blist, list) and blist:
+                    return blist
+            if attempt == 0:
+                await asyncio.sleep(0.6)
+        return []
 
     async def get_active_build_queues(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -251,6 +286,8 @@ class BuildingTask(BaseTask):
         يعيد dict يربط qtype (1200 / 1201) ببيانات البناء (bid, lv, remain_time).
         """
         resp = await self.conn.query("1003", "1", {}, timeout=8)
+        if not resp or not isinstance(resp, dict):
+            return {}
         data = resp.get("data", {})
         active_queues = {}
         if isinstance(data, dict):
@@ -473,41 +510,146 @@ class BuildingTask(BaseTask):
                 self.log.info("ℹ️ القلعة ليست قيد الترقية حالياً لتسريعها.")
 
         # ─────────────────────────────────────────────────────────────
-        #  القسم 2: ترقية القلعة الموصى بها (الأولى فالأولى)
+        #  القسم 2: ترقية القلعة الموصى بها (استعلام وفحص ذكي شامل وفق كود اللعبة)
         # ─────────────────────────────────────────────────────────────
-        if do_castle and (check_only or active_count < 2):
-            is_castle_upgrading = (castle_state == "2") or any(str(q.get("bid")) == "101" for q in active_queues.values())
+        if do_castle:
+            target_castle_lv = castle_lv + 1
+            is_castle_upgrading = (castle_state == "2") or any(
+                str(q.get("bid")) == "101" for q in active_queues.values()
+            )
 
             if is_castle_upgrading:
                 self.log.info(f"⏳ القلعة ({castle_lv}) قيد الترقية حالياً بالفعل.")
                 actions_taken.append(f"🏰 القلعة (مستوى {castle_lv}) قيد الترقية بالفعل")
+
+            elif target_castle_lv > 130:
+                self.log.info(f"🏰 القلعة بلغت الحد الأقصى للمستوى ({castle_lv}).")
+                actions_taken.append(f"🏰 القلعة بلغت الحد الأقصى ({castle_lv})")
+
             else:
-                # التحقق من المتطلبات المسبقة للقلعة:
-                # الشرط الأساسي في اللعبة: الأسوار (102) يجب أن تصل لمستوى القلعة الحالي لترقية القلعة
-                if walls_lv < castle_lv:
-                    self.log.warning(
-                        f"⚠️ [الأولى فالأولى] ترقية القلعة إلى {castle_lv + 1} تتطلب وصول الأسوار إلى مستوى {castle_lv} أولاً "
-                        f"(الأسوار حالياً: {walls_lv})!"
+                # جلب المتطلبات الرسمية للمستوى المستهدف من جدول اللعبة
+                target_cfg = CASTLE_PREREQS_DATA.get(target_castle_lv, {})
+                prereq_buildings = target_cfg.get("preCond", {})
+                cost_res = target_cfg.get("costRes", {})
+                cost_wes = target_cfg.get("costWEs", {})
+                cost_tools = target_cfg.get("costTools", {})
+
+                # 1. فحص جميع المباني المتطلبة (الأسوار + المباني الأخرى كقاعة المجد والمستودع وغيرها)
+                missing_prereqs = []
+                for req_bid_str, req_blv in prereq_buildings.items():
+                    b_list = buildings_by_type.get(str(req_bid_str), [])
+                    curr_blv = max((int(b.get("lv", 0)) for b in b_list), default=0)
+                    is_b_upgrading = any(str(b.get("state", "0")) == "2" for b in b_list) or any(
+                        str(q.get("bid")) == str(req_bid_str) for q in active_queues.values()
                     )
-                    if not check_only:
-                        self.log.info(f"🧱 جاري ترقية الأسوار أولاً تمهيداً للقلعة (مستوى {walls_lv} ➔ {walls_lv + 1})...")
-                        r_wall = await self.upgrade_building("102", walls_idx)
-                        if r_wall.get("err") == "0":
-                            actions_taken.append(f"🧱 تم بدء ترقية الأسوار (مستوى {walls_lv + 1}) لفتح ترقية القلعة")
-                            active_count += 1
+                    b_name = BUILDING_INFO.get(str(req_bid_str), {}).get("name", f"مبنى #{req_bid_str}")
+                    if curr_blv < req_blv:
+                        missing_prereqs.append({
+                            "bid": str(req_bid_str),
+                            "name": b_name,
+                            "current_lv": curr_blv,
+                            "required_lv": req_blv,
+                            "is_upgrading": is_b_upgrading,
+                            "binfo": b_list[0] if b_list else None
+                        })
+
+                # 2. فحص الموارد (Food, Wood, Iron, Quartz)
+                missing_res = []
+                city_res = self.conn.init_data.get("cityCtrl", {}).get("reslist", {})
+                if city_res:
+                    for resid_str, req_amt in cost_res.items():
+                        if req_amt > 0:
+                            curr_amt = float(city_res.get(str(resid_str), 0))
+                            if curr_amt < req_amt:
+                                r_name = RES_NAMES.get(int(resid_str), f"مورد #{resid_str}")
+                                missing_res.append({
+                                    "resid": resid_str,
+                                    "name": r_name,
+                                    "current": curr_amt,
+                                    "required": req_amt,
+                                    "diff": req_amt - curr_amt
+                                })
+
+                # 3. فحص بلورات الحرب والأدوات (War Essences & Tools)
+                missing_items = []
+                bag_ctrl = self.conn.init_data.get("backpackCtrl", {})
+                if bag_ctrl:
+                    for item_id_str, req_cnt in {**cost_wes, **cost_tools}.items():
+                        if req_cnt > 0:
+                            item_obj = bag_ctrl.get(str(item_id_str))
+                            curr_cnt = item_obj.get("count", 0) if isinstance(item_obj, dict) else (int(item_obj) if isinstance(item_obj, (int, str)) and str(item_obj).isdigit() else 0)
+                            if curr_cnt < req_cnt:
+                                it_name = "شظايا بلورات الشرف (Item 301101)" if str(item_id_str) == "301101" else f"أداة #{item_id_str}"
+                                missing_items.append({
+                                    "id": item_id_str,
+                                    "name": it_name,
+                                    "current": curr_cnt,
+                                    "required": req_cnt
+                                })
+
+                # ── التقييم واتخاذ القرار الذكي ──
+                if missing_prereqs:
+                    for mp in missing_prereqs:
+                        if mp["is_upgrading"]:
+                            self.log.info(
+                                f"⏳ {mp['name']} قيد الترقية حالياً (مستوى {mp['current_lv']}) — "
+                                f"القلعة بانتظار اكتماله للوصول للمستوى المطلوب ({mp['required_lv']})."
+                            )
+                            actions_taken.append(f"⏳ {mp['name']} قيد الترقية حالياً — القلعة بانتظار وصوله للمستوى {mp['required_lv']}")
                         else:
-                            actions_taken.append(f"⚠️ تعذر ترقية الأسوار: خطأ {r_wall.get('err')}")
-                    else:
-                        actions_taken.append(f"🔍 [فحص] التوصية للقلعة: ترقية الأسوار أولاً من {walls_lv} إلى {castle_lv} تمهيداً للقلعة")
+                            self.log.warning(
+                                f"⚠️ متطلب ناقص للقلعة: {mp['name']} (المستوى الحالي: {mp['current_lv']} < المطلوب: {mp['required_lv']})."
+                            )
+                            actions_taken.append(f"🔍 [فحص] يجب ترقية {mp['name']} أولاً ({mp['current_lv']} ➔ {mp['required_lv']}) قبل القلعة")
+
+                    # الترقية الذكية: إذا كان هناك طابور متاح ولسنا في وضع الفحص فقط، نبدأ بترقية أول مبنى متطلب خامل
+                    if not check_only and active_count < 2:
+                        for mp in missing_prereqs:
+                            if not mp["is_upgrading"] and mp["binfo"]:
+                                mp_idx = str(mp["binfo"].get("index", ""))
+                                if mp_idx:
+                                    self.log.info(f"🔨 البدء التلقائي بترقية {mp['name']} (مستوى {mp['current_lv'] + 1}) كمتطلب مسبق للقلعة...")
+                                    r_up = await self.upgrade_building(mp["bid"], mp_idx)
+                                    err_up = str(r_up.get("err", "-1"))
+                                    if err_up == "0":
+                                        actions_taken.append(f"🔨 تم بنجاح بدء ترقية {mp['name']} (مستوى {mp['current_lv'] + 1}) كمتطلب للقلعة")
+                                        active_count += 1
+                                        mp["binfo"]["state"] = "2"
+                                        break
+                                    elif err_up == "1001":
+                                        actions_taken.append("🛑 طوابير البناء ممتلئة")
+                                        break
+                                    else:
+                                        actions_taken.append(f"⚠️ تعذر ترقية {mp['name']}: كود {err_up}")
+
+                elif missing_res:
+                    for mr in missing_res:
+                        self.log.warning(f"📦 نقص موارد لترقية القلعة: {mr['name']} المتوفر {mr['current']:,.0f} / المطلوب {mr['required']:,.0f}")
+                        actions_taken.append(f"📦 نقص في {mr['name']} (ناقص {mr['diff']:,.0f}) — منع إرسال الطلب لتجنب الخطأ")
+
+                elif missing_items:
+                    for mi in missing_items:
+                        self.log.warning(f"💎 نقص أدوات لترقية القلعة: {mi['name']} ({mi['current']}/{mi['required']})")
+                        actions_taken.append(f"💎 نقص {mi['name']} ({mi['current']}/{mi['required']})")
+
+                elif active_count >= 2:
+                    self.log.info("🛑 طوابير البناء ممتلئة بالكامل (2/2) — تعذر إرسال ترقية القلعة.")
+                    actions_taken.append("🛑 طوابير البناء ممتلئة بالكامل")
+
                 else:
-                    # الأسوار جاهزة: محاولة ترقية القلعة مباشرة
-                    self.log.info(f"🚀 الأسوار مكتملة ({walls_lv}). جاري ترقية القلعة إلى المستوى {castle_lv + 1}...")
+                    # [فحص ذكي مؤكد 100%]: جميع المباني المتطلبة والموارد والأدوات والطوابير متوفرة تماماً!
+                    self.log.info(
+                        f"🚀 جميع شروط ترقية القلعة مكتملة بنسبة 100%! "
+                        f"جاري إرسال أمر ترقية القلعة إلى المستوى {target_castle_lv}..."
+                    )
                     if not check_only:
                         r_castle = await self.upgrade_building("101", castle_idx)
                         err_c = str(r_castle.get("err", "-1"))
                         if err_c == "0":
-                            actions_taken.append(f"🏰 تم بنجاح بدء ترقية القلعة إلى المستوى {castle_lv + 1} 🎉")
+                            actions_taken.append(f"🏰 تم بنجاح بدء ترقية القلعة إلى المستوى {target_castle_lv} 🎉")
                             active_count += 1
+                            if castle_binfo:
+                                castle_binfo["state"] = "2"
                             # إذا كان التسريع مفعل، نسارع فوراً بتسريع القلعة بعد بدئها!
                             if do_speedup:
                                 await asyncio.sleep(1.0)
@@ -515,9 +657,9 @@ class BuildingTask(BaseTask):
                         elif err_c == "1001":
                             actions_taken.append("🛑 طوابير البناء ممتلئة بالكامل")
                         else:
-                            actions_taken.append(f"⚠️ فشل ترقية القلعة: كود الخطأ {err_c} (قد تنقص موارد أو شروط خاصة)")
+                            actions_taken.append(f"⚠️ فشل ترقية القلعة: كود الخطأ {err_c}")
                     else:
-                        actions_taken.append(f"🔍 [فحص] القلعة جاهزة للترقية إلى المستوى {castle_lv + 1}")
+                        actions_taken.append(f"🔍 [فحص] القلعة مؤهلة وجاهزة بنسبة 100% للترقية إلى المستوى {target_castle_lv}")
 
         # ─────────────────────────────────────────────────────────────
         #  القسم 3: ترقية الموارد والمعسكرات والمستشفى بناءً على تفضيل المستخدم
@@ -541,9 +683,12 @@ class BuildingTask(BaseTask):
                         continue
 
                     # تصفية المباني التي ليست قيد الترقية حالياً ولم تفشل في هذه الدورة
+                    # وشرط ذكي مسبق: مستوى المبنى الداعم لا يمكن أن يتجاوز مستوى القلعة
                     available_to_upgrade = [
                         b for b in b_list
-                        if str(b.get("state", "0")) != "2" and str(b.get("state", "0")) != "failed"
+                        if str(b.get("state", "0")) != "2"
+                        and str(b.get("state", "0")) != "failed"
+                        and int(b.get("lv", 0)) < castle_lv
                     ]
                     if not available_to_upgrade:
                         continue

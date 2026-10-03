@@ -86,6 +86,7 @@ export async function checkApiAvailable(): Promise<boolean> {
 
 export async function getUserProfile(): Promise<User | null> {
   const authHeaders = await getAuthHeader()
+  if (!authHeaders.Authorization) return null
   const res = await fetch(`${getApiBaseUrl()}/api/user/profile`, {
     headers: authHeaders,
   })
@@ -540,7 +541,7 @@ export function formatCastleFromApi(raw: any): Castle {
       last_run_message: raw.last_run_message || (raw.state === 'running' ? 'البوت يعمل الآن...' : 'جاهز للتشغيل'),
       active_marches:   0,
       max_marches:      2,
-      last_error:       null,
+      last_error:       (raw.state === 'error' || raw.conn_state === 'error') ? (raw.conn_message || 'خطأ في المصادقة أو الاتصال') : (raw.last_error || null),
     },
     config: cfg,
   } as Castle
@@ -582,3 +583,60 @@ export function formatUserFromApi(raw: any): User {
     },
   } as User
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ⚡ العمليات الحية (Live Runtime Threads API)
+// ══════════════════════════════════════════════════════════════════
+
+export interface LiveProcessInfo {
+  castle_id: string
+  email: string
+  user_id: string
+  user_email?: string
+  thread_id: number | null
+  thread_name: string
+  thread_alive: boolean
+  state: string
+  live_category: 'running' | 'waiting' | 'other_login' | 'reconnecting' | 'starting' | string
+  category_label: string
+  current_step?: string
+  status_message: string
+  iteration: number
+  loop_interval_minutes: number
+  next_run_time: string | null
+  reconnect_attempt: number
+  max_reconnect_attempts: number
+  last_kick_reason: string
+  uptime_seconds: number
+  step_duration_seconds?: number
+  is_connection_alive: boolean
+  is_stopped: boolean
+  start_time: number
+}
+
+export interface LiveProcessesResponse {
+  status: string
+  source: string
+  timestamp: string
+  summary: {
+    total_active: number
+    running: number
+    waiting: number
+    other_login: number
+    reconnecting: number
+    starting: number
+  }
+  processes: LiveProcessInfo[]
+}
+
+export async function getAdminLiveProcesses(): Promise<LiveProcessesResponse> {
+  const authHeaders = await getAuthHeader()
+  const res = await fetch(`${getApiBaseUrl()}/api/admin/live-processes`, {
+    headers: authHeaders,
+  })
+  if (!res.ok) throw new Error('فشل جلب العمليات الحية من السيرفر')
+  return res.json()
+}
+
+
+

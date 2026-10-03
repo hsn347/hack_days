@@ -4,19 +4,24 @@ tasks/hospital.py — مهمة معالجة الجنود الجرحى في ال�
 ═════════════════════════════════════════════════════════════════════════════
 
 الوظيفة:
+  0. الاستعلام التلقائي المسبق عن مهمة علاج الجرحى في مهام الهيبة اليومية (#4112009):
+     - فحص ما إذا كانت المهمة منجزة مسبقاً (status in (4,5) أو اكتمال العدد المطلوب).
+     - في حال كانت منجزة، يتم تجاهل مهمة المشفى وتخطيها تلقائياً لحفظ الموارد ومنع الاستهلاك غير الضروري.
   1. التحقق من جاهزية مبنى المشفى (Hospital - Building ID: 206) في القلعة ومستواه.
   2. فحص طابور العلاج في queueCtrl (Queue Type: 1202 - hostpital_queue):
      - إذا كان هناك طابور علاج نشط (starttime + totaltime > now)، يتم تسجيل الوقت المتبقي والتخطي بأمان.
   3. استعلام بيانات الجيش وجلب الجنود المصابين الجرحى (1005/1 -> woundedArmy).
   4. في حال وجود جرحى والمشفى متاح:
      - إرسال طلب العلاج العادي (cmd: "1005", subcmd: "4", mode: "0") بكافة أعداد الجنود المحتاجة للعلاج.
-     - تحديث الذاكرة المحلية للجلسة (تصفير الجرحى وتحديث طابور العلاج 1202).
+     - تحديث الذاكرة المحلية للجلسة (تصفير الجرحى، تحديث طابور 1202، وتحديث مهمة الهيبة).
 
 بروتوكول اللعبة المعتمد:
-  - استعلام الجيش:    cmd: "1005", subcmd: "1", data: {}
-  - طلب بدء العلاج:   cmd: "1005", subcmd: "4", data: {"mode": "0", "armyinfo": {...}}
-  - طابور العلاج:     queueCtrl['1202'] (hostpital_queue)
-  - مبنى المشفى:      bid: "206" (BUILDID.HOSTPITAL)
+  - مهمة الهيبة لعلاج الجرحى: #4112009 (meritoriousTaskCtrl)
+  - تجديد بيانات الهيبة:      cmd: "1013", subcmd: "1"
+  - استعلام الجيش:            cmd: "1005", subcmd: "1", data: {}
+  - طلب بدء العلاج:           cmd: "1005", subcmd: "4", data: {"mode": "0", "armyinfo": {...}}
+  - طابور العلاج:             queueCtrl['1202'] (hostpital_queue)
+  - مبنى المشفى:              bid: "206" (BUILDID.HOSTPITAL)
 """
 
 from __future__ import annotations
@@ -46,16 +51,120 @@ if TYPE_CHECKING:
 
 HOSPITAL_BID = "206"
 HOSPITAL_QUEUE_TYPE = "1202"
+PRESTIGE_CURE_QUEST_ID = 4112009  # معرف مهمة علاج الجنود المصابين بالمشفى في مهام الهيبة (meritoriousTaskCtrl)
 
 
 class HospitalTask(BaseTask):
-    """مهمة فحص المشفى وعلاج كافة الجنود الجرحى تلقائياً."""
+    """مهمة فحص المشفى وعلاج كافة الجنود الجرحى تلقائياً مع الاستعلام المسبق لمهام الهيبة."""
 
     name = "hospital"
     description = "🏥 معالجة الجنود الجرحى في المشفى"
 
     def __init__(self, conn: GameConnection, config: Optional[Dict[str, Any]] = None):
         super().__init__(conn, config or {})
+
+    async def _refresh_merit_data(self) -> bool:
+        """
+        تجديد بيانات مهام الهيبة اليومية (meritoriousTaskCtrl) من السيرفر مباشرة.
+        يحاول الاستعلام عبر 1013/1 ثم 1001/1 في حال التعذر.
+        """
+        try:
+            r = await self.conn.query("1013", "1", {}, timeout=5)
+            if r and isinstance(r, dict) and "data" in r:
+                merit_data = r["data"].get("meritoriousTaskCtrl")
+                if merit_data and isinstance(merit_data, dict):
+                    self.conn.init_data["meritoriousTaskCtrl"] = merit_data
+                    return True
+        except Exception as e:
+            self.log.debug(f"استعلام 1013/1 لتجديد بيانات الهيبة لم يكتمل: {e}")
+
+        try:
+            r_all = await self.conn.query("1001", "1", {}, timeout=6)
+            if r_all and isinstance(r_all, dict) and "data" in r_all:
+                merit_data = r_all["data"].get("meritoriousTaskCtrl")
+                if merit_data and isinstance(merit_data, dict):
+                    self.conn.init_data["meritoriousTaskCtrl"] = merit_data
+                    return True
+        except Exception as e:
+            self.log.debug(f"استعلام 1001/1 لتجديد بيانات الهيبة لم يكتمل: {e}")
+
+        return False
+
+    def check_prestige_cure_done(self) -> Tuple[bool, Dict[str, Any]]:
+        """
+        الاستعلام عن حالة مهمة علاج الجنود الجرحى في مهام الهيبة (ID: 4112009) من meritoriousTaskCtrl.
+        يعيد: (منجزة_أم_لا, تفاصيل_المهمة)
+        """
+        merit_ctrl = self.conn.init_data.get("meritoriousTaskCtrl", {})
+        if not isinstance(merit_ctrl, dict) or not merit_ctrl:
+            return False, {"found": False, "task_id": PRESTIGE_CURE_QUEST_ID, "c_num": 0, "l_num": 0, "is_done": False}
+
+        qid = PRESTIGE_CURE_QUEST_ID
+        qid_str = str(qid)
+
+        # 1. فحص taskData (القاموس الرئيسي لمهام الهيبة اليومية)
+        task_data = merit_ctrl.get("taskData", {})
+        if isinstance(task_data, dict) and (qid_str in task_data or qid in task_data):
+            t_obj = task_data.get(qid_str) or task_data.get(qid)
+            if isinstance(t_obj, dict):
+                c_num = int(t_obj.get("cNum", t_obj.get("c_num", 0)))
+                l_num = int(t_obj.get("lNum", t_obj.get("l_num", 0)))
+                status = int(t_obj.get("status", 0))
+                # status == 4 (جاهزة للاستلام), status == 5 (تم استلامها), أو تحقيق الهدف المطلوب
+                is_done = (status in (4, 5)) or (l_num > 0 and c_num >= l_num)
+                remaining = max(0, l_num - c_num) if l_num > 0 else 0
+                return is_done, {
+                    "found": True,
+                    "task_id": qid,
+                    "c_num": c_num,
+                    "l_num": l_num,
+                    "status": status,
+                    "is_done": is_done,
+                    "remaining": remaining,
+                }
+
+        # 2. فحص قائمة tasks
+        tasks = merit_ctrl.get("tasks", [])
+        if isinstance(tasks, dict):
+            tasks = list(tasks.values())
+        if isinstance(tasks, list):
+            for task_obj in tasks:
+                if not isinstance(task_obj, dict):
+                    continue
+                t_id = task_obj.get("taskId") or task_obj.get("id")
+                if t_id and int(t_id) == qid:
+                    c_num = int(task_obj.get("c_num", task_obj.get("cNum", 0)))
+                    l_num = int(task_obj.get("l_num", task_obj.get("lNum", 0)))
+                    status = int(task_obj.get("status", 0))
+                    is_finish = int(task_obj.get("is_finish", task_obj.get("isFinish", 0)))
+                    is_done = (status in (4, 5)) or (is_finish == 1) or (l_num > 0 and c_num >= l_num)
+                    remaining = max(0, l_num - c_num) if l_num > 0 else 0
+                    return is_done, {
+                        "found": True,
+                        "task_id": qid,
+                        "c_num": c_num,
+                        "l_num": l_num,
+                        "status": status,
+                        "is_done": is_done,
+                        "remaining": remaining,
+                    }
+
+        # 3. فحص daily_task (قاموس العدادات اليومية)
+        daily_task = merit_ctrl.get("daily_task", {})
+        if isinstance(daily_task, dict) and (qid_str in daily_task or qid in daily_task):
+            c_val = int(daily_task.get(qid_str, daily_task.get(qid, 0)))
+            is_done = c_val >= 1
+            return is_done, {
+                "found": True,
+                "task_id": qid,
+                "c_num": c_val,
+                "l_num": 1,
+                "status": 4 if is_done else 2,
+                "is_done": is_done,
+                "remaining": 0 if is_done else 1,
+            }
+
+        return False, {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "is_done": False, "remaining": 0}
 
     def check_hospital_building(self) -> Tuple[bool, int, str]:
         """
@@ -155,8 +264,29 @@ class HospitalTask(BaseTask):
         return wounded_map, total_cnt
 
     async def run(self) -> TaskResult:
-        """تنفيذ مهمة فحص وعلاج الجنود الجرحى بالمشفى."""
-        self.log.info("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى والجنود الجرحى...")
+        """تنفيذ مهمة فحص وعلاج الجنود الجرحى بالمشفى مع التحقق المسبق من مهام الهيبة."""
+        self.log.info("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى ومهمة الهيبة...")
+
+        # 0. الاستعلام التلقائي المسبق: التحقق من إنجاز مهمة علاج الجرحى في مهام الهيبة اليومية (#4112009)
+        # إذا كانت منجزة بالفعل، يتم تجاهل علاج الجرحى وتخطي المشفى تلقائياً لحفظ موارد القلعة
+        await self._refresh_merit_data()
+        is_prestige_done, q_info = self.check_prestige_cure_done()
+        if is_prestige_done:
+            c_num = q_info.get("c_num", 0)
+            l_num = q_info.get("l_num", 0)
+            status_desc = f"({c_num}/{l_num})" if l_num > 0 else "(مكتملة)"
+            skip_msg = (
+                f"✨ [مهام الهيبة] مهمة علاج الجرحى في مهام الهيبة اليومية منجزة مسبقاً {status_desc} "
+                f"— تم تخطي مهمة المشفى تلقائياً لتوفير الموارد ومنع الاستهلاك غير الضروري!"
+            )
+            self.log.info(f"⏭️ {skip_msg}")
+            return TaskResult.ok(
+                skip_msg,
+                skipped=True,
+                reason="PRESTIGE_CURE_ALREADY_DONE",
+                quest_id=PRESTIGE_CURE_QUEST_ID,
+                quest_info=q_info,
+            )
 
         # 1. التحقق من وجود مبنى المشفى
         has_bld, b_lv, b_desc = self.check_hospital_building()
@@ -215,6 +345,24 @@ class HospitalTask(BaseTask):
                         "costres": retdata.get("costres", {})
                     }
                 }
+
+            # تحديث حالة مهمة علاج الجرحى في مهام الهيبة محلياً
+            merit = self.conn.init_data.get("meritoriousTaskCtrl")
+            if isinstance(merit, dict):
+                task_data = merit.setdefault("taskData", {})
+                if isinstance(task_data, dict):
+                    t_info = task_data.setdefault(str(PRESTIGE_CURE_QUEST_ID), {
+                        "id": PRESTIGE_CURE_QUEST_ID,
+                        "cNum": 0,
+                        "lNum": 1,
+                        "status": 2
+                    })
+                    if isinstance(t_info, dict):
+                        t_info["cNum"] = int(t_info.get("cNum", 0)) + total_wounded
+                        t_info["status"] = 4
+                daily = merit.setdefault("daily_task", {})
+                if isinstance(daily, dict):
+                    daily[str(PRESTIGE_CURE_QUEST_ID)] = int(daily.get(str(PRESTIGE_CURE_QUEST_ID), 0)) + 1
 
             m, s = divmod(int(totaltime), 60)
             h, m = divmod(m, 60)

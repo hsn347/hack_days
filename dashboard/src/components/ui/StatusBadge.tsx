@@ -17,6 +17,7 @@ const stateStyles: Record<BotState, string> = {
   disconnected: 'badge-yellow',
   reconnecting: 'badge-yellow',
   waiting:      'badge-blue',
+  deploying:    'badge-yellow',
 }
 
 const dotStyles: Record<BotState, string> = {
@@ -28,6 +29,7 @@ const dotStyles: Record<BotState, string> = {
   disconnected: 'bg-amber-400 animate-pulse',
   reconnecting: 'bg-orange-400 animate-pulse',
   waiting:      'bg-sky-400 animate-pulse',
+  deploying:    'bg-amber-400 animate-pulse',
 }
 
 export function StatusBadge({ state, label, showDot = true }: StatusBadgeProps) {

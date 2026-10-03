@@ -87,9 +87,11 @@ export function useDeleteUser() {
     mutationFn: async (uid: string) => {
       await deleteAdminUser(uid)
     },
-    onSuccess: () => {
+    onSuccess: (_, uid) => {
       qc.invalidateQueries({ queryKey: ['admin_users'] })
       qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['castles'] })
+      qc.invalidateQueries({ queryKey: ['castles', uid] })
     },
   })
 }

@@ -2,9 +2,10 @@
 """
 tasks/gold_gather.py — مهمة جمع الذهب وموارد التحالف الذكية والشاملة
 ═════════════════════════════════════════════════════════════════════════════
-
+python tasks/gold_gather.py --email "sumo-1234@hotmil.com" --tag "TIA" -x 405 -y 314 --check-only
 الاستخدام الشامل (يعتمد على رمز التحالف وإحداثيات قيادة التحالف المستهدف):
 
+python tasks/gold_gather.py --email "sumo-1234@hotmil.com" --tag "TIA" -x 405 -y 314 --range 400 --check-only
   1. فحص واكتشاف حقول الذهب المتاحة فقط دون إرسال مسيرات:
      python tasks/gold_gather.py --email "burcudemr@gmail.com" --tag "POL" -x 241 -y 260 --check-only
 
@@ -15,7 +16,7 @@ tasks/gold_gather.py — مهمة جمع الذهب وموارد التحالف 
      python tasks/gold_gather.py --email "burcudemr@gmail.com" --tag "POL" --coords "241,260" --marches 4
 
 
-   python tasks/gold_gather.py --email "hmzawyha44@gmail.com" --tag "A22" -x 347 -y 244
+   python tasks/gold_gather.py --email "sumo-1234@hotmil.com" --tag "TIA" -x 405 -y 314
   
 
 🚩 آلية العمل الذكية:
@@ -44,6 +45,7 @@ import asyncio
 import json
 import logging
 import math
+import random
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -262,59 +264,19 @@ def _pick_gather_heroes(heroes: list, max_count: int = 1, busy: Set[int] = None)
 
 
 # ════════════════════════════════════════════════════════════════════
-#  اختيار تشكيلة الجيش التلقائي (عربات النقل أولاً)
+#  استيراد منظومة حساب سعة الحمولة واختيار تشكيلة الجيش من tasks/gather.py
 # ════════════════════════════════════════════════════════════════════
 
-def select_gathering_army(available: Dict[int, int], needed_count: int = 25000) -> List[Dict[str, int]]:
-    """
-    أولوية اختيار الجيش:
-    1. عربات النقل (701..714) لتعظيم حمولة الموارد وتقليل استهلاك الجنود
-    2. مشاة (400..499)
-    3. فرسان (500..599)
-    4. رماة (600..699)
-    ملاحظة هامة: يُمنع بتاتاً تضمين أسلحة الدفاع وفخاخ الجدار (800 فما فوق) لأن إرسالها يسبب خطأ 8062 من السيرفر.
-    """
-    carts    = []
-    infantry = []
-    cavalry  = []
-    archers  = []
-
-    for tid, count in available.items():
-        if count <= 0:
-            continue
-        if 700 <= tid < 800:
-            carts.append((tid, count))
-        elif 400 <= tid < 500:
-            infantry.append((tid, count))
-        elif 500 <= tid < 600:
-            cavalry.append((tid, count))
-        elif 600 <= tid < 700:
-            archers.append((tid, count))
-
-    carts.sort(key=lambda x: x[0], reverse=True)
-    infantry.sort(key=lambda x: x[0], reverse=True)
-    cavalry.sort(key=lambda x: x[0], reverse=True)
-    archers.sort(key=lambda x: x[0], reverse=True)
-
-    army_list = []
-    remaining = needed_count
-
-    for group in [carts, infantry, cavalry, archers]:
-        for tid, count in group:
-            avail = available.get(tid, 0)
-            if avail <= 0:
-                continue
-            take = min(avail, remaining)
-            if take > 0:
-                army_list.append({"id": tid, "num": take})
-                available[tid] -= take
-                remaining -= take
-                if remaining <= 0:
-                    break
-        if remaining <= 0:
-            break
-
-    return army_list
+from tasks.gather import (
+    RESOURCE_WEIGHT_MULTIPLIERS,
+    get_resource_multiplier,
+    UNIT_FREE_WEIGHTS,
+    calculate_unit_capacity,
+    fetch_war_boe_pload,
+    calculate_load_bonus,
+    calculate_estimated_march_capacity,
+    select_gathering_army,
+)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -370,6 +332,7 @@ class GoldGatherTask(BaseTask):
         self.kingdom_id         : int    = 0
         self.min_res            : int    = DEFAULT_MIN_RESOURCES
         self.min_ratio          : float  = DEFAULT_MIN_RES_RATIO
+        self._learned_max_march_troops: Optional[int] = None
 
     def _capture_local_queues(self, cmd, sub, packet):
         if isinstance(packet, dict):
@@ -626,7 +589,7 @@ class GoldGatherTask(BaseTask):
                 r_search = await self.conn.query('2011', '3', {
                     "mapType": 5,
                     "subType": st,
-                    "num": 100,
+                    "num": 400,
                     "x": int(cx),
                     "y": int(cy),
                     "minLv": min_lv,
@@ -673,7 +636,8 @@ class GoldGatherTask(BaseTask):
                 dist   = round(((tx - cx) ** 2 + (ty - cy) ** 2) ** 0.5, 1)
 
                 try:
-                    r22 = await self.conn.query('1006', '22', {"x": tx, "y": ty, "id": str(cid)}, timeout=2.0)
+                    await asyncio.sleep(0.3) # مهلة أمان قصيرة جداً لمنع السيرفر من تجاهل طلباتنا
+                    r22 = await self.conn.query('1006', '22', {"x": tx, "y": ty, "id": str(cid)}, timeout=5.0)
                     ret22 = r22.get('retData', {}) if (r22 and isinstance(r22, dict)) else {}
 
                     tags = self._extract_tags(
@@ -729,7 +693,9 @@ class GoldGatherTask(BaseTask):
                         "is_our_tag": is_our_tag,
                         "cand": cand
                     })
-                except Exception:
+                except Exception as e:
+                    if self.config.get('check_only'):
+                        self.log.warning(f"⚠️ تعذر فحص الحقل ({tx}, {ty}) بسبب تأخر السيرفر بالرد.")
                     continue
 
             if best_mines:
@@ -928,7 +894,10 @@ class GoldGatherTask(BaseTask):
 
             res_title = "🪙 ذهب التحالف (Gold)" if active_subtype == SUBTYPE_GOLD else "🔮 ميثريل/ذهب السماء (Sky Gold)"
             self.log.info(f"🎯 تم العثور على {len(mines)} حقل مؤكد وتابع لـ [{alliance_tag}] من نوع {res_title}:")
-            for idx, m in enumerate(mines[:8], 1):
+            
+            # عرض كافة الحقول في وضع الفحص، أو 8 فقط في وضع الهجوم لمنع زحمة السجلات
+            print_limit = len(mines) if check_only else 8
+            for idx, m in enumerate(mines[:print_limit], 1):
                 tot_str = f"/{m['total']:,}" if m.get('total') else ""
                 self.log.info(
                     f"   {idx}. حقل ({m['x']}, {m['y']}) لفل={m['lv']} | مسافة={m['dist']} مربعات | "
@@ -937,13 +906,13 @@ class GoldGatherTask(BaseTask):
 
             # في حال طلب الفحص فقط (--check-only)
             if check_only:
-                sample_check_mines.extend(mines[:5])
+                sample_check_mines.extend(mines) # تم إزالة القيد [:5] لاستخراج الكل
                 if idx_alliance < len(target_alliances):
                     continue
                 return TaskResult.ok(
-                    f"✅ تم اكتشاف {len(sample_check_mines)} حقل ذهب متاح عبر التحالفات المحددة",
+                    f"✅ تم اكتشاف واستخراج {len(sample_check_mines)} حقل ذهب متاح بالكامل عبر التحالفات المحددة",
                     total_found=len(sample_check_mines),
-                    sample_mines=sample_check_mines
+                    all_mines=sample_check_mines
                 )
 
             # إرسال المسيرات نحو الحقول المكتشفة في هذا التحالف
@@ -1204,40 +1173,10 @@ class GoldGatherTask(BaseTask):
 
         chosen_hero = heroes[0]
 
-        # 2. حساب عدد الجنود المطلوب (عربة النقل تحمل ~25 مورد)
-        if troops_cfg:
-            needed_troops = int(troops_cfg)
-        elif cur_res > 0:
-            # إذا كان ذهب عادي (31500) نحتاج ~1500-25000 عربة
-            needed_troops = max(15000, cur_res // 25)
-        else:
-            needed_troops = 25000
-
-        # 3. جلب القوات المتوفرة بالقلعة لحظياً من السيرفر (فقط الجنود المتنقلون 400..799)
-        available: Dict[int, int] = {}
-        r_army = await self.conn.query('1005', '1', {})
-        if r_army and 'data' in r_army:
-            for k, v in r_army['data'].get('totalArmy', {}).items():
-                if str(k).isdigit() and str(v).isdigit():
-                    tid = int(k)
-                    # استبعاد أسلحة وفخاخ الجدار (800+) لأنها لا تسير في المسيرات
-                    if 400 <= tid < 800:
-                        val = int(v)
-                        if val > 0:
-                            available[tid] = val
-
-        # 4. تشكيل الجيش (عربات نقل أولاً)
-        army_list = select_gathering_army(available, needed_count=needed_troops)
-        if not army_list:
-            self.log.warning("⚠️ لا توجد قوات متوفرة بالقلعة لإرسال المسيرة!")
-            return "NO_ARMY"
-
-        total_troops = sum(item['num'] for item in army_list)
-
-        # 5. اختيار الحيوان الأليف تلقائياً
+        # 2. اختيار الحيوان الأليف تلقائياً
         pets_list = select_gathering_pet(self.conn, self._used_pets)
 
-        # 6. جلب معرف المملكة (kingdom_id)
+        # 3. جلب معرف المملكة (kingdom_id)
         kingdom_id = 0
         if self.conn.kingdom_id:
             try: kingdom_id = int(self.conn.kingdom_id)
@@ -1249,9 +1188,9 @@ class GoldGatherTask(BaseTask):
                 kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
 
         # نوع المورد في حزمة المسيرة 1007/2 هو: 1000 + actual_subtype
-        resource_type_id = 1000 + int(actual_subtype)
+        resource_type_id = int(mine.get('resourceType') or (1000 + int(actual_subtype)))
 
-        # 6.5 فحص فوري ثانٍ آني وشامل (Just-In-Time) قبل لحظة الإرسال مباشرة لتفادي مسيرات الآخرين وحروب الموارد
+        # 4. فحص فوري ثانٍ آني وشامل (Just-In-Time) قبل تجهيز الجيش لتفادي مسيرات الآخرين وحروب الموارد
         is_locked, lock_reason, fresh_rem = await self._is_tile_locked(mine, kingdom_id)
         if is_locked:
             self.log.warning(
@@ -1262,10 +1201,88 @@ class GoldGatherTask(BaseTask):
         if fresh_rem > 0:
             cur_res = fresh_rem
 
-        self.log.info(
-            f"🛡️ إعداد المسيرة → الحقل ({tx}, {ty}) | بطل={chosen_hero} | "
-            f"جنود={total_troops:,} | نوع المورد={resource_type_id} | حيوان={pets_list}"
+        # 5. حساب مضاعف الحمولة وسعة النقل المطلوبة وفق كود اللعبة الأصلي (worldDispatchArmyView.lua)
+        multiplier = get_resource_multiplier(resource_type_id, actual_subtype)
+        target_load = int(cur_res * multiplier)
+        self.log.info(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} مورد × مضاعف وزن {multiplier:g} = سعة حمولة مطلوبة: {target_load:,}")
+
+        # 6. جلب القوات المتوفرة بالقلعة لحظياً من السيرفر (فقط الجنود المتنقلون 400..799) وخصم المسيرات السابقة
+        available: Dict[int, int] = {}
+        r_army = await self.conn.query('1005', '1', {})
+        if r_army and 'data' in r_army:
+            for k, v in r_army['data'].get('totalArmy', {}).items():
+                if str(k).isdigit() and str(v).isdigit():
+                    tid = int(k)
+                    if 400 <= tid < 800:
+                        val = int(v)
+                        if val > 0:
+                            available[tid] = val
+
+        for tid, used in self._used_army.items():
+            if tid in available:
+                available[tid] = max(0, available[tid] - used)
+
+        # استعلام سمات الحرب للحمولة من السيرفر وتحديث الكاش إن لم تكن متوفرة
+        try:
+            await fetch_war_boe_pload(self.conn)
+        except Exception:
+            pass
+
+        # 7. حساب بونص سعة الحمولة الحقيقي وتشكيل الجيش
+        load_bonus = calculate_load_bonus(
+            self.conn,
+            sub_type=actual_subtype,
+            hero_list=[chosen_hero] if chosen_hero else []
         )
+
+        min_load_ratio = float(self.config.get("min_load_ratio", 0.25))
+        allow_partial = bool(self.config.get("allow_partial", True))
+
+        # تحديد سعة مسيرة اللورد ومعسكر التجمع القصوى (لمنع خطأ 8035)
+        max_march_troops = self._learned_max_march_troops
+        if not max_march_troops:
+            cfg_troops = self.config.get("max_march_troops")
+            if cfg_troops:
+                try: max_march_troops = int(cfg_troops)
+                except Exception: pass
+        if not max_march_troops:
+            max_march_troops = calculate_estimated_march_capacity(getattr(self.conn, 'init_data', {}))
+
+        if troops_cfg:
+            try: max_march_troops = min(max_march_troops or 999999, int(troops_cfg))
+            except Exception: pass
+
+        army_list, carried_load = select_gathering_army(
+            available,
+            target_load=target_load,
+            load_bonus=load_bonus,
+            allow_partial=allow_partial,
+            min_ratio=min_load_ratio,
+            max_march_troops=max_march_troops
+        )
+        if not army_list:
+            self.log.warning(
+                f"⚠️ القوات المتاحة بالقلعة أقل من الحد الأدنى المقبول ({int(min_load_ratio * 100)}% - ربع الحقل) "
+                f"لمسح الحقل (سعة متوفرة: {carried_load:,} / مطلوب: {target_load:,}) — تجنب إرسال مسيرة هزيلة جداً."
+            )
+            return "NO_ARMY"
+
+        total_troops = sum(item['num'] for item in army_list)
+        carts_troops = sum(item['num'] for item in army_list if 700 <= item['id'] < 800)
+        eff_cart1_w = calculate_unit_capacity(701, load_bonus=load_bonus)
+        eff_cart9_w = calculate_unit_capacity(709, load_bonus=load_bonus)
+        coverage_pct = (carried_load / target_load * 100) if target_load > 0 else 100.0
+        march_note = f" (مسيرة جزئية: تغطي {coverage_pct:.1f}% من الحقل)" if coverage_pct < 98.0 else " (مسح كامل 100%)"
+        cap_note = f" [سقف معسكر التجمع: {max_march_troops:,}]" if (max_march_troops and total_troops >= max_march_troops) else ""
+        self.log.info(
+            f"   🛡️ القوات المختارة{march_note}{cap_note}: {total_troops:,} جندي (منها {carts_troops:,} عربة) | "
+            f"سعة ع1: {eff_cart1_w:.1f} | سعة ع9: {eff_cart9_w:.1f} (بونص حساب: +{load_bonus*100:.1f}%) | حمولة المسيرة: {carried_load:,} / مطلوب: {target_load:,}"
+        )
+
+        # محاكاة بشرية طبيعية قبل إطلاق المسيرة (تجهيز الجيش والعتاد 2.0 - 3.5 ثانية)
+        prep_wait = round(random.uniform(2.2, 3.8), 2)
+        self.log.info(f"   ⏳ [محاكاة بشرية] تجهيز تفاصيل المسيرة ({prep_wait} ثانية)...")
+        await asyncio.sleep(prep_wait)
 
         # 7. إرسال حزمة المسيرة 1007/2
         r_march = await self.conn.query('1007', '2', {
@@ -1309,6 +1326,10 @@ class GoldGatherTask(BaseTask):
         elif err == '9007020':
             self._busy.add(chosen_hero)
             return "HERO_BUSY"
+        elif err == '8035':
+            self.log.warning(f"⚠️ تجاوز سعة المسيرة القصوى (كود 8035) — سيتم تقليص سقف المسيرة تلقائياً")
+            self._learned_max_march_troops = int(total_troops * 0.9)
+            return "ERROR"
         elif err in ('8062', '8063', '8060', '9007062'):
             self.log.warning(f"⚠️ الهدف {target_id} مشغول أو ممتلئ (كود {err}) — تخطي")
             self._exclude.add(target_id)

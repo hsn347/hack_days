@@ -145,14 +145,72 @@ class SessionManager:
                         pass
                 raise
 
+    def remove_session(self, email: str):
+        """حذف جلسة حساب معينة بأمان وذرياً عند حذف القلعة."""
+        if not email:
+            return
+        clean_target = email.strip().lower()
+        with _SESSION_LOCK:
+            existing = self._read_raw(self.cache_path)
+            if existing is None:
+                return
+            accounts = existing.get("accounts", {})
+            matched = [k for k in accounts if k.strip().lower() == clean_target]
+            if not matched:
+                return
+            for k in matched:
+                accounts.pop(k, None)
+            existing["accounts"] = accounts
+
+            tmp_path = self.cache_path + f".tmp.{os.getpid()}.{threading.get_ident()}"
+            try:
+                with open(tmp_path, 'w', encoding='utf-8') as f:
+                    json.dump(existing, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, self.cache_path)
+                log.info(f"🗑️ تم حذف جلسة {clean_target} من {self.cache_path}")
+            except Exception as e:
+                log.warning(f"⚠️ فشل حذف جلسة {clean_target} من {self.cache_path}: {e}")
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+
     # ── تسجيل دخول وحفظ ───────────────────────────────────────────
 
+    _LAST_AUTH_ERRORS: Dict[str, str] = {}
+
+    @classmethod
+    def get_last_error(cls, email: str) -> Optional[str]:
+        return cls._LAST_AUTH_ERRORS.get(email.strip().lower())
+
     def login_and_save(self, email: str, password: str) -> Optional[AccountSession]:
-        """تسجيل دخول ببريد وكلمة مرور وحفظ الجلسة."""
+        """تسجيل دخول ببريد وكلمة مرور وحفظ الجلسة مع تصنيف دقيق للأخطاء."""
+        clean_email = email.strip().lower()
         res = onemt_auth.sdk_login(email, password)
         if not res.get('success'):
-            log.error(f"❌ فشل تسجيل الدخول لـ {email}: {res.get('error_msg')}")
+            err_code = str(res.get('error_code', ''))
+            raw_err  = str(res.get('error_msg', ''))
+            
+            if err_code == 'BUSINESS_ACCOUNT_PASSWORD_LIMIT' or 'كلمة السر خاطئة' in raw_err:
+                msg = "❌ كلمة المرور غير صحيحة (تأكد من كتابتها بدقة)"
+            elif err_code == 'BUSINESS_ACCOUNT_FORBIDDEN' or 'إيقاف فاعلية الحساب' in raw_err:
+                msg = "🛑 تم إيقاف الحساب لمدة ساعة من اللعبة بسبب تكرار كلمة المرور 5 مرات"
+            elif err_code in ('INVALID_USER', 'USER_NOT_EXIST', 'ACCOUNT_NOT_EXIST') or 'غير موجود' in raw_err:
+                msg = "❌ البريد الإلكتروني غير مسجل أو غير صحيح"
+            elif raw_err:
+                msg = f"❌ فشل تسجيل الدخول: {raw_err}"
+            else:
+                msg = "❌ خطأ في البريد أو كلمة المرور"
+
+            self._LAST_AUTH_ERRORS[clean_email] = msg
+            log.error(f"❌ فشل تسجيل الدخول لـ {email}: {msg}")
             return None
+
+        # نجاح تسجيل الدخول — مسح أي خطأ سابق
+        self._LAST_AUTH_ERRORS.pop(clean_email, None)
         uid = str(res['userId'])
         sid = str(res['sessionId'])
         self.save_session(email, uid, sid, source="sdk_login")
@@ -186,6 +244,7 @@ class SessionManager:
         2. إذا لم تكن موجودة، يتم جلب كلمة المرور (سواء الممررة أو من SQLite).
         3. تسجيل الدخول وحفظ الجلسة في session_cache.json تلقائياً ثم إعادتها.
         """
+        clean_email = email.strip().lower()
         # 1. البحث في الكاش أولاً
         sessions = self.load()
         if email in sessions:
@@ -201,7 +260,9 @@ class SessionManager:
             log.info(f"🔑 [{email}] لم يتم العثور على الجلسة في الكاش — جاري تسجيل الدخول وحفظها في session_cache.json تلقائياً...")
             return self.login_and_save(email, pwd)
 
-        log.warning(f"⚠️ [{email}] غير موجود في session_cache.json ولا تتوفر كلمة مرور لتسجيل دخوله!")
+        msg = "❌ لا توجد كلمة مرور مسجلة للقلعة لتسجيل الدخول"
+        self._LAST_AUTH_ERRORS[clean_email] = msg
+        log.warning(f"⚠️ [{email}] {msg}")
         return None
 
     def refresh_session(
@@ -212,6 +273,7 @@ class SessionManager:
         castle_id: Optional[str] = None
     ) -> Optional[AccountSession]:
         """تجديد إجباري للجلسة بكلمة المرور وتحديث session_cache.json."""
+        clean_email = email.strip().lower()
         pwd = password
         if not pwd:
             pwd = self._fetch_password_from_db(castle_id=castle_id, email=email)
@@ -220,5 +282,13 @@ class SessionManager:
             log.info(f"🔄 [{email}] تجديد الجلسة بكلمة المرور وتحديث session_cache.json...")
             return self.login_and_save(email, pwd)
 
+        msg = "❌ لا توجد كلمة مرور مسجلة لتجديد الجلسة"
+        self._LAST_AUTH_ERRORS[clean_email] = msg
         return None
+
+
+def get_last_auth_error(email: str) -> Optional[str]:
+    """دالة مساعدة عامة لاستخراج آخر خطأ مصادقة للحساب."""
+    return SessionManager.get_last_error(email)
+
 

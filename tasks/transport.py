@@ -9,7 +9,11 @@ tasks/transport.py — مهمة نقل وإمداد الموارد (Resource Tra
     1002 : 🌾 قمح (Food)
     1003 : 🪵 خشب (Wood)
     1004 : ⛏️ حديد / حجر (Iron / Stone)
-    1005 : 💎 ألماس / ذهب (Diamond / Gold)
+    1005 : 💎 ألماس / ذهب (Diamond / Gold).
+
+
+python tasks/transport.py --email "x.abd3@gmail.com"
+
 
 الإعدادات (config / Firebase):
     target_x          : إحداثي X للقلعة الهدف [افتراضي: 487]
@@ -41,14 +45,14 @@ from game_client import GameConnection
 #  إعدادات افتراضية في رأس الملف (قابلة للتعديل والربط بـ Firebase)
 # ════════════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_X           = 344              # إحداثي X للهدف
-DEFAULT_TARGET_Y           = 447              # إحداثي Y للهدف
-DEFAULT_RESOURCE_IDS       = [1002 , 1003 , 1004 , 1005]           # [1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس/ذهب]
+DEFAULT_TARGET_X           = 484              # إحداثي X للهدف
+DEFAULT_TARGET_Y           = 287              # إحداثي Y للهدف
+DEFAULT_RESOURCE_IDS       = [1002,1003,1004]           # [1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس/ذهب]
 
 
-DEFAULT_MAX_CAPACITY       = 759000           # سعة الحمولة الكلية للقلعة (المستوى 40)
-DEFAULT_TAX_RATE           = 0.10             # نسبة ضريبة السوق (10%)
-DEFAULT_MAX_MARCHES        = 18                # الحد الأقصى للفيالق المتتالية
+DEFAULT_MAX_CAPACITY       = 690000           # سعة الحمولة لمبنى السوق بالحد الأقصى (المستوى 30)
+DEFAULT_TAX_RATE           = 0.10             # نسبة ضريبة السوق الافتراضية للفل 30 (10%)
+DEFAULT_MAX_MARCHES        = 18               # الحد الأقصى للفيالق المتتالية
 
 # أوزان الموارد في نظام اللعبة (Resource Weights)
 # 1 قمح = 1 خشب | 1 حديد = 6 قمح | 1 ألماس = 24 قمح
@@ -66,61 +70,137 @@ RESOURCE_NAMES = {
     1005: "💎 ألماس/ذهب",
 }
 
+# ════════════════════════════════════════════════════════════════════
+#  جدول سعة السوق والضريبة الرسمية من بيانات اللعبة (build112.lua)
+# ════════════════════════════════════════════════════════════════════
+MARKET_LEVEL_DATA: Dict[int, Tuple[int, float]] = {
+    1:  (20000, 0.45),   # ضريبة: 45.0%
+    2:  (40000, 0.44),   # ضريبة: 44.0%
+    3:  (60000, 0.43),   # ضريبة: 43.0%
+    4:  (80000, 0.42),   # ضريبة: 42.0%
+    5:  (100000, 0.41),  # ضريبة: 41.0%
+    6:  (120000, 0.40),  # ضريبة: 40.0%
+    7:  (140000, 0.39),  # ضريبة: 39.0%
+    8:  (160000, 0.38),  # ضريبة: 38.0%
+    9:  (180000, 0.37),  # ضريبة: 37.0%
+    10: (200000, 0.36),  # ضريبة: 36.0%
+    11: (220000, 0.35),  # ضريبة: 35.0%
+    12: (240000, 0.34),  # ضريبة: 34.0%
+    13: (270000, 0.33),  # ضريبة: 33.0%
+    14: (290000, 0.32),  # ضريبة: 32.0%
+    15: (320000, 0.31),  # ضريبة: 31.0%
+    16: (340000, 0.30),  # ضريبة: 30.0%
+    17: (370000, 0.29),  # ضريبة: 29.0%
+    18: (390000, 0.28),  # ضريبة: 28.0%
+    19: (420000, 0.27),  # ضريبة: 27.0%
+    20: (440000, 0.26),  # ضريبة: 26.0%
+    21: (470000, 0.25),  # ضريبة: 25.0%
+    22: (490000, 0.24),  # ضريبة: 24.0%
+    23: (520000, 0.23),  # ضريبة: 23.0%
+    24: (540000, 0.22),  # ضريبة: 22.0%
+    25: (570000, 0.21),  # ضريبة: 21.0%
+    26: (590000, 0.19),  # ضريبة: 19.0%
+    27: (620000, 0.17),  # ضريبة: 17.0%
+    28: (640000, 0.15),  # ضريبة: 15.0%
+    29: (670000, 0.13),  # ضريبة: 13.0%
+    30: (690000, 0.10),  # ضريبة: 10.0%
+}
+
 
 def get_market_capacity_for_level(level: int) -> Tuple[int, float]:
     """
-    حساب سعة الحمولة الكلية ونسبة الضريبة بدقة لأي مستوى من مستويات مبنى السوق (1 إلى 100).
-    المستوى 1: 10,000 (ضريبة 40%)
-    المستوى 40: 759,000 (ضريبة 10%)
+    استرجاع سعة السوق الأساسية ونسبة الضريبة لمستوى السوق من الجدول الرسمي (1 إلى 30).
     """
-    lv = max(1, min(100, int(level)))
-    if lv <= 40:
-        cap = int(10000 + (lv - 1) * (759000 - 10000) / 39)
-        tax = max(0.10, 0.40 - (lv - 1) * (0.40 - 0.10) / 39)
-    else:
-        cap = int(759000 + (lv - 40) * 30000)
-        tax = max(0.02, 0.10 - (lv - 40) * 0.0015)
-    return cap, round(tax, 4)
+    lv = max(1, min(30, int(level)))
+    return MARKET_LEVEL_DATA.get(lv, (180000, 0.37))
 
 
 def get_market_capacity_from_conn(conn: GameConnection) -> Tuple[int, float]:
     """
-    استخراج مستوى مبنى السوق (bid=113) تلقائياً من بيانات القلعة واستنتاج السعة ونسبة الضريبة.
+    استخراج مستوى مبنى السوق (bid=112) تلقائياً من بيانات القلعة واستنتاج السعة والضريبة الأساسية.
     """
     try:
         blist = conn.init_data.get('cityCtrl', {}).get('blist', [])
-        market_lv = None
         for b in blist:
             binfo = b.get('binfo', {})
-            if str(binfo.get('bid', '')) == '113':
-                market_lv = int(binfo.get('lv', 40))
-                break
-
-        if market_lv is not None:
-            cap, tax = get_market_capacity_for_level(market_lv)
-            return cap, tax
+            if str(binfo.get('bid', '')) == '112':
+                return get_market_capacity_for_level(int(binfo.get('lv', 1)))
     except Exception:
         pass
 
     return DEFAULT_MAX_CAPACITY, DEFAULT_TAX_RATE
 
 
-def calculate_resource_allocation(res_ids: List[int], total_capacity: int = DEFAULT_MAX_CAPACITY, tax_rate: float = DEFAULT_TAX_RATE) -> List[Dict[str, int]]:
+async def get_full_market_capacity(conn: GameConnection) -> Tuple[int, float, int, int]:
     """
-    حساب الكميات الصافية الدقيقة لكل مورد بناءً على أوزان الموارد وضريبة السوق.
-    المعادلة: Net_Capacity = Total_Capacity * (1 - TaxRate)
-    لكل مورد: Amount = Net_Capacity / (عدد_الموارد * وزن_المورد)
+    حساب سعة حمولة القافلة الإجمالية بدقة 100% كما في كود اللعبة (buildLogic.getMarketWeight):
+    1. استخراج مستوى مبنى السوق (bid=112) من cityCtrl.blist.
+    2. قراءة السعة الأساسية والضريبة من جدول build112.lua.
+    3. جلب علوم التحالف (cmd: 1010, subcmd: 75) واستخراج تقنية قدرة التجارة TRADING_WEIGHT (id: 33002).
+    4. السعة الإجمالية = السعة الأساسية + (السعة الأساسية * نسبة علوم التحالف).
+
+    ترجع: (إجمالي_السعة, نسبة_الضريبة, السعة_الأساسية, الزيادة_الإضافية)
+    """
+    _log = logging.getLogger("task.transport")
+    try:
+        blist = conn.init_data.get('cityCtrl', {}).get('blist', [])
+        market_lv = None
+        for b in blist:
+            binfo = b.get('binfo', {})
+            if str(binfo.get('bid', '')) == '112':
+                market_lv = int(binfo.get('lv', 1))
+                break
+
+        if market_lv is None:
+            market_lv = 9
+            _log.warning(f"⚠️ لم يُعثر على مبنى السوق (bid=112) في blist ({len(blist)} مباني) — استخدام لفل افتراضي: {market_lv}")
+
+        base_cap, tax = get_market_capacity_for_level(market_lv)
+
+        # استعلام علوم التحالف لتقنية TRADING_WEIGHT (33002)
+        sci_bonus_pct = 0.0
+        try:
+            r_sci = await conn.query('1010', '75', {}, timeout=5)
+            if r_sci and 'data' in r_sci:
+                scilist = r_sci['data'].get('retdata', {}).get('scilist', {})
+                if isinstance(scilist, dict):
+                    for group in scilist.values():
+                        if isinstance(group, list):
+                            for item in group:
+                                if item.get('id') == 33002:
+                                    sci_lv = int(item.get('lv', 0))
+                                    sci_bonus_pct = sci_lv * 0.01  # كل مستوى يمنح 1% زيادة
+                                    break
+                else:
+                    _log.warning(f"⚠️ scilist ليس dict بل {type(scilist).__name__} — تخطي بونص علوم التحالف")
+            else:
+                _log.warning(f"⚠️ استعلام علوم التحالف (1010/75) لم يرجع data — بدون بونص سعة")
+        except Exception as e:
+            _log.warning(f"⚠️ فشل استعلام علوم التحالف (1010/75): {e} — بدون بونص سعة")
+
+        add_cap = int(base_cap * sci_bonus_pct)
+        total_cap = base_cap + add_cap
+        return total_cap, tax, base_cap, add_cap
+
+    except Exception as e:
+        _log.error(f"❌ فشل حساب سعة السوق بالكامل: {e} — استخدام القيم الافتراضية (لفل 30: {DEFAULT_MAX_CAPACITY:,})")
+
+    return DEFAULT_MAX_CAPACITY, DEFAULT_TAX_RATE, DEFAULT_MAX_CAPACITY, 0
+
+
+def calculate_resource_allocation(res_ids: List[int], total_capacity: int = DEFAULT_MAX_CAPACITY) -> List[Dict[str, int]]:
+    """
+    حساب الكميات لكل مورد بناءً على السعة الإجمالية للقافلة وأوزان الموارد.
+    (ملاحظة: اللعبة تخصم الضريبة عند الاستلام، بينما ترسل القافلة بكامل سعتها).
     """
     if not res_ids:
         return []
 
-    net_capacity = total_capacity * (1.0 - tax_rate)
     n = len(res_ids)
-
     result = []
     for rid in res_ids:
         w = RESOURCE_WEIGHTS.get(int(rid), 1)
-        amount = int(net_capacity / (n * w))
+        amount = int(total_capacity / (n * w))
         result.append({
             "id": int(rid),
             "num": amount
@@ -132,17 +212,15 @@ def calculate_resource_allocation(res_ids: List[int], total_capacity: int = DEFA
 def calculate_dynamic_resource_allocation(
     available_dict: Dict[int, int],
     res_ids: List[int],
-    total_capacity: int = DEFAULT_MAX_CAPACITY,
-    tax_rate: float = DEFAULT_TAX_RATE
+    total_capacity: int = DEFAULT_MAX_CAPACITY
 ) -> List[Dict[str, int]]:
     """
-    توزيع ديناميكي ذكي بنسبة 100% من سعة السوق على الموارد المتوفرة بالقلعة حصراً:
-    - يستبعد الموارد ذات الرصيد الصفري أو المحمي.
-    - يقسم السعة بالتساوي بين الموارد المتاحة مع مراعاة أوزان الموارد (Food=1, Wood=1, Iron=6, Diamond=24).
-    - إذا كان أحد الموارد لا يكفي لحصته، يأخذ كامل رصيده المتاح ويُعاد توزيع السعة المتبقية فوراً على بقية الموارد.
-    - يضمن استغلال 100% من سعة السوق في كل مسيرة دون ترك أي سعة فارغة.
+    توزيع ديناميكي ذكي بنسبة 100% من سعة السوق على الموارد المتوفرة بالقلعة:
+    - يقسم السعة الإجمالية للقافلة على الموارد المتاحة مع مراعاة أوزان الموارد (Food=1, Wood=1, Iron=6, Diamond=24).
+    - إذا كان أحد الموارد غير كافٍ، يأخذ المتاح منه ويعيد توزيع المتبقي على بقية الموارد.
+    - يستغل 100% من سعة القافلة دون خصم الضريبة من كمية الإرسال (اللعبة تخصم الضريبة من المستلم).
     """
-    net_capacity = float(total_capacity) * (1.0 - tax_rate)
+    capacity = float(total_capacity)
 
     # 1. فلترة الموارد التي لها رصيد متاح > 0
     active_rids = [int(rid) for rid in res_ids if available_dict.get(int(rid), 0) > 0]
@@ -150,12 +228,12 @@ def calculate_dynamic_resource_allocation(
         return []
 
     allocated: Dict[int, int] = {rid: 0 for rid in active_rids}
-    remaining_net_capacity = net_capacity
+    remaining_capacity = capacity
     remaining_rids = list(active_rids)
 
-    while remaining_rids and remaining_net_capacity > 1.0:
+    while remaining_rids and remaining_capacity > 1.0:
         n = len(remaining_rids)
-        share_per_res = remaining_net_capacity / n
+        share_per_res = remaining_capacity / n
         newly_exhausted = []
 
         for rid in remaining_rids:
@@ -165,11 +243,11 @@ def calculate_dynamic_resource_allocation(
 
             if avail_units <= max_units_for_share:
                 allocated[rid] += avail_units
-                remaining_net_capacity -= avail_units * w
+                remaining_capacity -= avail_units * w
                 newly_exhausted.append(rid)
             else:
                 allocated[rid] += max_units_for_share
-                remaining_net_capacity -= max_units_for_share * w
+                remaining_capacity -= max_units_for_share * w
 
         if not newly_exhausted or newly_exhausted == remaining_rids:
             break
@@ -203,8 +281,7 @@ async def get_target_castle_info(conn: GameConnection, tx: int, ty: int, search_
                     return obj
 
             if results:
-                closest = min(results, key=lambda o: abs(o.get('x', 0) - tx) + abs(o.get('y', 0) - ty))
-                return closest
+                conn.log.warning(f"⚠️ لم يُعثر على قلعة بالضبط عند ({tx}, {ty}) — النتائج الأقرب: {[(o.get('x'), o.get('y'), o.get('id')) for o in results[:3]]}")
     except Exception as e:
         conn.log.warning(f"خطأ في استعلام موقع القلعة ({tx}, {ty}): {e}")
 
@@ -272,11 +349,16 @@ class TransportTask(BaseTask):
         if not kingdom_id:
             kingdom_id = 4
 
-        # 3. حساب سعة الحمولة والضريبة
-        auto_cap, auto_tax = get_market_capacity_from_conn(self.conn)
-        max_cap  = int(cfg.get('max_capacity') or auto_cap)
-        tax_rate = float(cfg.get('tax_rate') or auto_tax)
-        self.log.info(f"🏛️ سعة السوق المعتمدة: {max_cap:,} (ضريبة: {int(tax_rate*100)}%)")
+        # 3. حساب سعة الحمولة والضريبة بدقة
+        if cfg.get('max_capacity'):
+            max_cap = int(cfg['max_capacity'])
+            tax_rate = float(cfg.get('tax_rate', DEFAULT_TAX_RATE))
+            self.log.info(f"🏛️ سعة السوق المحددة يدوياً: {max_cap:,} (ضريبة: {int(tax_rate*100)}%)")
+        else:
+            total_cap, tax_rate, base_cap, add_cap = await get_full_market_capacity(self.conn)
+            max_cap = total_cap
+            bonus_str = f" [أساسي: {base_cap:,} + علوم تحالف: {add_cap:,}]" if add_cap > 0 else ""
+            self.log.info(f"🏛️ سعة السوق المعتمدة: {max_cap:,}{bonus_str} (ضريبة: {int(tax_rate*100)}%)")
 
         # 4. إرسال فيالق متتالية بتوزيع ديناميكي 100%
         sent_count = 0
@@ -284,36 +366,46 @@ class TransportTask(BaseTask):
 
         city = self.conn.init_data.get('cityCtrl', {}) if hasattr(self.conn, 'init_data') else {}
         reslist = city.get('reslist', {}) if isinstance(city, dict) else {}
-        saferes = city.get('saferes', {}) if isinstance(city, dict) else {}
+
+        # تشخيص: طباعة أرصدة الموارد الأولية
+        for rid in res_ids:
+            rid_str = str(rid)
+            tot = float(reslist.get(rid_str, 0))
+            r_name = RESOURCE_NAMES.get(int(rid), rid_str)
+            self.log.info(f"📦 رصيد {r_name}: {int(tot):,} (إجمالي)")
 
         for i in range(1, max_marches + 1):
             self.log.info(f"⚔️ محاولة إرسال فيلق النقل رقم ({i}/{max_marches})...")
 
+            # النقل يرسل من كل الموارد — لا نخصم saferes (المحمي يحمي فقط من النهب)
             avail_dict = {}
             for rid in res_ids:
                 rid_str = str(rid)
                 tot = float(reslist.get(rid_str, 0))
-                saf = float(saferes.get(rid_str, 0))
-                avail_dict[int(rid)] = max(0, int(tot - saf))
+                avail_dict[int(rid)] = max(0, int(tot))
 
             current_march_resources = calculate_dynamic_resource_allocation(
                 available_dict=avail_dict,
                 res_ids=res_ids,
-                total_capacity=max_cap,
-                tax_rate=tax_rate
+                total_capacity=max_cap
             )
 
             if not current_march_resources:
                 self.log.warning("⚠️ لا توجد موارد كافية قابلة للنقل لإرسال فيلق جديد.")
+                for rid in res_ids:
+                    rid_str = str(rid)
+                    r_name = RESOURCE_NAMES.get(int(rid), rid_str)
+                    self.log.warning(f"   📦 {r_name}: متاح={avail_dict.get(int(rid), 0):,}")
                 break
 
             current_payload_units = sum(r['num'] for r in current_march_resources)
+            current_payload_weight = sum(r['num'] * RESOURCE_WEIGHTS.get(r['id'], 1) for r in current_march_resources)
+
+            # تشخيص: تحذير إذا الحمولة أقل من سعة السوق
+            if current_payload_weight < max_cap * 0.95:  # أقل من 95% من السعة
+                self.log.warning(f"⚠️ الحمولة ({current_payload_weight:,} وزن) أقل من سعة السوق ({max_cap:,}) — الموارد المتاحة محدودة")
 
             march_payload = {
-                "needSend": False,
-                "runePages": [1],
-                "heros": [],
-                "pets": [],
                 "matrixType": 4,      # 4 = نقل موارد
                 "moveLineType": 5,    # 5 = مسار خط النقل
                 "mapId": int(kingdom_id),
@@ -326,7 +418,6 @@ class TransportTask(BaseTask):
                     "data": {
                         "resourceList": current_march_resources
                     },
-                    "army": []
                 }
             }
 
@@ -338,8 +429,9 @@ class TransportTask(BaseTask):
             err = str(r_send.get('err', '0'))
             if err == '0':
                 sent_count += 1
-                total_transported += current_payload_units
-                self.log.info(f"✅ تم إرسال فيلق النقل ({i}) بنجاح! 🚚 حمولة: {current_payload_units:,}")
+                total_transported += current_payload_weight
+                res_detail = " + ".join([f"{RESOURCE_NAMES.get(r['id'], r['id'])}:{r['num']:,}" for r in current_march_resources])
+                self.log.info(f"✅ تم إرسال فيلق النقل ({i}) بنجاح! 🚚 وزن: {current_payload_weight:,}/{max_cap:,} | {res_detail}")
 
                 for itm in current_march_resources:
                     r_str = str(itm['id'])
@@ -349,7 +441,11 @@ class TransportTask(BaseTask):
                         except Exception:
                             pass
 
-                await asyncio.sleep(5.0)  # حماية من الحظر - تأخير بين المسيرات
+                try:
+                    await asyncio.sleep(5.0)  # حماية من الحظر - تأخير بين المسيرات
+                except (asyncio.CancelledError, ConnectionError):
+                    self.log.warning(f"⚠️ انقطع الاتصال أثناء الانتظار بين المسيرات — تم إرسال {sent_count} فيلق قبل الانقطاع")
+                    break
             elif err in ('8004', '9007004'):
                 self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (الحد الأقصى - كود {err}).")
                 if sent_count == 0:
@@ -365,7 +461,7 @@ class TransportTask(BaseTask):
                 self.log.error(f"❌ فشل إرسال فيلق النقل - كود الخطأ: {err}")
                 break
 
-        self.log.info(f"🏁 ملخص النقل: تم إرسال {sent_count} فيلق | إجمالي الموارد المنقولة: {total_transported:,}")
+        self.log.info(f"🏁 ملخص النقل: تم إرسال {sent_count} فيلق | إجمالي الموارد المنقولة: {total_transported:,} | سعة الفيلق: {max_cap:,}")
         if sent_count > 0:
             return TaskResult.ok(f"✅ تم إرسال {sent_count} فيلق نقل", sent=sent_count, total=total_transported)
         return TaskResult.fail("لم يتم إرسال أي فيلق نقل", retry_after=180)
@@ -429,9 +525,16 @@ if __name__ == "__main__":
         }
 
         task = TransportTask(conn, task_cfg)
-        result = await task.run()
-        print(f"\n📊 النتيجة النهائية: {result.message} | تفاصيل: {result.data}")
-        await conn.close()
+        try:
+            result = await task.run()
+            print(f"\n📊 النتيجة النهائية: {result.message} | تفاصيل: {result.data}")
+        except (asyncio.CancelledError, ConnectionError, KeyboardInterrupt) as e:
+            print(f"\n⚠️ انقطع التنفيذ: {type(e).__name__}")
+        finally:
+            try:
+                await conn.close()
+            except Exception:
+                pass
 
     asyncio.run(_main())
     

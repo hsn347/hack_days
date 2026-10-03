@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { Plus, Minus, Trash2, Check, RotateCcw, Loader2, SlidersHorizontal, Edit3 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Toggle } from '../ui/Toggle'
-import { TaskTabs } from './TaskTabs'
+import { TaskTabs, TABS } from './TaskTabs'
 import { useUpdateCastleConfig } from '../../hooks/useCastles'
+import { updateCastle } from '../../lib/botApi'
 import type { Castle, TaskTab, CastleConfig, GoldLocation } from '../../types'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -211,12 +211,12 @@ function ResCard({ img, label, selected, onClick }: { img: string; label: string
       className={clsx('task-res-card', selected ? 'selected' : 'unselected')}
       style={{
         flex: '1 1 0',
-        minWidth: '68px',
-        padding: '8px 6px',
-        borderRadius: '10px',
+        minWidth: '58px',
+        padding: '5px 4px',
+        borderRadius: '8px',
         border: selected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
         background: selected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
         cursor: 'pointer',
         transition: 'all 0.15s',
         color: selected ? '#6ee7b7' : '#9ca3af',
@@ -224,7 +224,7 @@ function ResCard({ img, label, selected, onClick }: { img: string; label: string
         fontFamily: 'inherit',
       }}
     >
-      <img src={img} alt={label} style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+      <img src={img} alt={label} style={{ width: '22px', height: '22px', objectFit: 'contain' }}
         onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
       />
       {label}
@@ -251,6 +251,7 @@ function TaskRow({
   enabled: boolean; onToggle: (v: boolean) => void;
   children?: React.ReactNode; comingSoon?: boolean; badge?: React.ReactNode;
 }) {
+  const { t } = useTranslation()
   const { expandedTaskId, toggleTask } = React.useContext(TaskAccordionContext)
   const taskId = id || label
   const hasOptions = Boolean(children)
@@ -319,31 +320,47 @@ function TaskRow({
         }}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 12px', gap: '10px',
+          padding: '6px 10px', gap: '8px',
           cursor: comingSoon ? 'default' : 'pointer',
           userSelect: 'none',
         }}
         className="hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors task-row-header"
       >
         {/* الطرف الأيمن: أيقونة المهمة واسمها */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, flex: 1 }}>
           {img ? (
-            <img src={img} alt={label} style={{ width: '26px', height: '26px', objectFit: 'contain', flexShrink: 0 }}
+            <img src={img} alt={label} style={{ width: '22px', height: '22px', objectFit: 'contain', flexShrink: 0 }}
               onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
           ) : emoji ? (
-            <span style={{ fontSize: '18px', flexShrink: 0 }}>{emoji}</span>
+            <span style={{ fontSize: '15px', flexShrink: 0 }}>{emoji}</span>
           ) : null}
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div className="task-row-label" style={{ color: comingSoon ? '#6b7280' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="task-row-label" style={{ color: comingSoon ? '#6b7280' : '#f0fdf4', fontWeight: 600, fontSize: '12px' }}>
               {label}
             </div>
-            {badge}
+            {badge || (comingSoon && (
+              <span
+                className="task-coming-soon-badge"
+                style={{
+                  fontSize: '10px',
+                  padding: '1px 6px',
+                  borderRadius: '6px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#9ca3af',
+                  fontWeight: 500,
+                  userSelect: 'none',
+                }}
+              >
+                {t('tasks.comingSoon', 'قريباً')}
+              </span>
+            ))}
           </div>
         </div>
 
         {/* الطرف الأيسر: السهم المميز (فقط للمهام ذات الخيارات) + زر التفعيل Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {hasOptions && (
             <button
               type="button"
@@ -359,8 +376,8 @@ function TaskRow({
                   : 'bg-white/[0.07] text-gray-300 hover:text-white hover:bg-white/12 border border-white/10'
               )}
               style={{
-                width: '28px',
-                height: '28px',
+                width: '24px',
+                height: '24px',
               }}
             >
               <svg
@@ -368,8 +385,8 @@ function TaskRow({
                 viewBox="0 0 20 20"
                 fill="currentColor"
                 style={{
-                  width: '16px',
-                  height: '16px',
+                  width: '13px',
+                  height: '13px',
                   transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                   transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
@@ -394,11 +411,11 @@ function TaskRow({
         <div
           className="animate-in duration-200 task-row-children fade-in-50"
           style={{
-            padding: '0 12px 12px',
+            padding: '0 10px 8px',
             borderTop: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div style={{ paddingTop: '10px' }}>{children}</div>
+          <div style={{ paddingTop: '6px' }}>{children}</div>
         </div>
       )}
     </div>
@@ -407,7 +424,7 @@ function TaskRow({
 
 /** عنوان قسم */
 function SectionLabel({ text }: { text: string }) {
-  return <div className="task-section-label" style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>{text}</div>
+  return <div className="task-section-label" style={{ color: '#9ca3af', fontSize: '11px', fontWeight: 500, marginBottom: '4px' }}>{text}</div>
 }
 
 // ─── Resource definitions ────────────────────────────────────────────────────
@@ -553,17 +570,17 @@ const WORKSHOP_MATERIALS = [
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const stepBtn: React.CSSProperties = {
-  width: '28px', height: '28px', borderRadius: '8px',
+  width: '24px', height: '24px', borderRadius: '6px',
   border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.08)',
-  color: '#6ee7b7', cursor: 'pointer', fontSize: '16px',
+  color: '#6ee7b7', cursor: 'pointer', fontSize: '14px',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontFamily: 'inherit',
 }
 
 const inputStyle: React.CSSProperties = {
   width: '100%', background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px',
-  padding: '9px 12px', fontSize: '13px', color: '#f0fdf4',
+  border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px',
+  padding: '6px 10px', fontSize: '12px', color: '#f0fdf4',
   outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
 
@@ -604,7 +621,11 @@ export function TaskTabContent({
     setExpandedTaskId(prev => prev === id ? null : id)
   }
 
-  // Local draft of castle.config — allows multiple edits without immediately saving to Firebase
+  type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+  const [saveStatus, setSaveStatus] = useState<AutoSaveStatus>('idle')
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null)
+
+  // Local draft of castle.config — allows instant optimistic UI updates
   const [draftConfig, setDraftConfig] = useState<CastleConfig>(() =>
     JSON.parse(JSON.stringify(castle.config))
   )
@@ -612,8 +633,16 @@ export function TaskTabContent({
     JSON.parse(JSON.stringify(castle.config))
   )
 
+  const draftConfigRef = useRef<CastleConfig>(draftConfig)
   const lastSavedConfigRef = useRef<CastleConfig>(castle.config)
   const currentCastleIdRef = useRef<string>(castle.id)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isSavingRef = useRef<boolean>(false)
+  const hasPendingSaveRef = useRef<boolean>(false)
+
+  // Always keep draftConfigRef in sync with draftConfig state
+  draftConfigRef.current = draftConfig
 
   // Sync internalTab when externalTab changes
   useEffect(() => {
@@ -629,33 +658,119 @@ export function TaskTabContent({
     setExpandedTaskId(null)
   }, [currentTab])
 
-  // Sync with Firestore when castle changes (switch castle or server refresh)
+  const updateConfig = useUpdateCastleConfig(userId, castle.id)
+
+  const performSave = async () => {
+    if (isBatchMode) return
+    if (isSavingRef.current) {
+      hasPendingSaveRef.current = true
+      return
+    }
+
+    const currentDraft = draftConfigRef.current
+    if (JSON.stringify(currentDraft) === JSON.stringify(lastSavedConfigRef.current)) {
+      return
+    }
+
+    isSavingRef.current = true
+    hasPendingSaveRef.current = false
+    setSaveStatus('saving')
+    setSaveErrorMsg(null)
+
+    try {
+      await updateConfig.mutateAsync(currentDraft)
+      const freshCopy = JSON.parse(JSON.stringify(currentDraft))
+      lastSavedConfigRef.current = freshCopy
+      setSavedConfig(freshCopy)
+      setSaveStatus('saved')
+
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = setTimeout(() => {
+        setSaveStatus('idle')
+      }, 3000)
+    } catch (err) {
+      setSaveStatus('error')
+      setSaveErrorMsg(err instanceof Error ? err.message : 'فشل الحفظ')
+    } finally {
+      isSavingRef.current = false
+      if (hasPendingSaveRef.current) {
+        hasPendingSaveRef.current = false
+        scheduleSave(100)
+      }
+    }
+  }
+
+  const scheduleSave = (delayMs: number = 250) => {
+    if (isBatchMode) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      performSave()
+    }, delayMs)
+  }
+
+  const flushSave = () => {
+    if (isBatchMode) return
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+      performSave()
+    }
+  }
+
+  // Cleanup & flush pending changes on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      if (
+        !isBatchMode &&
+        castle.id &&
+        JSON.stringify(draftConfigRef.current) !== JSON.stringify(lastSavedConfigRef.current)
+      ) {
+        updateCastle(castle.id, { config: draftConfigRef.current as unknown as Record<string, unknown> }).catch(() => {})
+      }
+    }
+  }, [castle.id, isBatchMode])
+
+  // Sync with API/props when castle changes
   useEffect(() => {
     if (currentCastleIdRef.current !== castle.id) {
       currentCastleIdRef.current = castle.id
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       lastSavedConfigRef.current = castle.config
       const fresh = JSON.parse(JSON.stringify(castle.config))
+      draftConfigRef.current = fresh
       setSavedConfig(fresh)
       setDraftConfig(fresh)
+      setSaveStatus('idle')
+      setSaveErrorMsg(null)
       setCoordsError(false)
       setGoldError(false)
       return
     }
-    if (JSON.stringify(lastSavedConfigRef.current) !== JSON.stringify(castle.config)) {
-      lastSavedConfigRef.current = castle.config
-      const fresh = JSON.parse(JSON.stringify(castle.config))
-      setSavedConfig(fresh)
-      setDraftConfig(fresh)
+
+    // Only update from server if not currently saving and draft has no local pending edits
+    if (
+      !isSavingRef.current &&
+      JSON.stringify(lastSavedConfigRef.current) !== JSON.stringify(castle.config)
+    ) {
+      if (JSON.stringify(draftConfigRef.current) === JSON.stringify(lastSavedConfigRef.current)) {
+        lastSavedConfigRef.current = castle.config
+        const fresh = JSON.parse(JSON.stringify(castle.config))
+        draftConfigRef.current = fresh
+        setSavedConfig(fresh)
+        setDraftConfig(fresh)
+      }
     }
   }, [castle.id, castle.config])
 
-  const updateConfig = useUpdateCastleConfig(userId, castle.id)
-
   const changesCount = useMemo(() => {
+    if (!isBatchMode) return 0
     return countConfigChanges(savedConfig, draftConfig)
-  }, [savedConfig, draftConfig])
+  }, [isBatchMode, savedConfig, draftConfig])
 
-  const draftGg = (draftConfig as unknown as { gold_gather?: { enabled: boolean; locations?: GoldLocation[] } }).gold_gather
+  const draftGg = (draftConfig.march_manager as any)?.gold_gather as { enabled: boolean; locations?: GoldLocation[] } | undefined
   const goldHasIncompleteLocations = Boolean(
     draftGg?.enabled &&
     Array.isArray(draftGg.locations) &&
@@ -673,8 +788,26 @@ export function TaskTabContent({
     }
   }, [goldHasIncompleteLocations, goldError])
 
-  function update<K extends keyof CastleConfig>(key: K, patch: Partial<CastleConfig[K]>) {
+  const applyConfigChange = (
+    updater: (prev: CastleConfig) => CastleConfig,
+    delayMs: number = 250
+  ) => {
     setDraftConfig(prev => {
+      const next = updater(prev)
+      draftConfigRef.current = next
+      return next
+    })
+    if (!isBatchMode) {
+      scheduleSave(delayMs)
+    }
+  }
+
+  function update<K extends keyof CastleConfig>(
+    key: K,
+    patch: Partial<CastleConfig[K]>,
+    delayMs: number = 250
+  ) {
+    applyConfigChange(prev => {
       const current = (prev[key] || {}) as Record<string, unknown>
       return {
         ...prev,
@@ -683,14 +816,17 @@ export function TaskTabContent({
           ...(patch as Record<string, unknown>),
         } as CastleConfig[K],
       }
-    })
+    }, delayMs)
   }
 
   const toggle = (key: keyof CastleConfig) => (v: boolean) =>
-    update(key, { enabled: v } as Partial<CastleConfig[typeof key]>)
+    update(key, { enabled: v } as Partial<CastleConfig[typeof key]>, 150)
 
   const handleTabChange = (newTab: TaskTab) => {
     if (newTab === currentTab) return
+
+    // Flush any pending debounced change immediately before switching tab
+    flushSave()
 
     // التحقق من إحداثيات مساعدة الموارد إذا كانت مفعّلة
     const tr = draftConfig.march_manager?.transport
@@ -772,18 +908,13 @@ export function TaskTabContent({
       }
     }
 
-    const origGg = (savedConfig as unknown as { gold_gather?: unknown }).gold_gather
-    const draftGg = (draftConfig as unknown as { gold_gather?: unknown }).gold_gather
-    if (JSON.stringify(draftGg) !== JSON.stringify(origGg)) {
-      ;(changedSections as Record<string, unknown>).gold_gather = draftGg
-    }
-
     if (isBatchMode && onBatchSave) {
       try {
         setIsSavingBatch(true)
         await onBatchSave(changedSections)
         const updated = JSON.parse(JSON.stringify(draftConfig))
         lastSavedConfigRef.current = updated
+        setSavedConfig(updated)
         setCoordsError(false)
         setGoldError(false)
         toast.success(t('common.success'))
@@ -794,25 +925,13 @@ export function TaskTabContent({
       }
       return
     }
-
-    updateConfig.mutate(draftConfig, {
-      onSuccess: () => {
-        const updated = JSON.parse(JSON.stringify(draftConfig))
-        lastSavedConfigRef.current = updated
-        setSavedConfig(updated)
-        setCoordsError(false)
-        setGoldError(false)
-        toast.success(t('common.success'))
-      },
-      onError: (err) => {
-        toast.error(t('common.error') + ': ' + (err instanceof Error ? err.message : ''))
-      },
-    })
   }
 
   const handleCancel = () => {
     if (changesCount === 0) return
-    setDraftConfig(JSON.parse(JSON.stringify(savedConfig)))
+    const restored = JSON.parse(JSON.stringify(savedConfig))
+    draftConfigRef.current = restored
+    setDraftConfig(restored)
     setCoordsError(false)
     setGoldError(false)
     toast.success(t('common.success'))
@@ -828,7 +947,7 @@ export function TaskTabContent({
     if (tab === 'gather') {
     const g = cfg.march_manager.gather
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header toggle */}
         <div
           onClick={() => update('march_manager', { gather: { ...g, enabled: !g.enabled } })}
@@ -836,23 +955,23 @@ export function TaskTabContent({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: g.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: g.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '14px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer', userSelect: 'none',
           }}
           className={clsx('transition-colors task-header-card', g.enabled ? 'enabled' : 'disabled')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/images/gather/mtahil.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/images/gather/mtahil.png" style={{ width: '24px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.gatherResources')}</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.gatherResources')}</div>
             </div>
           </div>
-          <Toggle value={g.enabled} onChange={v => update('march_manager', { gather: { ...g, enabled: v } })} />
+          <Toggle value={g.enabled} onChange={v => update('march_manager', { gather: { ...g, enabled: v } })} size="sm" />
         </div>
 
         {/* Sub-options only shown when enabled */}
         {g.enabled && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Level stepper */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <SectionLabel text={t('tasks.minResourceLevel')} />
@@ -862,7 +981,7 @@ export function TaskTabContent({
             {/* Resource type cards */}
             <div>
               <SectionLabel text={t('tasks.resourceType')} />
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {MARCH_RESOURCES.map(r => (
                   <ResCard
                     key={r.v}
@@ -905,7 +1024,7 @@ export function TaskTabContent({
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header */}
         <div
           onClick={() => toggle('train')(!tr.enabled)}
@@ -913,50 +1032,50 @@ export function TaskTabContent({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: tr.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: tr.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '14px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer', userSelect: 'none',
           }}
           className={clsx('transition-colors task-header-card', tr.enabled ? 'enabled' : 'disabled')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>⚔️</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '20px' }}>⚔️</span>
             <div>
-              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.militaryTraining')}</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.militaryTraining')}</div>
             </div>
           </div>
-          <Toggle value={tr.enabled} onChange={toggle('train')} />
+          <Toggle value={tr.enabled} onChange={toggle('train')} size="sm" />
         </div>
 
         {/* Sub-options only shown when enabled */}
         {tr.enabled && (
           <>
             {/* Barracks cards */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {activeList.map((key, idx) => {
                 return (
                   <div key={key} className="task-barracks-card" style={{
                     background: 'rgba(255,255,255,0.04)',
                     border: '1px solid rgba(255,255,255,0.10)',
-                    borderRadius: '14px', padding: '14px',
+                    borderRadius: '10px', padding: '9px 11px',
                   }}>
                     {/* Card header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                        <span style={{ color: '#9ca3af', fontSize: '13px', fontWeight: 600 }}>{t('tasks.troops')} #{idx + 1}</span>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                        <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 600 }}>{t('tasks.troops')} #{idx + 1}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => removeBarracks(key)}
                         style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '2px', display: 'flex' }}
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
 
                     {/* Type selector — show all 4, disable ones used in other cards */}
                     <SectionLabel text={t('tasks.troopType')} />
-                    <div className="gap-2 grid grid-cols-2 sm:grid-cols-4 mb-3">
+                    <div className="gap-1.5 grid grid-cols-2 sm:grid-cols-4 mb-2">
                       {BARRACKS_TYPES.map(b => {
                         const isSelected = b.key === key
                         const isUsedElsewhere = !isSelected && activeList.includes(b.key as BarracksKey)
@@ -973,11 +1092,11 @@ export function TaskTabContent({
                             }}
                             style={{
                               width: '100%',
-                              padding: '8px 4px', borderRadius: '8px',
+                              padding: '5px 4px', borderRadius: '6px',
                               border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
                               background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
                               color: isSelected ? '#6ee7b7' : isUsedElsewhere ? '#374151' : '#9ca3af',
-                              fontSize: '12px', fontWeight: isSelected ? 600 : 500,
+                              fontSize: '11px', fontWeight: isSelected ? 600 : 500,
                               cursor: isUsedElsewhere ? 'not-allowed' : 'pointer',
                               fontFamily: 'inherit', transition: 'all 0.15s',
                               opacity: isUsedElsewhere ? 0.38 : 1,
@@ -1007,15 +1126,15 @@ export function TaskTabContent({
                 onClick={addBarracks}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                  width: '100%', padding: '8px 12px',
-                  borderRadius: '10px', border: '1px dashed rgba(34,197,94,0.3)',
+                  width: '100%', padding: '5px 10px',
+                  borderRadius: '8px', border: '1px dashed rgba(34,197,94,0.3)',
                   background: 'rgba(16,185,129,0.05)',
-                  color: '#6ee7b7', fontSize: '12px', fontWeight: 500,
+                  color: '#6ee7b7', fontSize: '11px', fontWeight: 500,
                   cursor: 'pointer', fontFamily: 'inherit',
                   transition: 'all 0.15s',
                 }}
               >
-                <Plus size={13} />
+                <Plus size={12} />
                 {t('tasks.addTroopType')}
               </button>
             )}
@@ -1028,58 +1147,65 @@ export function TaskTabContent({
   // ─────────────────────────────────────────────────────────────────────────
   // 3. الهجوم (Combat / march_manager)
   // ─────────────────────────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3. الهجوم (Combat / march_manager)
+  // ─────────────────────────────────────────────────────────────────────────
   if (tab === 'combat') {
     const mm = cfg.march_manager
-    // Only one of elf/invaders/rebels can be active
-    const combatChoice: 'elf' | 'invaders' | 'rebels' | null =
-      mm.elf.enabled ? 'elf' :
-      mm.invaders.enabled ? 'invaders' :
-      mm.rebels.enabled ? 'rebels' : null
+    
+    // استنتاج الخيار النشط: نعتمد على الكائن الأب combat
+    const combatChoice: 'elf' | 'invaders' | 'rebels' | null = 
+      mm.combat?.enabled ? (mm.combat.choice as 'elf' | 'invaders' | 'rebels') : null
 
+    // هذه الدالة هي سر الحل: تحدّث الكائن الأب (combat) والأبناء معاً، وتُعطل القتال كلياً إذا ألغيت الخيار
     const setCombatChoice = (choice: 'elf' | 'invaders' | 'rebels' | null) => {
       update('march_manager', {
+        combat: { 
+          ...mm.combat, 
+          enabled: choice !== null, 
+          choice: choice || mm.combat?.choice // نحتفظ بالاسم حتى لو تم التعطيل
+        },
         elf:      { ...mm.elf,      enabled: choice === 'elf'      },
         invaders: { ...mm.invaders, enabled: choice === 'invaders' },
         rebels:   { ...mm.rebels,   enabled: choice === 'rebels'   },
       })
     }
 
-    // Shared formation (used for the active combat choice)
-    const sharedFormation = mm.elf.enabled ? mm.elf.formation_id :
-                            mm.invaders.enabled ? mm.invaders.formation_id :
-                            mm.ruins.formation_id
+    const sharedFormation = mm.combat?.formation_id || mm.elf?.formation_id || 1
 
     const setSharedFormation = (v: number) => {
       update('march_manager', {
-        elf:      { ...mm.elf,      formation_id: v },
-        invaders: { ...mm.invaders, formation_id: v },
-        rebels:   { ...mm.rebels,   formation_id: v },
-        ruins:    { ...mm.ruins,    formation_id: v },
+        combat:     { ...mm.combat,     formation_id: v },
+        elf:        { ...mm.elf,        formation_id: v },
+        invaders:   { ...mm.invaders,   formation_id: v },
+        rebels:     { ...mm.rebels,     formation_id: v },
+        ruins:      { ...mm.ruins,      formation_id: v },
         stronghold: { ...mm.stronghold, formation_id: v },
       })
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Header */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Header - رجعناه ثابت بدون مفتاح تحكم كما طلبت */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
+          display: 'flex', alignItems: 'center', gap: '8px',
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '14px', padding: '12px 14px',
+          borderRadius: '10px', padding: '8px 10px',
         }}
         className="task-header-card disabled"
         >
-          <span style={{ fontSize: '24px' }}>🗡️</span>
+          <span style={{ fontSize: '20px' }}>🗡️</span>
           <div>
-            <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.attack')}</div>
+            <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.attack')}</div>
           </div>
         </div>
 
         {/* Formation selector */}
         <div>
           <SectionLabel text={t('tasks.selectedMarch')} />
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
             {[1, 2, 3, 4].map(f => (
               <button
                 key={f}
@@ -1087,12 +1213,12 @@ export function TaskTabContent({
                 className={clsx('task-formation-btn', sharedFormation === f ? 'selected' : 'unselected')}
                 onClick={() => setSharedFormation(f)}
                 style={{
-                  flex: '1 1 0', aspectRatio: '1',
-                  maxWidth: '72px', borderRadius: '10px',
+                  flex: '1 1 0', height: '42px',
+                  maxWidth: '52px', borderRadius: '8px',
                   border: sharedFormation === f ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
                   background: sharedFormation === f ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)',
                   color: sharedFormation === f ? '#6ee7b7' : '#9ca3af',
-                  fontSize: '16px', fontWeight: 700,
+                  fontSize: '13px', fontWeight: 700,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontFamily: 'inherit', transition: 'all 0.15s',
                   position: 'relative', overflow: 'hidden',
@@ -1111,7 +1237,7 @@ export function TaskTabContent({
         </div>
 
         {/* Combat type — radio (only one) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {([
             { key: 'elf',      img: '/images/combat/elitifrit.png',   labelKey: 'tasks.eliteEfreet', descKey: 'tasks.usesSelectedMarch' },
             { key: 'invaders', img: '/images/combat/yagmaci.png',     labelKey: 'tasks.invaders',    descKey: 'tasks.usesSelectedMarch' },
@@ -1127,19 +1253,19 @@ export function TaskTabContent({
                 style={{
                   background: isActive ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
                   border: isActive ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '12px', padding: '12px 14px',
+                  borderRadius: '10px', padding: '8px 10px',
                   cursor: 'pointer',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pointerEvents: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <img src={opt.img} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <img src={opt.img} alt="" style={{ width: '22px', height: '22px', objectFit: 'contain' }}
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                     <div>
-                      <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px' }}>{t(opt.labelKey)}</div>
-                      <div style={{ color: '#6b7280', fontSize: '11px' }}>{t(opt.descKey)}</div>
+                      <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t(opt.labelKey)}</div>
+                      <div style={{ color: '#6b7280', fontSize: '10.5px' }}>{t(opt.descKey)}</div>
                     </div>
                   </div>
                   <Toggle value={isActive} onChange={v => setCombatChoice(v ? opt.key : null)} size="sm" />
@@ -1148,14 +1274,17 @@ export function TaskTabContent({
                 {isActive && opt.key !== 'elf' && (
                   <div
                     onClick={e => e.stopPropagation()}
-                    style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                    style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                   >
-                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>{t('tasks.maxLevel')}</span>
+                    <span style={{ color: '#9ca3af', fontSize: '11px' }}>{t('tasks.maxLevel')}</span>
                     <Stepper
                       value={Math.min((configData as typeof mm.invaders).level || 1, opt.key === 'rebels' ? 5 : 35)}
                       min={1}
                       max={opt.key === 'rebels' ? 5 : 35}
-                      onChange={v => update('march_manager', { enabled: true, [opt.key]: { ...configData, level: v } })}
+                      onChange={v => update('march_manager', { 
+                        combat: { ...mm.combat, level: v },
+                        [opt.key]: { ...configData, level: v }
+                      })}
                     />
                   </div>
                 )}
@@ -1170,7 +1299,7 @@ export function TaskTabContent({
           style={{
             background: mm.ruins.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: mm.ruins.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '12px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer',
             userSelect: 'none',
             transition: 'all 0.15s ease',
@@ -1178,22 +1307,22 @@ export function TaskTabContent({
         >
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: mm.ruins.enabled ? '12px' : 0,
+            marginBottom: mm.ruins.enabled ? '8px' : 0,
             pointerEvents: 'none',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <img src="/images/combat/kesif.png" alt="" style={{ width: '28px' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <img src="/images/combat/kesif.png" alt="" style={{ width: '22px' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
               <div>
-                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px' }}>{t('tasks.ruins')}</div>
-                <div style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.singleMarchOnly')}</div>
+                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t('tasks.ruins')}</div>
+                <div style={{ color: '#6b7280', fontSize: '10.5px' }}>{t('tasks.singleMarchOnly')}</div>
               </div>
             </div>
             <Toggle value={mm.ruins.enabled} onChange={v => update('march_manager', { enabled: true, ruins: { ...mm.ruins, enabled: v } })} size="sm" />
           </div>
           {mm.ruins.enabled && (
-            <div onClick={e => e.stopPropagation()} style={{ marginTop: '4px' }}>
+            <div onClick={e => e.stopPropagation()} style={{ marginTop: '2px' }}>
               <SectionLabel text={t('tasks.marchDuration')} />
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '5px' }}>
                 {[
                   { s: 900,   labelKey: 'tasks.easy',   subKey: 'tasks.min15' },
                   { s: 3600,  labelKey: 'tasks.normal', subKey: 'tasks.hour1' },
@@ -1206,17 +1335,17 @@ export function TaskTabContent({
                     className={clsx('task-duration-btn', mm.ruins.explore_time === opt.s ? 'selected' : 'unselected')}
                     onClick={() => update('march_manager', { enabled: true, ruins: { ...mm.ruins, explore_time: opt.s } })}
                     style={{
-                      flex: '1 1 0', padding: '8px 4px', borderRadius: '10px',
+                      flex: '1 1 0', padding: '5px 3px', borderRadius: '6px',
                       border: mm.ruins.explore_time === opt.s ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
                       background: mm.ruins.explore_time === opt.s ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
                       color: mm.ruins.explore_time === opt.s ? '#6ee7b7' : '#9ca3af',
                       fontSize: '11px', fontWeight: mm.ruins.explore_time === opt.s ? 600 : 400,
-                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', lineHeight: 1.4,
+                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', lineHeight: 1.3,
                       transition: 'all 0.15s',
                     }}
                   >
                     <div>{t(opt.labelKey)}</div>
-                    {opt.subKey && <div style={{ fontSize: '10px', opacity: 0.75 }}>{t(opt.subKey)}</div>}
+                    {opt.subKey && <div style={{ fontSize: '9.5px', opacity: 0.75 }}>{t(opt.subKey)}</div>}
                   </button>
                 ))}
               </div>
@@ -1230,7 +1359,7 @@ export function TaskTabContent({
           style={{
             background: mm.stronghold.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: mm.stronghold.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '12px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer',
             userSelect: 'none',
             transition: 'all 0.15s ease',
@@ -1238,26 +1367,26 @@ export function TaskTabContent({
         >
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: mm.stronghold.enabled ? '12px' : 0,
+            marginBottom: mm.stronghold.enabled ? '8px' : 0,
             pointerEvents: 'none',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <img src="/images/prestige/siginak (1).png" alt="" style={{ width: '28px' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <img src="/images/prestige/siginak (1).png" alt="" style={{ width: '22px' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
               <div>
-                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px' }}>{t('tasks.stronghold')}</div>
+                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t('tasks.stronghold')}</div>
               </div>
             </div>
             <Toggle value={mm.stronghold.enabled} onChange={v => update('march_manager', { enabled: true, stronghold: { ...mm.stronghold, enabled: v } })} size="sm" />
           </div>
           {mm.stronghold.enabled && (
             <div onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: '#9ca3af', fontSize: '12px' }}>{t('tasks.maxLevel')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ color: '#9ca3af', fontSize: '11px' }}>{t('tasks.maxLevel')}</span>
                 <Stepper value={mm.stronghold.level} min={1} max={35}
                   onChange={v => update('march_manager', { enabled: true, stronghold: { ...mm.stronghold, level: v } })} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ color: '#9ca3af', fontSize: '12px' }}>{t('tasks.simultaneousAttacks')}</span>
+                <span style={{ color: '#9ca3af', fontSize: '11px' }}>{t('tasks.simultaneousAttacks')}</span>
                 <Stepper
                   value={Math.min(mm.stronghold.count || 1, 5)}
                   min={1}
@@ -1290,7 +1419,7 @@ export function TaskTabContent({
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header */}
         <div
           onClick={() => toggle('watermill')(!wm.enabled)}
@@ -1298,25 +1427,25 @@ export function TaskTabContent({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: wm.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: wm.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '14px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer', userSelect: 'none',
           }}
           className={clsx('transition-colors task-header-card', wm.enabled ? 'enabled' : 'disabled')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/images/watermill/uretimbonusust.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/images/watermill/uretimbonusust.png" style={{ width: '24px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.watermillBonus')}</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.watermillBonus')}</div>
             </div>
           </div>
-          <Toggle value={wm.enabled} onChange={toggle('watermill')} />
+          <Toggle value={wm.enabled} onChange={toggle('watermill')} size="sm" />
         </div>
 
         {wm.enabled && (
           <>
             <div>
               <SectionLabel text={t('tasks.bonusTypes')} />
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {WATERMILL_RESOURCES.map(r => (
                   <ResCard
                     key={r.key}
@@ -1331,14 +1460,14 @@ export function TaskTabContent({
 
             {/* Allow shop buy toggle */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
+              display: 'flex', alignItems: 'center', gap: '10px',
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '12px', padding: '12px 14px',
+              borderRadius: '10px', padding: '8px 10px',
             }}>
-              <img src="/images/watermill/uretimbonusust.png" style={{ width: '28px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              <img src="/images/watermill/uretimbonusust.png" style={{ width: '22px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
               <div style={{ flex: 1 }}>
-                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.buyFromAllianceShop')}</div>
-                <div style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.buyFromAllianceShopDesc')}</div>
+                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t('tasks.buyFromAllianceShop')}</div>
+                <div style={{ color: '#6b7280', fontSize: '10.5px' }}>{t('tasks.buyFromAllianceShopDesc')}</div>
               </div>
               <Toggle value={wm.allow_shop_buy} onChange={v => update('watermill', { allow_shop_buy: v })} size="sm" />
             </div>
@@ -1362,7 +1491,7 @@ export function TaskTabContent({
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header */}
         <div
           onClick={() => {
@@ -1374,15 +1503,15 @@ export function TaskTabContent({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: tr.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: tr.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '14px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer', userSelect: 'none',
           }}
           className={clsx('transition-colors task-header-card', tr.enabled ? 'enabled' : 'disabled')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>🔗</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '20px' }}>🔗</span>
             <div>
-              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.transportResources')}</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.transportResources')}</div>
             </div>
           </div>
           <Toggle
@@ -1391,6 +1520,7 @@ export function TaskTabContent({
               update('march_manager', { transport: { ...tr, enabled: v } })
               if (!v) setCoordsError(false)
             }}
+            size="sm"
           />
         </div>
 
@@ -1517,7 +1647,7 @@ export function TaskTabContent({
     const activeCount = subtaskDefs.filter(isSubtaskActive).length
 
     const setAllSubtasks = (val: boolean) => {
-      setDraftConfig(prev => ({
+      applyConfigChange(prev => ({
         ...prev,
         prestige: {
           ...prev.prestige,
@@ -1534,7 +1664,7 @@ export function TaskTabContent({
           prestige_stronghold: { enabled: val },
           prestige_gather: { enabled: val },
         },
-      }))
+      }), 150)
     }
 
     const handleToggleSubtask = (def: typeof subtaskDefs[number], nextVal: boolean) => {
@@ -1553,15 +1683,15 @@ export function TaskTabContent({
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* ─── Master Controller Banner (نظام مهام الهيبة الرئيسي) ─── */}
         <div
           onClick={() => toggle('prestige')(!pr.enabled)}
           style={{
             background: pr.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: pr.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '12px',
-            padding: '12px 14px',
+            borderRadius: '10px',
+            padding: '8px 10px',
             transition: 'all 0.15s ease',
             cursor: 'pointer',
             userSelect: 'none',
@@ -1569,9 +1699,9 @@ export function TaskTabContent({
           className={clsx('transition-colors task-row-card', pr.enabled ? 'enabled' : 'disabled')}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'nowrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
               <div style={{
-                width: '32px', height: '32px', borderRadius: '8px',
+                width: '26px', height: '26px', borderRadius: '7px',
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1580,12 +1710,12 @@ export function TaskTabContent({
                 <img
                   src="/images/daily/goldenchest.png"
                   alt="Prestige"
-                  style={{ width: '22px', height: '22px', objectFit: 'contain' }}
+                  style={{ width: '18px', height: '18px', objectFit: 'contain' }}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
               </div>
               <div style={{ minWidth: 0 }}>
-                <div className="task-row-label" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
+                <div className="task-row-label" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' }}>
                   {t('tasks.prestigeTasks')}
                 </div>
               </div>
@@ -1599,23 +1729,23 @@ export function TaskTabContent({
 
         {/* ─── Subtasks Section (المهام الفرعية) ─── */}
         {pr.enabled && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {/* Sub-header with quick actions */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '0 4px', marginTop: '2px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#d1fae5', fontSize: '13px', fontWeight: 600 }}>{t('tasks.prestigeTasks')}</span>
+                <span style={{ color: '#d1fae5', fontSize: '12px', fontWeight: 600 }}>{t('tasks.prestigeTasks')}</span>
                 <span style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.activeSubtasks', { count: activeCount })}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
                 <button
                   type="button"
                   onClick={() => setAllSubtasks(true)}
                   style={{
                     background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)',
-                    color: '#6ee7b7', padding: '3px 10px', borderRadius: '8px',
+                    color: '#6ee7b7', padding: '2px 8px', borderRadius: '6px',
                     cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
                   }}
                 >
@@ -1626,7 +1756,7 @@ export function TaskTabContent({
                   onClick={() => setAllSubtasks(false)}
                   style={{
                     background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#9ca3af', padding: '3px 10px', borderRadius: '8px',
+                    color: '#9ca3af', padding: '2px 8px', borderRadius: '6px',
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >
@@ -1647,25 +1777,25 @@ export function TaskTabContent({
                   style={{
                     background: isSubEnabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.025)',
                     border: isSubEnabled ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: '14px',
-                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    padding: '6px 10px',
                     cursor: 'pointer',
                     userSelect: 'none',
                     transition: 'all 0.15s ease',
                   }}
                 >
                   <div
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', pointerEvents: 'none' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', pointerEvents: 'none' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                       <img
                         src={st.img}
                         alt=""
-                        style={{ width: '32px', height: '32px', objectFit: 'contain', flexShrink: 0 }}
+                        style={{ width: '22px', height: '22px', objectFit: 'contain', flexShrink: 0 }}
                         onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: isSubEnabled ? '#f0fdf4' : '#9ca3af', fontWeight: 600, fontSize: '13px' }}>
+                        <div style={{ color: isSubEnabled ? '#f0fdf4' : '#9ca3af', fontWeight: 600, fontSize: '12px' }}>
                           {t(st.labelKey)}
                         </div>
                       </div>
@@ -1715,12 +1845,12 @@ export function TaskTabContent({
             {/* التبرع للتحالف (auto_help) */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px', borderRadius: '10px',
+              padding: '6px 10px', borderRadius: '9px',
               background: (cfg.alliance.auto_help ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
               border: (cfg.alliance.auto_help ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
             }}>
               <div>
-                <div style={{ color: '#f0fdf4', fontSize: '13px', fontWeight: 600 }}>{t('tasks.allianceDonation')}</div>
+                <div style={{ color: '#f0fdf4', fontSize: '12px', fontWeight: 600 }}>{t('tasks.allianceDonation')}</div>
               </div>
               <Toggle
                 value={cfg.alliance.auto_help ?? true}
@@ -1733,13 +1863,13 @@ export function TaskTabContent({
             {(cfg.alliance.auto_help ?? true) && (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '11px 13px', borderRadius: '10px',
+                padding: '6px 10px', borderRadius: '9px',
                 background: (cfg.alliance.gold_donations ?? 0) > 0 ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.03)',
                 border: (cfg.alliance.gold_donations ?? 0) > 0 ? '1px solid rgba(234,179,8,0.25)' : '1px solid rgba(255,255,255,0.07)',
                 gap: '12px', flexWrap: 'wrap',
               }}>
                 <div>
-                  <div style={{ color: '#fef08a', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ color: '#fef08a', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>{t('tasks.goldDonation')}</span>
                   </div>
                 </div>
@@ -1764,39 +1894,39 @@ export function TaskTabContent({
           emoji="🦌" label={t('tasks.petPatrol')}
           enabled={cfg.pet_patrol.enabled} onToggle={toggle('pet_patrol')}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* الحيوان القائم بالدورية (ثابت دائماً: الغزال 1261) */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 12px', borderRadius: '10px',
+              padding: '6px 10px', borderRadius: '8px',
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)'
             }}>
-              <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('tasks.petRunner')}:</span>
-              <span style={{ fontSize: '12px', color: '#6ee7b7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ fontSize: '11px', color: '#9ca3af' }}>{t('tasks.petRunner')}:</span>
+              <span style={{ fontSize: '11px', color: '#6ee7b7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span>🦌</span>
                 <span>{t('tasks.petDeer')}</span>
-                <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 400 }}>(1261)</span>
+                <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: 400 }}>(1261)</span>
               </span>
             </div>
 
             {/* الحيوان المستهدف (وجهة الدورية) */}
             <div>
               <SectionLabel text={t('tasks.targetAnimal')} />
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                 {PET_TARGETS.map(p => {
                   const isSelected = (cfg.pet_patrol.destination === p.id) ||
-                                     (!cfg.pet_patrol.destination && (cfg.pet_patrol.pet === p.name || (p.id as number) === 1262))
+                                     (!cfg.pet_patrol.destination && (cfg.pet_patrol.pet === p.name || (p.id as number) === 1350))
                   return (
                     <button key={p.id} type="button"
                       className={clsx('task-pet-btn', isSelected ? 'selected' : 'unselected')}
                       onClick={() => update('pet_patrol', { destination: p.id, pet: p.name })}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: '5px',
-                        padding: '5px 10px', borderRadius: '8px', fontFamily: 'inherit',
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        padding: '3px 8px', borderRadius: '7px', fontFamily: 'inherit',
                         border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
                         background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
                         color: isSelected ? '#6ee7b7' : '#9ca3af',
-                        fontSize: '12px', fontWeight: isSelected ? 600 : 400,
+                        fontSize: '11px', fontWeight: isSelected ? 600 : 400,
                         cursor: 'pointer', transition: 'all 0.15s',
                       }}
                     >
@@ -1824,13 +1954,13 @@ export function TaskTabContent({
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
+                gap: '10px',
                 paddingTop: '2px',
               }}>
                 <img
                   src="/images/daily/dayaniklilik_1.png"
                   alt=""
-                  style={{ width: '34px', height: '34px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' }}
+                  style={{ width: '26px', height: '26px', objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' }}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
                 <select
@@ -1841,15 +1971,15 @@ export function TaskTabContent({
                     flex: 1,
                     background: '#0d130e',
                     border: '1.5px solid #f59e0b',
-                    borderRadius: '10px',
-                    padding: '10px 14px',
-                    fontSize: '13.5px',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
                     fontWeight: 600,
                     color: '#ffffff',
                     outline: 'none',
                     cursor: 'pointer',
                     fontFamily: 'inherit',
-                    boxShadow: '0 0 10px rgba(245, 158, 11, 0.15)',
+                    boxShadow: '0 0 8px rgba(245, 158, 11, 0.15)',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -1860,8 +1990,8 @@ export function TaskTabContent({
                       style={{
                         background: '#121a14',
                         color: '#ffffff',
-                        fontSize: '13.5px',
-                        padding: '10px',
+                        fontSize: '12px',
+                        padding: '6px',
                       }}
                     >
                       {t('tasks.staminaOption', { count: opt.count, gold: opt.gold })}
@@ -1879,13 +2009,14 @@ export function TaskTabContent({
           img="/images/daily/goldenchest.png" label={t('tasks.savingsBank')}
           enabled={cfg.savings_bank.enabled} onToggle={toggle('savings_bank')}
         >
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
             {[
+              { d: 1,  labelKey: 'tasks.day1',   img: 'goldenchest.png' },
               { d: 7,  labelKey: 'tasks.days7',  img: 'silverchest.png' },
               { d: 15, labelKey: 'tasks.days15', img: 'silverchest.png' },
               { d: 30, labelKey: 'tasks.days30', img: 'silverchest.png' },
             ].map(opt => {
-              const currentDays = (cfg.savings_bank.days === 1 || !cfg.savings_bank.days) ? 7 : cfg.savings_bank.days
+              const currentDays = cfg.savings_bank.days || 7
               const isSelected = currentDays === opt.d
               return (
                 <button
@@ -1895,8 +2026,8 @@ export function TaskTabContent({
                   onClick={() => update('savings_bank', { days: opt.d })}
                   style={{
                     flex: 1,
-                    padding: '7px 4px',
-                    borderRadius: '9px',
+                    padding: '5px 4px',
+                    borderRadius: '8px',
                     border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
                     background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
                     color: isSelected ? '#6ee7b7' : '#9ca3af',
@@ -1908,7 +2039,7 @@ export function TaskTabContent({
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '4px',
+                    gap: '3px',
                     transition: 'all 0.15s',
                   }}
                 >
@@ -1916,8 +2047,8 @@ export function TaskTabContent({
                     src={`/images/daily/${opt.img}`}
                     alt=""
                     style={{
-                      width: '26px',
-                      height: '26px',
+                      width: '22px',
+                      height: '22px',
                       objectFit: 'contain',
                       filter: isSelected ? 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' : 'grayscale(15%) opacity(0.85)',
                       transition: 'all 0.15s',
@@ -1931,6 +2062,29 @@ export function TaskTabContent({
           </div>
         </TaskRow>
 
+        {/* متجر المحارب (مركز المنافع - متجر الاستبدال) */}
+        <TaskRow
+          id="warrior_exchange"
+          img="/images/daily/812034.png"
+          label={t('tasks.warriorExchange')}
+          enabled={cfg.warrior_exchange?.enabled ?? false}
+          onToggle={toggle('warrior_exchange')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ color: '#e5e7eb', fontSize: '12px', fontWeight: 500 }}>
+                {t('tasks.warriorExchangeCount')}
+              </span>
+            </div>
+            <Stepper
+              value={cfg.warrior_exchange?.count ?? 15}
+              min={1}
+              max={15}
+              onChange={v => update('warrior_exchange', { count: v })}
+            />
+          </div>
+        </TaskRow>
+
         {/* دراسة الاستراتيجيات (Study Strategies / Tactics Hall) */}
         {(() => {
           return (
@@ -1940,9 +2094,9 @@ export function TaskTabContent({
               enabled={cfg.tactics_hall.enabled}
               onToggle={toggle('tactics_hall')}
             >
-              <div style={{ paddingTop: '4px' }}>
+              <div style={{ paddingTop: '2px' }}>
                 {/* ── تصنيفات الاستراتيجيات: Battle | Development | Help ── */}
-                <div className="gap-1.5 grid grid-cols-3 bg-gray-100 dark:bg-white/5 mb-3.5 p-1 border border-gray-200 dark:border-white/10 rounded-xl">
+                <div className="gap-1.5 grid grid-cols-3 bg-gray-100 dark:bg-white/5 mb-2 p-1 border border-gray-200 dark:border-white/10 rounded-xl">
                   {STRATEGY_TABS.map(tab => {
                     const isActive = tacticsCategory === tab.id
                     return (
@@ -1950,7 +2104,7 @@ export function TaskTabContent({
                         key={tab.id}
                         type="button"
                         className={clsx(
-                          'flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg text-center transition-all cursor-pointer task-strategy-pill',
+                          'flex justify-center items-center gap-1.5 px-2 py-1 rounded-lg text-center transition-all cursor-pointer task-strategy-pill',
                           isActive ? 'active' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                         )}
                         onClick={() => setTacticsCategory(tab.id)}
@@ -1972,19 +2126,19 @@ export function TaskTabContent({
                         key={item.id}
                         type="button"
                         className={clsx(
-                          'relative flex flex-col justify-center items-center p-3 rounded-xl text-center transition-all cursor-pointer task-strategy-card',
+                          'relative flex flex-col justify-center items-center p-2 rounded-xl text-center transition-all cursor-pointer task-strategy-card',
                           isSelected ? 'selected' : 'unselected'
                         )}
                         onClick={() => update('tactics_hall', { tactic: item.name_en })}
                         style={{
-                          minHeight: '78px',
+                          minHeight: '60px',
                         }}
                       >
                         <img
                           src={`/images/strategies/${item.img}`}
                           alt={item.name_en}
                           className={clsx(
-                            'mb-1.5 w-8 sm:w-9 h-8 sm:h-9 object-contain transition-transform',
+                            'mb-1 w-7 h-7 object-contain transition-transform',
                             isSelected ? 'scale-105' : 'opacity-85'
                           )}
                           onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
@@ -2062,19 +2216,19 @@ export function TaskTabContent({
                 ) : null
               }
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '2px' }}>
                 {/* ── قسم اختيار الموارد الخمسة للتمني ── */}
                 <div>
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: '8px',
+                    marginBottom: '6px',
                     flexWrap: 'wrap',
-                    gap: '8px',
+                    gap: '6px',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#d1fae5', fontSize: '13px', fontWeight: 600 }}>{t('tasks.selectedResources')}</span>
+                      <span style={{ color: '#d1fae5', fontSize: '12px', fontWeight: 600 }}>{t('tasks.selectedResources')}</span>
                       <span style={{
                         padding: '1px 8px',
                         borderRadius: '9999px',
@@ -2127,7 +2281,7 @@ export function TaskTabContent({
                   </div>
 
                   {/* شبكة بطاقات الموارد الخمسة */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
                     {FOUNTAIN_RESOURCES.map(r => {
                       const isSelected = selectedRes.includes(r.key)
                       return (
@@ -2137,16 +2291,16 @@ export function TaskTabContent({
                           className={clsx('task-fountain-card', isSelected ? 'selected' : 'unselected')}
                           onClick={() => toggleRes(r.key)}
                           style={{
-                            padding: '12px 6px',
-                            borderRadius: '12px',
+                            padding: '6px 4px',
+                            borderRadius: '10px',
                             border: isSelected ? '1.5px solid #f59e0b' : '1px solid rgba(255,255,255,0.08)',
                             background: isSelected ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
-                            boxShadow: isSelected ? '0 0 12px rgba(245,158,11,0.2)' : 'none',
+                            boxShadow: isSelected ? '0 0 10px rgba(245,158,11,0.2)' : 'none',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '6px',
+                            gap: '4px',
                             cursor: 'pointer',
                             fontFamily: 'inherit',
                             transition: 'all 0.15s ease',
@@ -2166,9 +2320,9 @@ export function TaskTabContent({
                           }}
                         >
                           <div style={{
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '8px',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
                             background: isSelected ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.30)',
                             border: isSelected ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
                             display: 'flex',
@@ -2180,8 +2334,8 @@ export function TaskTabContent({
                               src={r.img}
                               alt={t(r.resKey)}
                               style={{
-                                width: '28px',
-                                height: '28px',
+                                width: '20px',
+                                height: '20px',
                                 objectFit: 'contain',
                                 filter: isSelected ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(25%) opacity(0.8)',
                                 transition: 'filter 0.15s ease',
@@ -2190,7 +2344,7 @@ export function TaskTabContent({
                             />
                           </div>
                           <span style={{
-                            fontSize: '12px',
+                            fontSize: '11px',
                             color: isSelected ? '#fbbf24' : '#9ca3af',
                             fontWeight: isSelected ? 600 : 500,
                           }}>
@@ -2233,27 +2387,27 @@ export function TaskTabContent({
                     <div style={{
                       background: isGoldAllowed ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.03)',
                       border: isGoldAllowed ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: '12px',
-                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      padding: '6px 10px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '10px',
+                      gap: '8px',
                       transition: 'all 0.2s ease',
                     }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: '12px',
+                        gap: '10px',
                         flexWrap: 'wrap',
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <img
                             src="/images/fountain/gold.png"
                             alt="Gold"
                             style={{
-                              width: '28px',
-                              height: '28px',
+                              width: '22px',
+                              height: '22px',
                               objectFit: 'contain',
                               filter: isGoldAllowed ? 'drop-shadow(0 0 6px rgba(245,158,11,0.5))' : 'grayscale(60%) opacity(0.6)',
                             }}
@@ -2261,7 +2415,7 @@ export function TaskTabContent({
                           />
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ color: isGoldAllowed ? '#fbbf24' : '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>
+                              <span style={{ color: isGoldAllowed ? '#fbbf24' : '#f0fdf4', fontWeight: 600, fontSize: '12px' }}>
                                 {t('tasks.allowGoldPurchase')}
                               </span>
                               <span style={{
@@ -2280,7 +2434,7 @@ export function TaskTabContent({
                         </div>
 
                         {/* مفتاح التفعيل الصريح (Toggle) وأداة التحكم بالأرقام (+ / -) */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           {isGoldAllowed && (
                             <Stepper
                               value={currentGoldTimes}
@@ -2300,11 +2454,11 @@ export function TaskTabContent({
                       {/* رسالة توضيحية للأمان */}
                       {isGoldAllowed ? (
                         <div style={{
-                          fontSize: '11px',
+                          fontSize: '10.5px',
                           color: '#fde047',
                           background: 'rgba(234,179,8,0.12)',
-                          padding: '6px 10px',
-                          borderRadius: '8px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
                           border: '1px solid rgba(234,179,8,0.25)',
                           display: 'flex',
                           alignItems: 'center',
@@ -2315,7 +2469,7 @@ export function TaskTabContent({
                         </div>
                       ) : (
                         <div style={{
-                          fontSize: '11px',
+                          fontSize: '10.5px',
                           color: '#9ca3af',
                           paddingLeft: '4px',
                         }}>
@@ -2337,7 +2491,7 @@ export function TaskTabContent({
           enabled={cfg.material_workshop.enabled}
           onToggle={toggle('material_workshop')}
         >
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
             {WORKSHOP_MATERIALS.map(m => {
               const currentMats = cfg.material_workshop.materials || []
               const isAll = currentMats.includes('all') || currentMats.includes('الكل')
@@ -2363,20 +2517,20 @@ export function TaskTabContent({
                   onClick={handleToggle}
                   style={{
                     flex: 1,
-                    padding: '16px 10px',
-                    borderRadius: '12px',
+                    padding: '6px 4px',
+                    borderRadius: '10px',
                     border: isSelected ? '1.5px solid #f59e0b' : '1px solid rgba(255,255,255,0.08)',
                     background: isSelected ? 'rgba(245,158,11,0.10)' : 'rgba(255,255,255,0.03)',
-                    boxShadow: isSelected ? '0 0 14px rgba(245,158,11,0.2)' : 'none',
+                    boxShadow: isSelected ? '0 0 10px rgba(245,158,11,0.2)' : 'none',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '10px',
+                    gap: '4px',
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                     transition: 'all 0.15s ease',
-                    minHeight: '88px',
+                    minHeight: '62px',
                   }}
                   onMouseEnter={e => {
                     if (!isSelected) {
@@ -2392,9 +2546,9 @@ export function TaskTabContent({
                   }}
                 >
                   <div style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '8px',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '6px',
                     background: isSelected ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)',
                     border: isSelected ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
                     display: 'flex',
@@ -2406,8 +2560,8 @@ export function TaskTabContent({
                       src={`/images/workshop/${m.img}`}
                       alt={t(m.labelKey)}
                       style={{
-                        width: '30px',
-                        height: '30px',
+                        width: '22px',
+                        height: '22px',
                         objectFit: 'contain',
                         filter: isSelected ? 'drop-shadow(0 0 6px rgba(245,158,11,0.4))' : 'none',
                         transition: 'filter 0.15s ease',
@@ -2416,7 +2570,7 @@ export function TaskTabContent({
                     />
                   </div>
                   <span style={{
-                    fontSize: '13px',
+                    fontSize: '11px',
                     color: isSelected ? '#fbbf24' : '#9ca3af',
                     fontWeight: isSelected ? 600 : 500,
                   }}>
@@ -2435,7 +2589,7 @@ export function TaskTabContent({
           enabled={sh.enabled}
           onToggle={toggle('shield')}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '2px' }}>
             {/* مدة الدرع - القائمة المنسدلة */}
             <div>
               <select
@@ -2446,9 +2600,9 @@ export function TaskTabContent({
                   width: '100%',
                   background: 'rgba(255,255,255,0.06)',
                   border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: '10px',
-                  padding: '9px 14px',
-                  fontSize: '13px',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  fontSize: '12px',
                   color: '#f0fdf4',
                   outline: 'none',
                   cursor: 'pointer',
@@ -2472,15 +2626,15 @@ export function TaskTabContent({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '8px 12px',
+              padding: '6px 10px',
               background: sh.allow_gold ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)',
               border: sh.allow_gold ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(255,255,255,0.06)',
-              borderRadius: '10px',
+              borderRadius: '8px',
               transition: 'all 0.15s ease',
             }}>
               <div>
                 <div style={{
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontWeight: 600,
                   color: sh.allow_gold ? '#fbbf24' : '#e2e8f0',
                 }}>
@@ -2586,22 +2740,22 @@ export function TaskTabContent({
             {/* القلعة فقط */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px',
+              padding: '6px 10px',
               background: bld.upgrade_castle ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)',
               border: bld.upgrade_castle ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(255,255,255,0.05)',
-              borderRadius: '10px',
+              borderRadius: '9px',
               transition: 'all 0.15s ease',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{
-                  width: '32px', height: '32px', borderRadius: '8px',
+                  width: '26px', height: '26px', borderRadius: '7px',
                   background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
                 }}>
-                  <img src="/images/development/insaat.png" alt="" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
+                  <img src="/images/development/insaat.png" alt="" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
                 </div>
                 <div>
-                  <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.castleOnly')}</div>
+                  <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12px' }}>{t('tasks.castleOnly')}</div>
                 </div>
               </div>
               <Toggle
@@ -2614,23 +2768,23 @@ export function TaskTabContent({
             {/* استخدام التسريع */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px',
+              padding: '6px 10px',
               background: bld.speedup_castle ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)',
               border: bld.speedup_castle ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(255,255,255,0.05)',
-              borderRadius: '10px',
+              borderRadius: '9px',
               transition: 'all 0.15s ease',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{
-                  width: '32px', height: '32px', borderRadius: '8px',
+                  width: '26px', height: '26px', borderRadius: '7px',
                   background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
                 }}>
-                  <img src="/images/daily/yildirim_hizi.png" alt="" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
+                  <img src="/images/daily/yildirim_hizi.png" alt="" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
                 </div>
                 <div>
-                  <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.useSpeedup')}</div>
-                  <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '1px' }}>{t('tasks.speedupCastleDesc')}</div>
+                  <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12px' }}>{t('tasks.useSpeedup')}</div>
+                  <div style={{ color: '#6b7280', fontSize: '10px', marginTop: '1px' }}>{t('tasks.speedupCastleDesc')}</div>
                 </div>
               </div>
               <Toggle
@@ -2642,24 +2796,24 @@ export function TaskTabContent({
 
             {/* ترقية المعسكرات والمباني الداعمة */}
             <div style={{
-              display: 'flex', flexDirection: 'column', gap: '8px',
-              padding: '10px 12px',
+              display: 'flex', flexDirection: 'column', gap: '6px',
+              padding: '6px 10px',
               background: bld.upgrade_support_buildings ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)',
               border: bld.upgrade_support_buildings ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(255,255,255,0.05)',
-              borderRadius: '10px',
+              borderRadius: '9px',
               transition: 'all 0.15s ease',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{
-                    width: '32px', height: '32px', borderRadius: '8px',
+                    width: '26px', height: '26px', borderRadius: '7px',
                     background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
                   }}>
-                    <img src="/images/development/camps/egitimcadiri.png" alt="" style={{ width: '24px', height: '20px', objectFit: 'contain' }} />
+                    <img src="/images/development/camps/egitimcadiri.png" alt="" style={{ width: '20px', height: '16px', objectFit: 'contain' }} />
                   </div>
                   <div>
-                    <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.upgradeSupportBuildings')}</div>
+                    <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12px' }}>{t('tasks.upgradeSupportBuildings')}</div>
                   </div>
                 </div>
                 <Toggle
@@ -2674,11 +2828,11 @@ export function TaskTabContent({
                 <div className="task-support-bld-box" style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
-                  marginTop: '6px',
-                  padding: '10px',
+                  gap: '6px',
+                  marginTop: '4px',
+                  padding: '8px',
                   background: 'rgba(0,0,0,0.3)',
-                  borderRadius: '10px',
+                  borderRadius: '9px',
                   border: '1px solid rgba(255,255,255,0.06)',
                 }}>
                   {/* شريط التحكم السريع ومعلومات التفعيل */}
@@ -2687,14 +2841,14 @@ export function TaskTabContent({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
-                    gap: '8px',
-                    paddingBottom: '6px',
+                    gap: '6px',
+                    paddingBottom: '4px',
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '10px',
+                        padding: '1px 7px',
+                        borderRadius: '8px',
                         background: activeBuildingsCount > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
                         border: activeBuildingsCount > 0 ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(239,68,68,0.3)',
                         color: activeBuildingsCount > 0 ? '#4ade80' : '#f87171',
@@ -2705,7 +2859,7 @@ export function TaskTabContent({
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <button
                         type="button"
                         onClick={selectAllBuildings}
@@ -2713,7 +2867,7 @@ export function TaskTabContent({
                           background: 'rgba(34,197,94,0.12)',
                           border: '1px solid rgba(34,197,94,0.25)',
                           borderRadius: '6px',
-                          padding: '3px 9px',
+                          padding: '2px 8px',
                           color: '#86efac',
                           fontSize: '11px',
                           fontWeight: 500,
@@ -2731,7 +2885,7 @@ export function TaskTabContent({
                           background: 'rgba(255,255,255,0.04)',
                           border: '1px solid rgba(255,255,255,0.08)',
                           borderRadius: '6px',
-                          padding: '3px 9px',
+                          padding: '2px 8px',
                           color: '#9ca3af',
                           fontSize: '11px',
                           fontWeight: 500,
@@ -2746,14 +2900,14 @@ export function TaskTabContent({
                   </div>
 
                   {/* الشبكة التفاعلية للمباني الـ 6 */}
-                  <div className="gap-2.5 sm:gap-3 grid grid-cols-2 sm:grid-cols-3">
+                  <div className="gap-2 sm:gap-2 grid grid-cols-2 sm:grid-cols-3">
                     {supportBuildingOptions.map(b => {
                       const isSelected = Boolean(targetBuildings[b.key as keyof typeof targetBuildings] ?? true)
                       return (
                         <button
                           key={b.key}
                           type="button"
-                          className={clsx('relative flex flex-col justify-between items-center p-2.5 sm:p-3 rounded-xl transition-all duration-150 cursor-pointer task-support-bld-card', isSelected ? 'selected' : 'unselected')}
+                          className={clsx('relative flex flex-col justify-between items-center p-2 rounded-xl transition-all duration-150 cursor-pointer task-support-bld-card', isSelected ? 'selected' : 'unselected')}
                           onClick={() => toggleTargetBuilding(b.key)}
                           style={{
                             background: isSelected
@@ -2762,19 +2916,19 @@ export function TaskTabContent({
                             border: isSelected
                               ? '1.5px solid rgba(34,197,94,0.45)'
                               : '1px solid rgba(255,255,255,0.06)',
-                            borderRadius: '10px',
-                            boxShadow: isSelected ? '0 0 12px rgba(34,197,94,0.12)' : 'none',
+                            borderRadius: '9px',
+                            boxShadow: isSelected ? '0 0 10px rgba(34,197,94,0.12)' : 'none',
                             opacity: isSelected ? 1 : 0.45,
                             fontFamily: 'inherit',
-                            minHeight: '90px',
+                            minHeight: '68px',
                           }}
                         >
 
                           <div style={{
-                            width: '56px',
-                            height: '40px',
+                            width: '44px',
+                            height: '30px',
                             background: isSelected ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)',
-                            borderRadius: '8px',
+                            borderRadius: '6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -2782,18 +2936,18 @@ export function TaskTabContent({
                             filter: isSelected ? 'drop-shadow(0 0 6px rgba(34,197,94,0.35))' : 'grayscale(25%)',
                             transition: 'all 0.15s',
                           }}>
-                            <img src={b.img} alt={t(b.nameKey)} style={{ width: '46px', height: '34px', objectFit: 'contain' }} />
+                            <img src={b.img} alt={t(b.nameKey)} style={{ width: '34px', height: '24px', objectFit: 'contain' }} />
                           </div>
 
                           <span
                             className="task-support-bld-name"
                             style={{
                               color: isSelected ? '#f0fdf4' : '#9ca3af',
-                              fontSize: '12px',
+                              fontSize: '11px',
                               fontWeight: isSelected ? 600 : 500,
                               textAlign: 'center',
-                              lineHeight: 1.25,
-                              marginTop: '6px',
+                              lineHeight: 1.2,
+                              marginTop: '4px',
                             }}
                           >
                             {t(b.nameKey)}
@@ -2855,12 +3009,13 @@ export function TaskTabContent({
   if (tab === 'events') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {/* كنز طروادة (troy_treasure) */}
+        {/* كنز طروادة (troy_treasure) — معطلة وباهتة (غير متوفرة حالياً) */}
         <TaskRow
           emoji="🏛️"
           label={t('tasks.troyEvent')}
-          enabled={!!cfg.troy_treasure?.enabled}
-          onToggle={toggle('troy_treasure')}
+          enabled={false}
+          onToggle={() => {}}
+          comingSoon
         />
 
         {/* الزنزانة الأساسية (port_delegate) */}
@@ -2943,7 +3098,7 @@ export function TaskTabContent({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <button
                       type="button"
                       onClick={selectAll}
@@ -2951,7 +3106,7 @@ export function TaskTabContent({
                         background: isAll ? 'rgba(34,197,94,0.2)' : 'rgba(34,197,94,0.08)',
                         border: '1px solid rgba(34,197,94,0.25)',
                         borderRadius: '6px',
-                        padding: '3px 10px',
+                        padding: '2px 8px',
                         color: '#86efac',
                         fontSize: '11px',
                         fontWeight: 500,
@@ -2969,7 +3124,7 @@ export function TaskTabContent({
                         background: 'rgba(255,255,255,0.04)',
                         border: '1px solid rgba(255,255,255,0.08)',
                         borderRadius: '6px',
-                        padding: '3px 10px',
+                        padding: '2px 8px',
                         color: '#9ca3af',
                         fontSize: '11px',
                         fontWeight: 500,
@@ -2986,8 +3141,8 @@ export function TaskTabContent({
                 {/* شبكة بسيطة ومباشرة للمنتجات السبعة */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))',
-                  gap: '8px',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(105px, 1fr))',
+                  gap: '6px',
                 }}>
                   {dungeonShopProducts.map(item => {
                     const isSelected = selectedIds.includes(item.id)
@@ -3001,30 +3156,30 @@ export function TaskTabContent({
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
-                          padding: '8px 6px',
+                          padding: '5px 4px',
                           background: isSelected
                             ? 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, rgba(5,150,105,0.08) 100%)'
                             : 'rgba(255,255,255,0.02)',
                           border: isSelected
                             ? '1.5px solid rgba(34,197,94,0.45)'
                             : '1px solid rgba(255,255,255,0.06)',
-                          borderRadius: '10px',
+                          borderRadius: '8px',
                           cursor: 'pointer',
                           position: 'relative',
                           transition: 'all 0.15s ease',
                           boxShadow: isSelected ? '0 0 10px rgba(34,197,94,0.12)' : 'none',
                           opacity: isSelected ? 1 : 0.5,
                           fontFamily: 'inherit',
-                          gap: '4px',
+                          gap: '3px',
                         }}
                       >
                         {/* الأيقونة الرسمية */}
                         <div style={{
-                          width: '36px',
-                          height: '36px',
-                          marginTop: '4px',
+                          width: '28px',
+                          height: '28px',
+                          marginTop: '2px',
                           background: isSelected ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -3033,14 +3188,14 @@ export function TaskTabContent({
                           <img
                             src={item.img}
                             alt={t(item.nameKey)}
-                            style={{ width: '30px', height: '30px', objectFit: 'contain' }}
+                            style={{ width: '22px', height: '22px', objectFit: 'contain' }}
                           />
                         </div>
 
                         {/* اسم المنتج */}
                         <span style={{
                           color: isSelected ? '#f0fdf4' : '#9ca3af',
-                          fontSize: '11px',
+                          fontSize: '10.5px',
                           fontWeight: isSelected ? 600 : 500,
                           textAlign: 'center',
                           lineHeight: 1.2,
@@ -3075,33 +3230,29 @@ export function TaskTabContent({
           enabled={cfg.territory_expansion.enabled} onToggle={toggle('territory_expansion')}
         />
 
-        {/* صندوق مشعل رويال — coming soon */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '12px',
-          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
-          borderRadius: '12px', padding: '12px 14px', opacity: 0.5,
-        }}>
-          <span style={{ fontSize: '20px' }}>🎰</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#9ca3af', fontWeight: 600, fontSize: '13px' }}>{t('tasks.torchChest')}</div>
-            <div style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.torchChestDesc')}</div>
-          </div>
-          <Toggle value={false} onChange={() => {}} disabled size="sm" />
-        </div>
+        {/* صندوق مشعل رويال (شراء) */}
+        <TaskRow
+          img="/images/events/mesale.png"
+          label={t('tasks.torchChest')}
+          enabled={cfg.torch_chest?.enabled ?? false}
+          onToggle={toggle('torch_chest')}
+        />
 
-        {/* فتح صندوق مشعل رويال — coming soon */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '12px',
-          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
-          borderRadius: '12px', padding: '12px 14px', opacity: 0.5,
-        }}>
-          <span style={{ fontSize: '20px' }}>📦</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#9ca3af', fontWeight: 600, fontSize: '13px' }}>{t('tasks.openTorchChest')}</div>
-            <div style={{ color: '#6b7280', fontSize: '11px' }}>{t('tasks.openTorchChestDesc')}</div>
-          </div>
-          <Toggle value={false} onChange={() => {}} disabled size="sm" />
-        </div>
+        {/* فتح صندوق مشعل رويال */}
+        <TaskRow
+          img="/images/events/mesale.png"
+          label={t('tasks.openTorchChest')}
+          enabled={cfg.open_torch_chest?.enabled ?? false}
+          onToggle={toggle('open_torch_chest')}
+        />
+
+        {/* الرحلات البطولية (hero_consign) */}
+        <TaskRow
+          img="/images/events/hero_voyage.png"
+          label={t('tasks.heroConsign')}
+          enabled={cfg.hero_consign?.enabled ?? false}
+          onToggle={toggle('hero_consign')}
+        />
       </div>
     )
   }
@@ -3109,14 +3260,17 @@ export function TaskTabContent({
   // ─────────────────────────────────────────────────────────────────────────
   // 10. البحث عن الذهب (Gold)
   // ─────────────────────────────────────────────────────────────────────────
-  if (tab === 'gold') {
-    // gold_gather is optional field, default to empty if not present
-    const gg = (cfg as unknown as { gold_gather?: { enabled: boolean; locations: GoldLocation[] } }).gold_gather
-      ?? { enabled: false, locations: [] }
+    if (tab === 'gold') {
+      const mm = cfg.march_manager;
+      
+      // تعريف النوع صراحةً لإخبار TypeScript أن locations عبارة عن مصفوفة من GoldLocation
+      const gg = (mm as unknown as { gold_gather?: { enabled: boolean; locations: GoldLocation[] } }).gold_gather 
+        ?? { enabled: false, locations: [] };
 
-    const updateGg = (patch: Partial<typeof gg>) => {
-      update('gold_gather' as keyof CastleConfig, { ...gg, ...patch } as unknown as Partial<CastleConfig[keyof CastleConfig]>)
-    }
+      const updateGg = (patch: Partial<typeof gg>) => {
+        // دمج التحديثات داخل march_manager وتجاهل أخطاء الواجهة عبر as any
+        update('march_manager', { gold_gather: { ...gg, ...patch } } as any);
+      }
 
     const addLocation = () => updateGg({ locations: [...gg.locations, { x: 0, y: 0, alliance_tag: '' }] })
     const removeLocation = (i: number) => {
@@ -3137,7 +3291,7 @@ export function TaskTabContent({
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header */}
         <div
           onClick={() => {
@@ -3149,18 +3303,18 @@ export function TaskTabContent({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: gg.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
             border: gg.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '14px', padding: '12px 14px',
+            borderRadius: '10px', padding: '8px 10px',
             cursor: 'pointer', userSelect: 'none',
           }}
           className={clsx('transition-colors task-header-card', gg.enabled ? 'enabled' : 'disabled')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/images/gather/altin.png" style={{ width: '32px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/images/gather/altin.png" style={{ width: '24px' }} alt="" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             <div>
-              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 700, fontSize: '15px' }}>{t('tasks.goldSearch')}</div>
+              <div className="task-header-title" style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '13px' }}>{t('tasks.goldSearch')}</div>
             </div>
           </div>
-          <Toggle value={gg.enabled} onChange={v => {
+          <Toggle value={gg.enabled} size="sm" onChange={v => {
             updateGg({ enabled: v })
             if (!v) setGoldError(false)
           }} />
@@ -3169,7 +3323,7 @@ export function TaskTabContent({
         {gg.enabled && (
           <>
             {/* Locations */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {gg.locations.map((loc, i) => {
                 const isXInvalid = !loc.x || loc.x <= 0
                 const isYInvalid = !loc.y || loc.y <= 0
@@ -3181,20 +3335,20 @@ export function TaskTabContent({
                   <div key={i} className="task-gold-location-card" style={{
                     background: showCardError ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.04)',
                     border: showCardError ? '1.5px solid rgba(239,68,68,0.45)' : '1px solid rgba(255,255,255,0.10)',
-                    borderRadius: '14px', padding: '14px',
+                    borderRadius: '10px', padding: '8px 10px',
                     transition: 'all 0.15s ease',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{
-                          width: '8px', height: '8px', borderRadius: '50%',
+                          width: '7px', height: '7px', borderRadius: '50%',
                           background: showCardError ? '#ef4444' : '#eab308',
                           boxShadow: showCardError ? '0 0 6px #ef4444' : 'none',
                           display: 'inline-block',
                         }} />
                         <span style={{
                           color: showCardError ? '#fca5a5' : '#9ca3af',
-                          fontSize: '13px',
+                          fontSize: '12px',
                           fontWeight: 600,
                         }}>
                           {t('tasks.locationNumber', { index: i + 1 })}
@@ -3211,15 +3365,15 @@ export function TaskTabContent({
                           borderRadius: '6px',
                         }}
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                       <div style={{ flex: 1 }}>
                         <div className="task-coord-label" style={{
                           color: goldError && isXInvalid ? '#f87171' : '#9ca3af',
                           fontSize: '11px',
-                          marginBottom: '6px',
+                          marginBottom: '3px',
                           fontWeight: goldError && isXInvalid ? 600 : 400,
                         }}>
                           X {goldError && isXInvalid ? '*' : ''}
@@ -3248,7 +3402,7 @@ export function TaskTabContent({
                         <div className="task-coord-label" style={{
                           color: goldError && isYInvalid ? '#f87171' : '#9ca3af',
                           fontSize: '11px',
-                          marginBottom: '6px',
+                          marginBottom: '3px',
                           fontWeight: goldError && isYInvalid ? 600 : 400,
                         }}>
                           Y {goldError && isYInvalid ? '*' : ''}
@@ -3278,7 +3432,7 @@ export function TaskTabContent({
                       <div style={{
                         color: goldError && isTagInvalid ? '#f87171' : '#9ca3af',
                         fontSize: '11px',
-                        marginBottom: '6px',
+                        marginBottom: '3px',
                         fontWeight: goldError && isTagInvalid ? 600 : 400,
                       }}>
                         {t('tasks.allianceTag')} {goldError && isTagInvalid ? '*' : ''}
@@ -3304,9 +3458,9 @@ export function TaskTabContent({
 
                     {showCardError && (
                       <div style={{
-                        marginTop: '10px',
-                        padding: '7px 10px',
-                        borderRadius: '8px',
+                        marginTop: '8px',
+                        padding: '5px 8px',
+                        borderRadius: '6px',
                         background: 'rgba(239, 68, 68, 0.12)',
                         border: '1px solid rgba(239, 68, 68, 0.35)',
                         color: '#fca5a5',
@@ -3327,15 +3481,15 @@ export function TaskTabContent({
             {/* Add location */}
             <button type="button" onClick={addLocation}
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                width: '100%', padding: '11px',
-                borderRadius: '12px', border: '1px dashed rgba(234,179,8,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                width: '100%', padding: '6px 10px',
+                borderRadius: '8px', border: '1px dashed rgba(234,179,8,0.35)',
                 background: 'rgba(234,179,8,0.05)',
-                color: '#fbbf24', fontSize: '13px', fontWeight: 500,
+                color: '#fbbf24', fontSize: '12px', fontWeight: 500,
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
-              <Plus size={15} />
+              <Plus size={14} />
               {t('tasks.addLocation')}
             </button>
           </>
@@ -3357,75 +3511,109 @@ export function TaskTabContent({
   const goldHasErrorTab = Boolean(goldError && goldHasIncompleteLocations)
 
   return (
-    <div className="relative space-y-5 w-full task-tab-content-root">
-      <TaskTabs
-        active={currentTab}
-        onChange={handleTabChange}
-        errorTab={goldHasErrorTab ? 'gold' : transportHasMissingCoords ? 'transport' : null}
-      />
+    <div className="relative space-y-4 w-full task-tab-content-root">
+      <div className="space-y-2.5 w-full">
+        <TaskTabs
+          active={currentTab}
+          onChange={handleTabChange}
+          errorTab={goldHasErrorTab ? 'gold' : transportHasMissingCoords ? 'transport' : null}
+        />
 
-      <TaskAccordionContext.Provider value={{ expandedTaskId, toggleTask: toggleTaskAccordion }}>
-        {renderTabContent()}
-      </TaskAccordionContext.Provider>
+        {/* AutoSave Status Row for Single Mode */}
+        {!isBatchMode && (
+          <div className="flex justify-between items-center px-1 min-h-[22px] text-xs select-none">
+            <span className="font-medium text-[11px] text-gray-400">
+              {TABS.find(t => t.id === currentTab)?.emoji} {t(`tabs.${currentTab}`, { defaultValue: TABS.find(t => t.id === currentTab)?.label || '' })}
+            </span>
 
-      {/* Floating Save Widget on the Right (only when there are changes) */}
-      {changesCount > 0 && typeof document !== 'undefined' && createPortal(
-        <div
-          className="right-4 sm:right-6 md:right-8 bottom-20 slide-in-from-bottom-3 md:bottom-6 z-[999] fixed animate-in duration-200 fade-in"
-          style={{ maxWidth: 'calc(100vw - 32px)' }}
-        >
-          <div className="flex items-center gap-3 bg-gray-900/95 shadow-[0_10px_35px_rgba(0,0,0,0.7)] backdrop-blur-xl px-3.5 py-2 border border-emerald-500/30 rounded-xl text-white task-floating-save-bar">
-            {/* Minimal counter */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="bg-amber-400 rounded-full w-2 h-2 animate-pulse shrink-0" />
-              <span className="font-semibold text-gray-200">
-                {isBatchMode
-                  ? (batchTargetCount > 0 ? `${changesCount} ${t('common.edits')} • ${batchTargetCount} ${t('accounts.accountUnit')}` : `${changesCount} ${t('common.edits')}`)
-                  : `${changesCount} ${t('common.unsavedChanges')}`}
+            {/* Smart Autosave State Indicator */}
+            <div className="flex items-center gap-1.5 transition-all duration-200">
+              {saveStatus === 'saving' && (
+                <span className="inline-flex items-center gap-1.5 font-medium text-[11px] text-amber-400 animate-pulse">
+                  <Loader2 size={12} className="text-amber-400 animate-spin shrink-0" />
+                  <span>{t('common.saving', 'جاري الحفظ...')}</span>
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="inline-flex items-center gap-1.5 font-medium text-[11px] text-emerald-400">
+                  <Check size={12} className="text-emerald-400 shrink-0" />
+                  <span>{t('common.saved', 'تم الحفظ تلقائياً')}</span>
+                </span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="inline-flex items-center gap-2 font-medium text-[11px] text-rose-400">
+                  <span>{t('common.saveFailed', 'فشل الحفظ')}{saveErrorMsg ? `: ${saveErrorMsg}` : ''}</span>
+                  <button
+                    type="button"
+                    onClick={() => performSave()}
+                    className="font-semibold text-rose-300 hover:text-white underline cursor-pointer"
+                  >
+                    {t('common.retry', 'إعادة المحاولة')}
+                  </button>
+                </span>
+              )}
+              {saveStatus === 'idle' && (
+                <span className="inline-flex items-center gap-1.5 font-normal text-[11px] text-gray-500">
+                  <span className="inline-block bg-emerald-500/70 shadow-[0_0_4px_rgba(16,185,129,0.5)] rounded-full w-1.5 h-1.5" />
+                  <span>{t('common.autosaveActive', 'حفظ تلقائي مفعّل')}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Compact Luxury Glowing Single-Row Action Bar for Batch Mode */}
+        {isBatchMode && changesCount > 0 && (
+          <div className="flex flex-nowrap justify-between items-center gap-2.5 backdrop-blur-md px-3 py-1.5 border rounded-xl w-full text-xs animate-in duration-150 select-none batch-action-bar fade-in">
+            {/* Target Accounts Count */}
+            <div className="flex items-center gap-2 min-w-0 truncate shrink">
+              <span className="bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.6)] dark:shadow-[0_0_6px_rgba(52,211,153,0.7)] rounded-full w-2 h-2 shrink-0" />
+              <span className="font-medium text-[11px] sm:text-xs whitespace-nowrap batch-count-text">
+                <span className="ml-1 font-bold batch-count-num">   {batchTargetCount}   </span>
+
+                {t('accounts.accountUnit', 'حساب')}
               </span>
             </div>
 
-            {/* Subtle Divider */}
-            <div className="bg-white/10 w-px h-4" />
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-1.5">
+            {/* Actions: Cancel & Elegant Glowing Save Button */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               <button
                 type="button"
                 disabled={isPending}
                 onClick={handleCancel}
-                className="hover:bg-white/10 px-2.5 py-1 rounded-lg text-gray-400 hover:text-white text-xs transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded-lg font-medium text-[11px] sm:text-xs whitespace-nowrap active:scale-95 transition-colors cursor-pointer batch-cancel-btn"
               >
-                {t('common.cancel')}
+                {t('common.cancel', 'إلغاء')}
               </button>
 
               <button
                 type="button"
-                disabled={isPending || (isBatchMode && batchTargetCount === 0)}
+                disabled={isPending || batchTargetCount === 0}
                 onClick={handleSave}
                 className={clsx(
-                  'flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold text-xs transition-all duration-200',
-                  !isPending && (!isBatchMode || batchTargetCount > 0)
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-500/25 active:scale-95 cursor-pointer'
-                    : 'bg-white/10 text-gray-500 cursor-not-allowed opacity-60'
+                  'flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold text-[11px] sm:text-xs whitespace-nowrap active:scale-95 transition-all duration-150 batch-lux-btn',
+                  !isPending && batchTargetCount > 0
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-sm border border-emerald-500 dark:border-emerald-400/30'
+                    : 'bg-gray-100 dark:bg-white/10 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60'
                 )}
               >
                 {isPending ? (
-                  <Loader2 size={13} className="text-white animate-spin" />
+                  <Loader2 size={12} className="text-white animate-spin shrink-0" />
                 ) : (
-                  <Check size={13} className="text-white" />
+                  <Check size={12} className="stroke-[2.5] text-white shrink-0" />
                 )}
                 <span>
-                  {isBatchMode
-                    ? (batchTargetCount > 0 ? `${t('common.apply')} (${batchTargetCount})` : t('common.apply'))
-                    : t('common.save')}
+                  {t('common.save', 'حفظ')} ({changesCount})
                 </span>
               </button>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </div>
+
+      <TaskAccordionContext.Provider value={{ expandedTaskId, toggleTask: toggleTaskAccordion }}>
+        {renderTabContent()}
+      </TaskAccordionContext.Provider>
     </div>
   )
 }

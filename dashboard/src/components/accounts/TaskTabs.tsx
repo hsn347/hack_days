@@ -38,11 +38,11 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '4px',
+        gap: '3px',
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '14px',
-        padding: '4px',
+        borderRadius: '10px',
+        padding: '2.5px 3px',
         width: '100%',
         boxSizing: 'border-box',
       }}
@@ -53,10 +53,10 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
         onClick={() => scroll('left')}
         className="task-tabs-arrow"
         style={{
-          flexShrink: 0, padding: '4px 8px',
-          borderRadius: '8px', border: 'none',
+          flexShrink: 0, padding: '2px 5px',
+          borderRadius: '6px', border: 'none',
           background: 'none', color: '#6b7280',
-          cursor: 'pointer', fontSize: '16px',
+          cursor: 'pointer', fontSize: '14px',
           display: 'flex', alignItems: 'center',
         }}
       >
@@ -68,7 +68,7 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
         ref={scrollRef}
         style={{
           display: 'flex', alignItems: 'center',
-          gap: '4px', flex: 1,
+          gap: '3px', flex: 1,
           overflowX: 'auto',
           scrollbarWidth: 'none',
         }}
@@ -84,9 +84,9 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
               className={clsx('task-tab-item', isActive && 'active', isError && 'has-error')}
               style={{
                 flexShrink: 0,
-                display: 'flex', alignItems: 'center', gap: '5px',
-                padding: '5px 9px',
-                borderRadius: '8px',
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '3.5px 7.5px',
+                borderRadius: '6px',
                 border: isError
                   ? '1px solid rgba(239,68,68,0.7)'
                   : isActive
@@ -98,7 +98,7 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
                   ? 'linear-gradient(135deg, rgba(5,150,105,0.25) 0%, rgba(16,185,129,0.15) 100%)'
                   : 'none',
                 color: isError ? '#fca5a5' : isActive ? '#6ee7b7' : '#9ca3af',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: isActive ? 600 : 400,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
@@ -106,7 +106,7 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
                 fontFamily: 'inherit',
               }}
             >
-              <span style={{ fontSize: '13px', lineHeight: 1 }}>{tab.emoji}</span>
+              <span style={{ fontSize: '12px', lineHeight: 1 }}>{tab.emoji}</span>
               <span>{t(`tabs.${tab.id}`, tab.label)}</span>
               {isError && (
                 <span

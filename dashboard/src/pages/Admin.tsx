@@ -15,15 +15,16 @@ import {
 import { useCastles, useDeleteCastle } from '../hooks/useCastles'
 import { useQueryClient } from '@tanstack/react-query'
 import { updateAdminSubscription, banAdminUser, approveAdminUser, approveAllPendingAdminUsers } from '../lib/botApi'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { AdminLiveProcessesView } from './AdminLiveProcesses'
 import type { User, Subscription, Castle } from '../types'
 import toast from 'react-hot-toast'
 
 export const isSuperAdminUser = (u?: Partial<User> | null) => {
   if (!u) return false
   const email = (u.email || '').toLowerCase().trim()
-  return u.role === 'admin' || email === 'ibraboths@gmail.com'
+  return email === 'ibraboths@gmail.com'
 }
 
 const formatDate = (d: Date | null) => {
@@ -602,6 +603,8 @@ function UserCastlesModal({ user, onClose }: { user: User; onClose: () => void }
 export function AdminPage() {
   const { t } = useTranslation()
   const { firebaseUser, isAdmin, loading: authLoading } = useAuth()
+  const location = useLocation()
+  const isLiveTab = location.pathname.startsWith('/admin/live-processes')
   const [search, setSearch] = useState('')
   const [editUser, setEditUser] = useState<User | null>(null)
   const [manageCastlesUser, setManageCastlesUser] = useState<User | null>(null)
@@ -627,8 +630,10 @@ export function AdminPage() {
     )
   }
 
-  if (!firebaseUser) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/dashboard" replace />
+  const adminEmail = (firebaseUser?.email || '').trim().toLowerCase()
+  if (!firebaseUser || adminEmail !== 'ibraboths@gmail.com' || !isAdmin) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   const getDaysRemaining = (u: User) => {
     const expDate = u.subscription?.expires_at ? new Date(u.subscription.expires_at) : null
@@ -729,8 +734,10 @@ export function AdminPage() {
   }
 
   return (
-    <AdminLayout title={t('admin.title')}>
-      <div className="space-y-4 sm:space-y-6">
+    <AdminLayout title={isLiveTab ? 'العمليات الحية بالذاكرة' : t('admin.title')}>
+      {/* ── Users Management Tab View ── */}
+      <div style={{ display: isLiveTab ? 'none' : 'block' }}>
+        <div className="space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex sm:flex-row flex-col justify-between sm:items-center gap-2.5 sm:gap-4">
           <div>
@@ -738,6 +745,9 @@ export function AdminPage() {
               <Shield size={22} className="text-emerald-600 dark:text-emerald-400" />
               <span>{t('admin.title')}</span>
             </h1>
+            <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+              إدارة المستخدمين والاشتراكات ومراجعة الحسابات وتفعيل الباقات
+            </p>
           </div>
         </div>
 
@@ -936,11 +946,22 @@ export function AdminPage() {
                           </td>
                           <td className="px-3 py-3.5 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              <div className="font-mono text-sm">
-                                <span className="font-black text-emerald-600 dark:text-emerald-400">{u.subscription?.current_castles_count ?? 0}</span>
-                                <span className="font-normal text-slate-400"> / {u.subscription?.max_castles_allowed ?? 1}</span>
-                              </div>
-                              {pendingCount > 0 && (
+                              {u.is_banned ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="font-mono text-sm flex items-center justify-center gap-1 text-red-500">
+                                    <Ban size={13} />
+                                    <span className="font-black">0</span>
+                                    <span className="font-normal text-slate-400"> / {u.subscription?.max_castles_allowed ?? 1}</span>
+                                  </div>
+                                  <span className="text-[10px] text-red-500 font-semibold leading-none">(محظور)</span>
+                                </div>
+                              ) : (
+                                <div className="font-mono text-sm">
+                                  <span className="font-black text-emerald-600 dark:text-emerald-400">{u.subscription?.current_castles_count ?? 0}</span>
+                                  <span className="font-normal text-slate-400"> / {u.subscription?.max_castles_allowed ?? 1}</span>
+                                </div>
+                              )}
+                              {!u.is_banned && pendingCount > 0 && (
                                 <button onClick={e => { e.stopPropagation(); setManageCastlesUser(u) }} className="flex items-center gap-1 hover:bg-yellow-500/30 text-[10px] animate-pulse cursor-pointer badge badge-yellow">
                                   <Clock size={10} /><span>{pendingCount} انتظار</span>
                                 </button>
@@ -1059,19 +1080,30 @@ export function AdminPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-semibold text-[10px] text-slate-500 dark:text-slate-400">القلاع (النشطة / الحد)</div>
-                            <div className="flex items-center gap-1 font-mono text-xs">
-                              <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                                {u.subscription?.current_castles_count ?? 0}
-                              </span>
-                              <span className="font-medium text-slate-400">
-                                / {u.subscription?.max_castles_allowed ?? 1}
-                              </span>
-                              {pendingCount > 0 && (
-                                <span className="ms-1 bg-amber-100/90 dark:bg-amber-900/40 px-1 py-0.2 border border-amber-200 dark:border-amber-700/40 rounded font-bold text-[9px] text-amber-700 dark:text-amber-300">
-                                  +{pendingCount}
+                            {u.is_banned ? (
+                              <div className="flex items-center gap-1 font-mono text-xs text-red-500">
+                                <Ban size={12} />
+                                <span className="font-black text-red-500 text-sm">0</span>
+                                <span className="font-medium text-slate-400">
+                                  / {u.subscription?.max_castles_allowed ?? 1}
                                 </span>
-                              )}
-                            </div>
+                                <span className="text-[10px] text-red-500 font-semibold ms-1">(محظور)</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 font-mono text-xs">
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                  {u.subscription?.current_castles_count ?? 0}
+                                </span>
+                                <span className="font-medium text-slate-400">
+                                  / {u.subscription?.max_castles_allowed ?? 1}
+                                </span>
+                                {pendingCount > 0 && (
+                                  <span className="ms-1 bg-amber-100/90 dark:bg-amber-900/40 px-1 py-0.2 border border-amber-200 dark:border-amber-700/40 rounded font-bold text-[9px] text-amber-700 dark:text-amber-300">
+                                    +{pendingCount}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1161,14 +1193,20 @@ export function AdminPage() {
           )}
         </div>
       </div>
+      </div>
+
+      {/* ── Live Processes Tab View (Always hot in memory, instant display) ── */}
+      <div style={{ display: isLiveTab ? 'block' : 'none' }}>
+        <AdminLiveProcessesView isActive={isLiveTab} />
+      </div>
 
       <AnimatePresence>
         {editUser && <EditUserModal user={editUser} onClose={()=>setEditUser(null)} />}
         {manageCastlesUser && <UserCastlesModal user={manageCastlesUser} onClose={()=>setManageCastlesUser(null)} />}
         {confirmDeleteUser && (
           <ConfirmDialog
-            title="حذف المستخدم"
-            message="هذا الإجراء لا يمكن التراجع عنه. سيتم حذف الحساب وجميع بياناته نهائياً."
+            title="حذف المستخدم وجميع قلاعه"
+            message="هذا الإجراء لا يمكن التراجع عنه. سيتم إيقاف وحذف جميع قلاع هذا المستخدم وحذف حسابه نهائياً من النظام."
             email={confirmDeleteUser.email}
             loading={deleting}
             onConfirm={doDelete}

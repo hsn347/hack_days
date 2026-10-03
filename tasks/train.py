@@ -411,7 +411,7 @@ class TrainTask(BaseTask):
             else:
                 return False, 0, f"كود سيرفر: {err}"
 
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(0.4)
 
         return False, 0, f"تجاوز السعة القصوى المتاحة (كود: {last_err})"
 
