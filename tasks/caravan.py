@@ -31,6 +31,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional
 
@@ -76,12 +77,16 @@ class CaravanTask(BaseTask):
             if ev_list or rewards:
                 self.log.info(f"⚡ تمت المعالجة السريعة لـ {len(ev_list)} حدث في طريق القافلة! (مكافآت: {rewards})")
 
+        await asyncio.sleep(random.uniform(1.2, 2.2))
+
         # 2. فحص واستلام جوائز القافلة المكتملة (3139/7)
         r_claim = await self.conn.query('3139', '7', {}, timeout=8)
         if r_claim and str(r_claim.get('err', '0')) == '0':
             claim_data = r_claim.get('data', {})
             if claim_data.get('isClaimedReward'):
                 self.log.info("🏆 تم استلام جوائز وصول القافلة السابقة بنجاح! ✅")
+
+        await asyncio.sleep(random.uniform(1.1, 2.0))
 
         # 3. فحص حالة القافلة الحالية (3139/6)
         r_look = await self.conn.query('3139', '6', {}, timeout=8)
@@ -181,19 +186,30 @@ class CaravanTask(BaseTask):
             }
         }
 
+        await asyncio.sleep(random.uniform(1.4, 2.6))
         r_start = await self.conn.query('3139', '1', payload, timeout=10)
         if not r_start or str(r_start.get('err', '0')) != '0':
             err_code = str(r_start.get('err', 'unknown')) if r_start else 'timeout'
-            if "TODAY_LIMIT_MAX" in err_code:
+            if "TODAY_LIMIT_MAX" in err_code or "LIMIT_MAX" in err_code:
                 self.log.info("ℹ️ تم استهلاك جميع محاولات إرسال القوافل المتاحة لهذا اليوم (الحد اليومي مكتمل) ✅")
                 return TaskResult.ok(
                     "تم استهلاك الحد اليومي لإرسال القوافل لهذا اليوم",
                     status="daily_limit_reached",
                     retry_after=14400
                 )
-            elif "HAS_MARCHING" in err_code:
+            elif "NOT_ESCORT_TIME" in err_code:
+                self.log.info("ℹ️ خارج أوقات إرسال القوافل اليومية (مغلقة حالياً في السيرفر) ⏳")
+                return TaskResult.ok(
+                    "خارج أوقات إرسال القوافل اليومية (مغلقة حالياً بالسيرفر)",
+                    status="not_escort_time",
+                    retry_after=1800
+                )
+            elif "HAS_MARCHING" in err_code or "CARRIAGE_ESCORT_DOING" in err_code:
                 self.log.info("ℹ️ توجد قافلة تسير بالفعل في الطريق حالياً.")
                 return TaskResult.ok("توجد قافلة تسير بالفعل", status="marching", retry_after=1800)
+            elif "ATY_NOT_OPEN" in err_code:
+                self.log.info("ℹ️ فعالية القافلة وحراسة الكنز غير مفتوحة حالياً في السيرفر.")
+                return TaskResult.ok("فعالية القافلة غير مفتوحة حالياً", status="activity_closed", retry_after=7200)
             else:
                 self.log.error(f"❌ فشل إرسال القافلة (كود السيرفر: {err_code})")
                 return TaskResult.fail(f"فشل إرسال القافلة (كود {err_code})", retry_after=600)

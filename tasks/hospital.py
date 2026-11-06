@@ -10,15 +10,15 @@ tasks/hospital.py — مهمة معالجة الجنود الجرحى في ال�
   1. التحقق من جاهزية مبنى المشفى (Hospital - Building ID: 206) في القلعة ومستواه.
   2. فحص طابور العلاج في queueCtrl (Queue Type: 1202 - hostpital_queue):
      - إذا كان هناك طابور علاج نشط (starttime + totaltime > now)، يتم تسجيل الوقت المتبقي والتخطي بأمان.
-  3. استعلام بيانات الجيش وجلب الجنود المصابين الجرحى (1005/1 -> woundedArmy).
+  3. جلب الجنود المصابين الجرحى من الذاكرة الحية مباشرة دون طلبات شبكة (init_data -> armyCtrl -> woundedArmy).
   4. في حال وجود جرحى والمشفى متاح:
-     - إرسال طلب العلاج العادي (cmd: "1005", subcmd: "4", mode: "0") بكافة أعداد الجنود المحتاجة للعلاج.
-     - تحديث الذاكرة المحلية للجلسة (تصفير الجرحى، تحديث طابور 1202، وتحديث مهمة الهيبة).
+     - اقتطاع ومعالجة العدد المتبقي فقط المطلوب لمهمة الهيبة اليومية (#4112009) بدءاً من الرتب الأقل لتوفير الموارد.
+     - إرسال طلب العلاج العادي (cmd: "1005", subcmd: "4", mode: "0") بالعدد المقتطع فقط.
+     - تحديث الذاكرة الحية للجلسة بخصم المعالجين فقط وتحديث حالة مهمة الهيبة إلى مكتملة (status = 4).
 
 بروتوكول اللعبة المعتمد:
   - مهمة الهيبة لعلاج الجرحى: #4112009 (meritoriousTaskCtrl)
   - تجديد بيانات الهيبة:      cmd: "1013", subcmd: "1"
-  - استعلام الجيش:            cmd: "1005", subcmd: "1", data: {}
   - طلب بدء العلاج:           cmd: "1005", subcmd: "4", data: {"mode": "0", "armyinfo": {...}}
   - طابور العلاج:             queueCtrl['1202'] (hostpital_queue)
   - مبنى المشفى:              bid: "206" (BUILDID.HOSTPITAL)
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import sys
 import os
+import json
 import time
 import asyncio
 import logging
@@ -48,6 +49,16 @@ from tasks.base_task import BaseTask, TaskResult
 
 if TYPE_CHECKING:
     from game_client import GameConnection
+
+# تحميل قاعدة بيانات القوات وتكاليف التدريب والعلاج الرسمية المستخرجة من كود اللعبة
+_ARMY_DB_PATH = os.path.join(_ROOT_DIR, "core", "army_database.json")
+_ARMY_DATABASE: Dict[str, Any] = {}
+if os.path.exists(_ARMY_DB_PATH):
+    try:
+        with open(_ARMY_DB_PATH, "r", encoding="utf-8") as _f:
+            _ARMY_DATABASE = json.load(_f)
+    except Exception:
+        pass
 
 HOSPITAL_BID = "206"
 HOSPITAL_QUEUE_TYPE = "1202"
@@ -228,65 +239,162 @@ class HospitalTask(BaseTask):
 
     async def get_wounded_troops(self) -> Tuple[Dict[str, str], int]:
         """
-        استعلام أحدث بيانات الجيش من السيرفر (1005/1) وجلب قائمة الجنود الجرحى.
+        جلب قائمة الجنود الجرحى مباشرة من الذاكرة الحية (init_data['armyCtrl']['woundedArmy'])
+        دون إرسال أي استعلام شبكي للسيرفر لتسريع الأداء وتوفير الطلبات.
         يعيد: (armyinfo_dict, total_count)
         """
         wounded_map: Dict[str, str] = {}
+        army_ctrl = self.conn.init_data.get("armyCtrl", {})
+        raw_cached = army_ctrl.get("woundedArmy", {}) if isinstance(army_ctrl, dict) else {}
 
-        try:
-            r_army = await self.conn.query("1005", "1", {}, timeout=6)
-            if r_army and str(r_army.get("err", "-1")) == "0":
-                data = r_army.get("data", {})
-                if isinstance(data, dict):
-                    # تحديث الكاش المحلي
-                    if "armyCtrl" in self.conn.init_data and isinstance(self.conn.init_data["armyCtrl"], dict):
-                        self.conn.init_data["armyCtrl"]["woundedArmy"] = data.get("woundedArmy", {})
-                        if "totalArmy" in data:
-                            self.conn.init_data["armyCtrl"]["totalArmy"] = data.get("totalArmy", {})
-                    raw_wounded = data.get("woundedArmy", {})
-                    if isinstance(raw_wounded, dict):
-                        for k, v in raw_wounded.items():
-                            if str(k).isdigit() and str(v).isdigit() and int(v) > 0:
-                                wounded_map[str(k)] = str(v)
-        except Exception as e:
-            self.log.warning(f"⚠️ تعذر استعلام الجيش 1005/1: {e} — استخدام البيانات المخزنة محلياً.")
-
-        # خطة بديلة: قراءة الجرحى من بيانات init_data المخزنة مسبقاً
-        if not wounded_map:
-            army_ctrl = self.conn.init_data.get("armyCtrl", {})
-            raw_cached = army_ctrl.get("woundedArmy", {}) if isinstance(army_ctrl, dict) else {}
-            if isinstance(raw_cached, dict):
-                for k, v in raw_cached.items():
-                    if str(k).isdigit() and str(v).isdigit() and int(v) > 0:
-                        wounded_map[str(k)] = str(v)
+        if isinstance(raw_cached, dict):
+            for k, v in raw_cached.items():
+                if str(k).isdigit() and str(v).isdigit() and int(v) > 0:
+                    wounded_map[str(k)] = str(v)
 
         total_cnt = sum(int(v) for v in wounded_map.values())
         return wounded_map, total_cnt
 
-    async def run(self) -> TaskResult:
-        """تنفيذ مهمة فحص وعلاج الجنود الجرحى بالمشفى مع التحقق المسبق من مهام الهيبة."""
-        self.log.info("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى ومهمة الهيبة...")
+    def _select_prestige_troops(
+        self,
+        wounded_map: Dict[str, str],
+        needed_count: int
+    ) -> Tuple[Dict[str, str], int]:
+        """
+        اقتطاع العدد المطلوب فقط من الجنود لعلاج الهيبة بدءاً من المستويات الأقل (أرخص وأسرع).
+        """
+        if needed_count <= 0 or not wounded_map:
+            return {}, 0
+        # فرز الرتب تصاعدياً (401 -> 1, 409 -> 9) لاختيار الأقل كلفة وزمن علاج أولاً
+        def get_tier(army_id: str) -> int:
+            try:
+                return int(army_id) % 100
+            except Exception:
+                return 99
+        sorted_ids = sorted(wounded_map.keys(), key=get_tier)
+        selected: Dict[str, str] = {}
+        quota = needed_count
+        for aid in sorted_ids:
+            avail = int(wounded_map[aid])
+            if avail <= 0:
+                continue
+            take = min(avail, quota)
+            selected[aid] = str(take)
+            quota -= take
+            if quota <= 0:
+                break
+        total_selected = sum(int(v) for v in selected.values())
+        return selected, total_selected
 
-        # 0. الاستعلام التلقائي المسبق: التحقق من إنجاز مهمة علاج الجرحى في مهام الهيبة اليومية (#4112009)
-        # إذا كانت منجزة بالفعل، يتم تجاهل علاج الجرحى وتخطي المشفى تلقائياً لحفظ موارد القلعة
-        await self._refresh_merit_data()
-        is_prestige_done, q_info = self.check_prestige_cure_done()
-        if is_prestige_done:
-            c_num = q_info.get("c_num", 0)
-            l_num = q_info.get("l_num", 0)
-            status_desc = f"({c_num}/{l_num})" if l_num > 0 else "(مكتملة)"
-            skip_msg = (
-                f"✨ [مهام الهيبة] مهمة علاج الجرحى في مهام الهيبة اليومية منجزة مسبقاً {status_desc} "
-                f"— تم تخطي مهمة المشفى تلقائياً لتوفير الموارد ومنع الاستهلاك غير الضروري!"
-            )
-            self.log.info(f"⏭️ {skip_msg}")
-            return TaskResult.ok(
-                skip_msg,
-                skipped=True,
-                reason="PRESTIGE_CURE_ALREADY_DONE",
-                quest_id=PRESTIGE_CURE_QUEST_ID,
-                quest_info=q_info,
-            )
+    def _filter_affordable_troops(
+        self,
+        candidate_troops: Dict[str, str]
+    ) -> Tuple[Dict[str, str], int, str]:
+        """
+        فحص استباقي لموارد القلعة (init_data['cityCtrl']['reslist'])
+        واقتطاع أقصى عدد من الجنود يمكن علاجه بالموارد المتاحة دون إرسال طلبات فاشلة للسيرفر.
+        يعيد: (affordable_armyinfo, total_affordable_count, status_reason)
+        """
+        city_ctrl = self.conn.init_data.get("cityCtrl", {})
+        reslist = city_ctrl.get("reslist", {}) if isinstance(city_ctrl, dict) else {}
+
+        # رصيد الموارد الحالية في المدينة (1002 قمح, 1003 خشب, 1004 حديد, 1005 فضة)
+        budget = {
+            "1002": float(reslist.get("1002", 0.0)),
+            "1003": float(reslist.get("1003", 0.0)),
+            "1004": float(reslist.get("1004", 0.0)),
+            "1005": float(reslist.get("1005", 0.0)),
+        }
+
+        # في حال عدم توفر قاعدة بيانات القوات، نمرر المرشحين كما هم كإجراء احتياطي
+        if not _ARMY_DATABASE:
+            total_cand = sum(int(v) for v in candidate_troops.values())
+            return candidate_troops, total_cand, ""
+
+        affordable: Dict[str, str] = {}
+        limiting_res = ""
+
+        for aid, cnt_str in candidate_troops.items():
+            count = int(cnt_str)
+            if count <= 0:
+                continue
+
+            unit_info = _ARMY_DATABASE.get(str(aid), {})
+            base_cost = unit_info.get("costRes", {})
+
+            # تكلفة علاج الجندي الواحد = 50% من تكلفة التدريب
+            unit_cure_cost = {str(res_id): float(val) * 0.5 for res_id, val in base_cost.items()}
+
+            # حساب أقصى عدد يمكن علاجه من هذه الفئة وفق الميزانية المتبقية
+            max_possible = count
+            res_names = {"1002": "القمح", "1003": "الخشب", "1004": "الحديد", "1005": "الفضة"}
+            for res_id, u_cost in unit_cure_cost.items():
+                if u_cost > 0:
+                    avail = budget.get(str(res_id), 0.0)
+                    can_afford = int(avail // u_cost)
+                    if can_afford < max_possible:
+                        max_possible = can_afford
+                        limiting_res = res_names.get(str(res_id), f"مورد {res_id}")
+
+            if max_possible > 0:
+                affordable[aid] = str(max_possible)
+                # خصم التكلفة المستهلكة من الميزانية المتبقية
+                for res_id, u_cost in unit_cure_cost.items():
+                    budget[str(res_id)] = max(0.0, budget.get(str(res_id), 0.0) - (u_cost * max_possible))
+
+            # إذا لم نستطع تغطية كامل العدد المطلوب من هذه الفئة، نتوقف فوراً لأن المورد نفد
+            if max_possible < count:
+                break
+
+        total_affordable = sum(int(v) for v in affordable.values())
+        return affordable, total_affordable, limiting_res
+
+    async def run(self) -> TaskResult:
+        """تنفيذ مهمة فحص وعلاج الجنود الجرحى بالمشفى مع التحقق المسبق لمهام الهيبة وفحص الموارد الاستباقي."""
+        # 0. قراءة نمط العلاج المختار من الإعدادات:
+        # "prestige" = علاج المتبقي لمهمة الهيبة فقط (الافتراضي)
+        # "all"      = علاج كافة الجرحى الممكنين بالموارد دون التقيد بمهمة الهيبة
+        mode = str(self.config.get("mode", "prestige")).lower().strip()
+        is_all_mode = (mode == "all")
+
+        remaining_needed = 0
+
+        if not is_all_mode:
+            self.log.info("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى ومهمة الهيبة (نمط: prestige)...")
+            # التحقق المسبق من إنجاز مهمة علاج الجرحى في مهام الهيبة اليومية (#4112009)
+            await self._refresh_merit_data()
+            is_prestige_done, q_info = self.check_prestige_cure_done()
+            if is_prestige_done:
+                c_num = q_info.get("c_num", 0)
+                l_num = q_info.get("l_num", 0)
+                status_desc = f"({c_num}/{l_num})" if l_num > 0 else "(مكتملة)"
+                skip_msg = (
+                    f"✨ [مهام الهيبة] مهمة علاج الجرحى في مهام الهيبة اليومية منجزة مسبقاً {status_desc} "
+                    f"— تم تخطي مهمة المشفى تلقائياً لتوفير الموارد ومنع الاستهلاك غير الضروري!"
+                )
+                self.log.info(f"⏭️ {skip_msg}")
+                return TaskResult.ok(
+                    skip_msg,
+                    skipped=True,
+                    reason="PRESTIGE_CURE_ALREADY_DONE",
+                    quest_id=PRESTIGE_CURE_QUEST_ID,
+                    quest_info=q_info,
+                )
+
+            # إذا كانت المهمة غير مسندة لهذا الحساب اليوم يتم التخطي لحفظ الموارد
+            if not q_info.get("found", False):
+                skip_msg = "✨ [مهام الهيبة] مهمة علاج الجرحى (#4112009) غير مطلوبة اليوم في هذا الحساب — تم التخطي لحفظ الموارد."
+                self.log.info(f"⏭️ {skip_msg}")
+                return TaskResult.ok(skip_msg, skipped=True, reason="PRESTIGE_CURE_NOT_ACTIVE")
+
+            # قراءة العدد المتبقي المطلوب للهيبة بالضبط
+            remaining_needed = q_info.get("remaining", 0)
+            if remaining_needed <= 0:
+                skip_msg = "✨ [مهام الهيبة] تم استيفاء عدد الجنود المطلوب علاجهم — تخطي المشفى."
+                self.log.info(f"⏭️ {skip_msg}")
+                return TaskResult.ok(skip_msg, skipped=True, reason="NO_REMAINING_PRESTIGE_CURE")
+        else:
+            self.log.info("🛡️ [مهمة المشفى] بدء فحص جاهزية المشفى لعلاج كافة الجرحى الممكنين (نمط: all)...")
 
         # 1. التحقق من وجود مبنى المشفى
         has_bld, b_lv, b_desc = self.check_hospital_building()
@@ -300,15 +408,40 @@ class HospitalTask(BaseTask):
             self.log.info(f"⏳ {q_desc} — المشفى مشغول حالياً، تخطي العلاج بأمان لهذه الدورة.")
             return TaskResult.ok(q_desc, skipped=True, reason="HOSPITAL_BUSY", remaining_seconds=q_remain)
 
-        # 3. استعلام الجنود الجرحى
-        armyinfo, total_wounded = await self.get_wounded_troops()
-        if total_wounded <= 0 or not armyinfo:
+        # 3. جلب الجنود الجرحى من الذاكرة الحية مباشرة
+        all_wounded, total_wounded = await self.get_wounded_troops()
+        if total_wounded <= 0 or not all_wounded:
             self.log.info("✅ [المشفى سليم] لا يوجد أي جنود جرحى بحاجة للعلاج في المشفى حالياً.")
             return TaskResult.ok("لا يوجد جنود جرحى", wounded_count=0)
 
-        self.log.info(f"🩹 تم رصد {total_wounded:,} جندي جريح في المشفى بحاجة للعلاج عبر {len(armyinfo)} فئة قوات...")
+        # تحديد العدد المستهدف:
+        # في نمط الهيبة: العدد المتبقي للهيبة
+        # في نمط الكل: جميع الجرحى في المشفى
+        target_count = total_wounded if is_all_mode else remaining_needed
 
-        # 4. إرسال طلب العلاج (1005 / 4)
+        # اقتطاع القوات المرشحة بدءاً من المستوى الأقل (الأرخص والأسرع)
+        candidates, cand_count = self._select_prestige_troops(all_wounded, target_count)
+        if cand_count <= 0 or not candidates:
+            self.log.info("✅ لا توجد قوات صالحة للعلاج حالياً.")
+            return TaskResult.ok("تم استيفاء المطلوب", wounded_count=0)
+
+        # 4. الفحص الاستباقي لموارد القلعة والتأكد من كفايتها قبل إرسال طلب العلاج
+        armyinfo, heal_count, limit_reason = self._filter_affordable_troops(candidates)
+        if heal_count <= 0 or not armyinfo:
+            warn_msg = f"⚠️ [فحص استباقي للموارد] رصيد القلعة الحالي من ({limit_reason or 'الموارد'}) لا يكفي لعلاج أي جنود حالياً — تم التخطي بأمان دون أخطاء."
+            self.log.warning(warn_msg)
+            return TaskResult.ok(warn_msg, skipped=True, reason="INSUFFICIENT_RESOURCES_PREFLIGHT")
+
+        if heal_count < cand_count:
+            self.log.info(
+                f"⚠️ [فحص استباقي للموارد] الموارد المتاحة تكفي لعلاج {heal_count:,} من أصل {cand_count:,} جندي مطلوب (الحد بسبب: {limit_reason}) "
+                f"➔ سيتم علاج ما يمكن علاجه فقط لتفادي أخطاء السيرفر!"
+            )
+        else:
+            mode_desc = "لكامل العدد المطلوب للهيبة" if not is_all_mode else "لكافة الجرحى"
+            self.log.info(f"✅ [فحص استباقي للموارد] الموارد متوفرة وتكفي {mode_desc} بالكامل ({heal_count:,} جندي).")
+
+        # 5. إرسال طلب العلاج للدفعة المضمونة فقط (1005 / 4)
         payload = {
             "mode": "0",
             "armyinfo": armyinfo
@@ -330,9 +463,16 @@ class HospitalTask(BaseTask):
             totaltime = float(retdata.get("totaltime", 0.0))
             queuetype = str(retdata.get("queuetype", HOSPITAL_QUEUE_TYPE))
 
-            # تحديث الذاكرة المحلية للجلسة فوراً
+            # تحديث الذاكرة المحلية للجلسة: خصم الجنود المعالجين فقط والحفاظ على بقية الجرحى
             if "armyCtrl" in self.conn.init_data and isinstance(self.conn.init_data["armyCtrl"], dict):
-                self.conn.init_data["armyCtrl"]["woundedArmy"] = {}
+                cached_wounded = self.conn.init_data["armyCtrl"].get("woundedArmy")
+                if isinstance(cached_wounded, dict):
+                    for aid, cnt_str in armyinfo.items():
+                        c_rem = max(0, int(cached_wounded.get(aid, 0)) - int(cnt_str))
+                        if c_rem > 0:
+                            cached_wounded[aid] = str(c_rem)
+                        else:
+                            cached_wounded.pop(aid, None)
 
             if "queueCtrl" in self.conn.init_data and isinstance(self.conn.init_data["queueCtrl"], dict):
                 self.conn.init_data["queueCtrl"][queuetype] = {
@@ -346,7 +486,7 @@ class HospitalTask(BaseTask):
                     }
                 }
 
-            # تحديث حالة مهمة علاج الجرحى في مهام الهيبة محلياً
+            # تحديث حالة مهمة علاج الجرحى في مهام الهيبة محلياً (إن وجدت)
             merit = self.conn.init_data.get("meritoriousTaskCtrl")
             if isinstance(merit, dict):
                 task_data = merit.setdefault("taskData", {})
@@ -354,12 +494,16 @@ class HospitalTask(BaseTask):
                     t_info = task_data.setdefault(str(PRESTIGE_CURE_QUEST_ID), {
                         "id": PRESTIGE_CURE_QUEST_ID,
                         "cNum": 0,
-                        "lNum": 1,
+                        "lNum": remaining_needed if remaining_needed > 0 else 500,
                         "status": 2
                     })
                     if isinstance(t_info, dict):
-                        t_info["cNum"] = int(t_info.get("cNum", 0)) + total_wounded
-                        t_info["status"] = 4
+                        new_c = int(t_info.get("cNum", 0)) + heal_count
+                        t_info["cNum"] = new_c
+                        l_target = int(t_info.get("lNum", 0))
+                        if l_target > 0 and new_c >= l_target:
+                            t_info["status"] = 4  # أصبحت منجزة وجاهزة للاستلام فوراً
+
                 daily = merit.setdefault("daily_task", {})
                 if isinstance(daily, dict):
                     daily[str(PRESTIGE_CURE_QUEST_ID)] = int(daily.get(str(PRESTIGE_CURE_QUEST_ID), 0)) + 1
@@ -368,9 +512,9 @@ class HospitalTask(BaseTask):
             h, m = divmod(m, 60)
             dur_str = f"{h}س و{m}د" if h > 0 else f"{m}د و{s}ث"
 
-            succ_msg = f"🏥 تم إرسال طلب علاج {total_wounded:,} جندي جريح بنجاح! (مدة العلاج: {dur_str})"
+            succ_msg = f"🏥 تم إرسال علاج {heal_count:,} جندي بنجاح (النمط: {mode})! (مدة العلاج: {dur_str})"
             self.log.info(f"✅ {succ_msg}")
-            return TaskResult.ok(succ_msg, healed_count=total_wounded, totaltime=totaltime)
+            return TaskResult.ok(succ_msg, healed_count=heal_count, totaltime=totaltime)
 
         # التعامل مع أخطاء السيرفر المعروفة
         err_descriptions = {

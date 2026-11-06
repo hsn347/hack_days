@@ -20,29 +20,15 @@ class PortTask(BaseTask):
     name = "port"
 
     async def run(self) -> TaskResult:
-        self.log.info("🚢 فحص الميناء...")
-
-        # استعلام قائمة السفن المتاحة
+        # إرسال طلب استلام جائزة سفينة الميناء مباشرة
         r = await self.conn.query('1033', '2', {})
-        if not r or 'data' not in r:
-            return TaskResult.fail("❌ فشل استعلام الميناء", retry_after=300)
+        if not r or str(r.get('err', '-1')) != '0':
+            err_msg = r.get('msg') if r else 'لا يوجد رد'
+            return TaskResult.fail(f" تعذر استلام جائزة الميناء: {err_msg}")
 
-        ships = r['data'].get('shipList', [])
-        if not ships:
-            self.log.info("🚢 لا توجد سفن متاحة حالياً")
-            return TaskResult.ok("لا توجد سفن", ships=0)
+        # تحديث بيانات الميناء في الذاكرة الحية فوراً بالعداد والبيانات الجديدة
+        new_data = r.get('data')
+        if isinstance(new_data, dict):
+            self.conn.init_data['timeRewardCtrl'] = new_data
 
-        sent = 0
-        for ship in ships:
-            ship_id = ship.get('id')
-            if not ship_id:
-                continue
-            if ship.get('status', 0) != 0:  # 0 = متاح للإرسال
-                continue
-            r_send = await self.conn.query('1033', '3', {"shipId": ship_id})
-            if r_send and str(r_send.get('err', '0')) == '0':
-                self.log.info(f"✅ تم إرسال السفينة {ship_id}")
-                sent += 1
-            await asyncio.sleep(2.0)  # حماية من الحظر
-
-        return TaskResult.ok(f"✅ تم إرسال {sent} سفينة", sent=sent)
+        return TaskResult.ok("تم استلام جائزة سفينة الميناء بنجاح")

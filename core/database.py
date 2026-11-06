@@ -12,6 +12,7 @@ core/database.py — قاعدة بيانات SQLite المحلية الرئيس�
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import logging
@@ -59,9 +60,11 @@ def get_db_path(custom_path: Optional[str] = None) -> str:
     return DEFAULT_DB_PATH
 
 
-def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
+@contextlib.contextmanager
+def get_connection(db_path: Optional[str] = None):
     """
-    إنشاء اتصال بقاعدة بيانات SQLite مع تفعيل إعدادات السرعة والأمان التزامني (WAL).
+    إنشاء اتصال بقاعدة بيانات SQLite مع تفعيل إعدادات السرعة والأمان التزامني (WAL)،
+    وضمان إغلاق الاتصال وتحرير الـ File Descriptors فور انتهاء البلوك لمنع استنزاف موارد النظام.
     """
     path = get_db_path(db_path)
     conn = sqlite3.connect(path, timeout=10.0)
@@ -72,7 +75,11 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA busy_timeout = 5000;")
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_db(db_path: Optional[str] = None) -> None:
@@ -99,11 +106,17 @@ def init_db(db_path: Optional[str] = None) -> None:
                     subscription_expires_at TEXT,
                     max_castles_allowed INTEGER DEFAULT 1,
                     current_castles_count INTEGER DEFAULT 0,
-                    pending_castles_count INTEGER DEFAULT 0
+                    pending_castles_count INTEGER DEFAULT 0,
+                    tenant_domain TEXT DEFAULT ''
                 );
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);")
+                try:
+                    conn.execute("ALTER TABLE users ADD COLUMN tenant_domain TEXT DEFAULT '';")
+                except Exception:
+                    pass
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_domain);")
 
                 # ── جدول القلاع ──
                 conn.execute("""
@@ -113,6 +126,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                     user_id TEXT,
                     password TEXT DEFAULT '',
                     config TEXT DEFAULT '{}',
+                    version INTEGER DEFAULT 1,
                     is_active INTEGER DEFAULT 1,
                     created_at TEXT,
                     lord_name TEXT,
@@ -137,10 +151,27 @@ def init_db(db_path: Optional[str] = None) -> None:
                     diamond INTEGER DEFAULT 0,
                     gold INTEGER DEFAULT 0,
                     stamina INTEGER DEFAULT 100,
+                    unprotected_food INTEGER DEFAULT 0,
+                    unprotected_wood INTEGER DEFAULT 0,
+                    unprotected_iron INTEGER DEFAULT 0,
+                    unprotected_diamond INTEGER DEFAULT 0,
+                    safe_food INTEGER DEFAULT 0,
+                    safe_wood INTEGER DEFAULT 0,
+                    safe_iron INTEGER DEFAULT 0,
+                    safe_diamond INTEGER DEFAULT 0,
+                    loop_interval INTEGER DEFAULT 40,
                     last_updated TEXT,
                     raw_json TEXT
                 );
                 """)
+                for col in (
+                    "unprotected_food", "unprotected_wood", "unprotected_iron", "unprotected_diamond",
+                    "safe_food", "safe_wood", "safe_iron", "safe_diamond"
+                ):
+                    try:
+                        conn.execute(f"ALTER TABLE castle_states ADD COLUMN {col} INTEGER DEFAULT 0;")
+                    except Exception:
+                        pass
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_email ON castle_states(email);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_user ON castle_states(user_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_state ON castle_states(state);")
@@ -214,11 +245,15 @@ def init_db(db_path: Optional[str] = None) -> None:
                 new_cols = {
                     "password": "TEXT DEFAULT ''",
                     "config": "TEXT DEFAULT '{}'",
+                    "version": "INTEGER DEFAULT 1",
                     "is_active": "INTEGER DEFAULT 1",
                     "created_at": "TEXT",
                     "castle_name": "TEXT DEFAULT ''",
                     "alliance_name": "TEXT DEFAULT ''",
                     "vip_level": "INTEGER DEFAULT 0",
+                    "avatar": "TEXT DEFAULT ''",
+                    "image_id": "INTEGER DEFAULT 0",
+                    "loop_interval": "INTEGER DEFAULT 40",
                 }
                 for col_name, col_def in new_cols.items():
                     if col_name not in existing_cols:
@@ -226,9 +261,29 @@ def init_db(db_path: Optional[str] = None) -> None:
                             conn.execute(f"ALTER TABLE castle_states ADD COLUMN {col_name} {col_def}")
                         except Exception:
                             pass
+                try:
+                    conn.execute("UPDATE castle_states SET version = 1 WHERE version IS NULL;")
+                except Exception:
+                    pass
+
+                # ── جدول إعدادات النظام العامة ──
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS system_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT
+                );
+                """)
 
                 # إسقاط جدول التنبيهات الحرجة القديم تلقائياً لتنظيف قاعدة البيانات
                 conn.execute("DROP TABLE IF EXISTS critical_alerts;")
+
+                # ── فهارس تسريع الاستعلامات وتعبيرات LOWER و created_at (Milestone 1) ──
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_states_lower_email ON castle_states(LOWER(email));")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_states_lower_user ON castle_states(LOWER(user_id));")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users(LOWER(email));")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_states_created_at ON castle_states(created_at DESC);")
 
                 conn.commit()
             _db_initialized = True
@@ -242,6 +297,41 @@ def _ensure_init(db_path: Optional[str] = None) -> None:
     path = get_db_path(db_path)
     if path not in _initialized_paths:
         init_db(db_path)
+
+
+# ════════════════════════════════════════════════════════════════════
+# ⚙️ إعدادات النظام العامة (System Settings)
+# ════════════════════════════════════════════════════════════════════
+
+def get_system_setting(key: str, default: str = "", db_path: Optional[str] = None) -> str:
+    """استرجاع إعداد نظام معين من جدول system_settings."""
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            row = conn.execute("SELECT value FROM system_settings WHERE key = ?", (key,)).fetchone()
+            if row and row["value"] is not None:
+                return str(row["value"])
+    except Exception as e:
+        log.warning(f"⚠️ خطأ في قراءة إعداد النظام {key}: {e}")
+    return default
+
+
+def set_system_setting(key: str, value: str, db_path: Optional[str] = None) -> bool:
+    """حفظ أو تحديث إعداد نظام في جدول system_settings."""
+    _ensure_init(db_path)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with get_connection(db_path) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                (key, str(value), now)
+            )
+            conn.commit()
+        return True
+    except Exception as e:
+        log.warning(f"⚠️ خطأ في حفظ إعداد النظام {key}: {e}")
+        return False
+
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -265,6 +355,7 @@ def create_or_update_user(
     max_castles_allowed: int = 0,
     current_castles_count: int = 0,
     pending_castles_count: int = 0,
+    tenant_domain: str = "",
     db_path: Optional[str] = None,
 ) -> bool:
     """إنشاء أو تحديث مستخدم في قاعدة البيانات."""
@@ -273,6 +364,12 @@ def create_or_update_user(
         return False
     clean_email = email.strip().lower()
     is_super = clean_email == "ibraboths@gmail.com"
+    try:
+        from core.tenants import is_merchant_admin
+        is_merchant = is_merchant_admin(clean_email)
+    except Exception:
+        is_merchant = False
+
     if is_super:
         role = "admin"
         plan_id = "super_admin_unlimited"
@@ -280,9 +377,17 @@ def create_or_update_user(
         subscription_status = "active"
         subscription_expires_at = "2099-01-01T00:00:00Z"
         max_castles_allowed = 999999
+    elif is_merchant:
+        role = "merchant_admin"
+        plan_id = "merchant_admin_unlimited"
+        plan_name = "باقة مشرف التاجر (غير محدود)"
+        subscription_status = "active"
+        subscription_expires_at = "2099-01-01T00:00:00Z"
+        max_castles_allowed = 999999
     else:
         role = "user"
 
+    clean_tenant = tenant_domain.strip().lower()
     now_created = created_at or datetime.now(timezone.utc).isoformat()
     try:
         with get_connection(db_path) as conn:
@@ -291,26 +396,32 @@ def create_or_update_user(
                 uid, email, username, phone, role, created_at,
                 is_banned, banned_reason, plan_id, plan_name,
                 subscription_status, subscription_started_at, subscription_expires_at,
-                max_castles_allowed, current_castles_count, pending_castles_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                max_castles_allowed, current_castles_count, pending_castles_count,
+                tenant_domain
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 email = excluded.email,
                 username = CASE WHEN excluded.username != '' THEN excluded.username ELSE users.username END,
                 phone = CASE WHEN excluded.phone != '' THEN excluded.phone ELSE users.phone END,
-                role = CASE WHEN excluded.email = 'ibraboths@gmail.com' THEN 'admin' ELSE 'user' END,
+                role = CASE WHEN excluded.email = 'ibraboths@gmail.com' THEN 'admin' ELSE users.role END,
                 is_banned = excluded.is_banned,
+                tenant_domain = CASE WHEN users.tenant_domain != '' THEN users.tenant_domain ELSE excluded.tenant_domain END,
                 banned_reason = CASE WHEN excluded.banned_reason != '' THEN excluded.banned_reason ELSE users.banned_reason END
             """, (
                 uid, clean_email, username, phone, role, now_created,
                 1 if is_banned else 0, banned_reason, plan_id, plan_name,
                 subscription_status, subscription_started_at, subscription_expires_at,
                 max_castles_allowed, current_castles_count, pending_castles_count,
+                clean_tenant,
             ))
             conn.commit()
             return True
     except Exception as e:
         log.warning(f"⚠️ تعذر إنشاء/تحديث المستخدم ({uid}): {e}")
         return False
+
+
+create_user = create_or_update_user
 
 
 def get_user(uid: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -342,13 +453,32 @@ def get_user(uid: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]
     return None
 
 
-def get_all_users(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """جلب جميع المستخدمين (للإدارة)."""
+def get_all_users(tenant_domains: Optional[List[str]] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """جلب المستخدمين (للإدارة، مع إمكانية الفلترة حسب نطاقات التاجر)."""
     _ensure_init(db_path)
     result: List[Dict[str, Any]] = []
     try:
+        from core.tenants import get_all_merchants, DEFAULT_TENANT
+        admin_emails = [DEFAULT_TENANT["admin_email"].strip().lower()]
+        for m in get_all_merchants():
+            ae = (m.get("admin_email") or "").strip().lower()
+            if ae and ae not in admin_emails:
+                admin_emails.append(ae)
+
         with get_connection(db_path) as conn:
-            cur = conn.execute("SELECT * FROM users ORDER BY created_at DESC")
+            email_placeholders = ",".join("?" for _ in admin_emails)
+            base_where = f"role NOT IN ('admin', 'merchant_admin') AND LOWER(email) NOT IN ({email_placeholders})"
+            params = list(admin_emails)
+
+            if tenant_domains and len(tenant_domains) > 0:
+                clean_domains = [d.strip().lower() for d in tenant_domains if d.strip()]
+                placeholders = ",".join("?" for _ in clean_domains)
+                query = f"SELECT * FROM users WHERE {base_where} AND LOWER(tenant_domain) IN ({placeholders}) ORDER BY created_at DESC"
+                params.extend(clean_domains)
+            else:
+                query = f"SELECT * FROM users WHERE {base_where} ORDER BY created_at DESC"
+
+            cur = conn.execute(query, params)
             for row in cur.fetchall():
                 d = dict(row)
                 d["is_banned"] = bool(d.get("is_banned", 0))
@@ -882,7 +1012,11 @@ def save_castle(
 
     clean_email = em.strip().lower()
     now_created = c_at or datetime.now(timezone.utc).isoformat()
-    config_json = json.dumps(cfg, ensure_ascii=False) if isinstance(cfg, dict) else str(cfg or "{}")
+    if isinstance(cfg, dict):
+        cfg = _sanitize_castle_config(cfg)
+        config_json = json.dumps(cfg, ensure_ascii=False)
+    else:
+        config_json = str(cfg or "{}")
 
     try:
         with get_connection(db_path) as conn:
@@ -952,6 +1086,316 @@ def get_user_castles(user_id: str, db_path: Optional[str] = None) -> List[Dict[s
     return result
 
 
+def get_castle_config(castle_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """جلب إعدادات قلعة محددة فقط عند الطلب (بدون بيانات حساسة)."""
+    if not castle_id:
+        return None
+    _ensure_init(db_path)
+    clean_cid = str(castle_id).strip()
+    try:
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT castle_id, user_id, email, config, is_active, state, conn_state, conn_message, next_run_time FROM castle_states WHERE castle_id = ? OR lower(email) = ? LIMIT 1",
+                (clean_cid, clean_cid.lower())
+            ).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            try:
+                d["config"] = json.loads(d.get("config") or "{}") if isinstance(d.get("config"), str) else (d.get("config") or {})
+            except Exception:
+                d["config"] = {}
+            return d
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء جلب إعدادات القلعة ({castle_id}): {e}")
+        return None
+
+
+def get_admin_castles_paginated(
+    page: Optional[int] = 1,
+    page_size: Optional[int] = 25,
+    search: str = "",
+    filter_status: str = "all",
+    tenant_domains: Optional[List[str]] = None,
+    db_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    استعلام ترقيم متقدم لقلاع ومستخدمي لوحة الإدارة يعتمد LIMIT و OFFSET و COUNT(*)
+    مع تصفية دقيقة حسب المستأجر (Tenant) وحالة القلاع والبحث النصي،
+    مع استبعاد عمود config و raw_json الثقيلين لتسريع الاستجابة وخفض استهلاك الذاكرة.
+    """
+    _ensure_init(db_path)
+
+    if hasattr(page, "default"):
+        page = page.default
+    if hasattr(page_size, "default"):
+        page_size = page_size.default
+    if hasattr(search, "default"):
+        search = search.default
+    if hasattr(filter_status, "default"):
+        filter_status = filter_status.default
+
+    # 1. ضبط قيم الترقيم
+    is_paginated = False
+    ps = None
+    if page_size is not None:
+        try:
+            ps_val = int(page_size)
+            if ps_val > 0:
+                is_paginated = True
+                ps = max(1, min(ps_val, 500))
+        except (ValueError, TypeError):
+            is_paginated = False
+
+    p = 1
+    if page is not None:
+        try:
+            p = max(1, int(page))
+        except (ValueError, TypeError):
+            p = 1
+
+    offset = (p - 1) * ps if (is_paginated and ps) else 0
+
+    clean_search = str(search or "").strip().lower()
+    clean_filter = str(filter_status or "all").strip().lower()
+
+    where_clauses: List[str] = []
+    params: List[Any] = []
+
+    # 2. عزل بيانات التجار (Tenant isolation)
+    if tenant_domains is not None:
+        valid_domains = [d.strip().lower() for d in tenant_domains if d and d.strip()]
+        if valid_domains:
+            placeholders = ", ".join("?" for _ in valid_domains)
+            where_clauses.append(f"lower(coalesce(u.tenant_domain, '')) IN ({placeholders})")
+            params.extend(valid_domains)
+        else:
+            where_clauses.append("1 = 0")
+
+    # 3. شرط البحث النصي
+    if clean_search:
+        like_term = f"%{clean_search}%"
+        search_sql = (
+            "("
+            "lower(u.email) LIKE ? OR "
+            "lower(coalesce(u.username, '')) LIKE ? OR "
+            "lower(u.uid) LIKE ? OR "
+            "EXISTS ("
+            "  SELECT 1 FROM castle_states cs_s "
+            "  WHERE (cs_s.user_id = u.uid OR lower(cs_s.user_id) = lower(u.email)) "
+            "    AND (lower(cs_s.email) LIKE ? OR lower(cs_s.castle_id) LIKE ? OR lower(coalesce(cs_s.castle_name, '')) LIKE ? OR lower(coalesce(cs_s.lord_name, '')) LIKE ?)"
+            ")"
+            ")"
+        )
+        where_clauses.append(search_sql)
+        params.extend([like_term, like_term, like_term, like_term, like_term, like_term, like_term])
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    # 4. شرط الفلترة (HAVING clause على مستوى المستخدم بعد التجميع)
+    having_clause = ""
+    if clean_filter == "with_castles":
+        having_clause = "HAVING count(distinct cs.castle_id) > 0"
+    elif clean_filter == "no_castles":
+        having_clause = "HAVING count(distinct cs.castle_id) = 0"
+    elif clean_filter == "running":
+        having_clause = "HAVING count(distinct case when cs.state in ('running', 'waiting', 'reconnecting', 'connected') or (cs.is_active = 1 and cs.state != 'idle' and cs.state != 'error') then cs.castle_id end) > 0"
+
+    try:
+        with get_connection(db_path) as conn:
+            # أولاً: حساب إجمالي عدد المستخدمين المطابقين للشرط
+            count_query = f"""
+            SELECT count(*) AS total_count FROM (
+                SELECT u.uid
+                FROM users u
+                LEFT JOIN castle_states cs ON (cs.user_id = u.uid OR lower(cs.user_id) = lower(u.email))
+                {where_sql}
+                GROUP BY u.uid
+                {having_clause}
+            )
+            """
+            cur_count = conn.execute(count_query, params)
+            count_row = cur_count.fetchone()
+            total_count = int(count_row["total_count"]) if count_row else 0
+
+            # ثانياً: استعلام إحصائيات النظام الشاملة (Summary Stats)
+            stats_params: List[Any] = []
+            stats_where = ""
+            if tenant_domains is not None:
+                valid_domains = [d.strip().lower() for d in tenant_domains if d and d.strip()]
+                if valid_domains:
+                    ph = ", ".join("?" for _ in valid_domains)
+                    stats_where = f"WHERE lower(coalesce(u.tenant_domain, '')) IN ({ph})"
+                    stats_params.extend(valid_domains)
+                else:
+                    stats_where = "WHERE 1 = 0"
+
+            stats_query = f"""
+            SELECT
+                count(distinct u.uid) as total_users,
+                count(distinct cs.castle_id) as total_castles,
+                count(distinct case when cs.state in ('running', 'waiting', 'reconnecting', 'connected') or (cs.is_active = 1 and cs.state != 'idle' and cs.state != 'error') then cs.castle_id end) as total_running
+            FROM users u
+            LEFT JOIN castle_states cs ON (cs.user_id = u.uid OR lower(cs.user_id) = lower(u.email))
+            {stats_where}
+            """
+            cur_stats = conn.execute(stats_query, stats_params)
+            stats_row = cur_stats.fetchone()
+            summary_stats = {
+                "total_users": int(stats_row["total_users"]) if stats_row and stats_row["total_users"] else 0,
+                "total_castles": int(stats_row["total_castles"]) if stats_row and stats_row["total_castles"] else 0,
+                "total_running": int(stats_row["total_running"]) if stats_row and stats_row["total_running"] else 0,
+            }
+
+            # ثالثاً: استعلام صفحة المستخدمين
+            page_params = list(params)
+            limit_clause = ""
+            if is_paginated:
+                limit_clause = "LIMIT ? OFFSET ?"
+                page_params.extend([ps, offset])
+
+            page_query = f"""
+            SELECT 
+                u.uid,
+                u.email,
+                u.username,
+                u.phone,
+                u.role,
+                u.is_banned,
+                u.created_at,
+                u.tenant_domain,
+                u.plan_id,
+                u.plan_name,
+                u.subscription_status,
+                u.subscription_expires_at,
+                u.max_castles_allowed,
+                count(distinct cs.castle_id) as castles_count,
+                count(distinct case when cs.state in ('running', 'waiting', 'reconnecting', 'connected') or (cs.is_active = 1 and cs.state != 'idle' and cs.state != 'error') then cs.castle_id end) as running_count,
+                count(distinct case when cs.is_active = 0 or cs.state = 'pending' then cs.castle_id end) as pending_count
+            FROM users u
+            LEFT JOIN castle_states cs ON (cs.user_id = u.uid OR lower(cs.user_id) = lower(u.email))
+            {where_sql}
+            GROUP BY u.uid
+            {having_clause}
+            ORDER BY coalesce(u.created_at, '') DESC, u.uid DESC
+            {limit_clause}
+            """
+            cur_page = conn.execute(page_query, page_params)
+            user_rows = cur_page.fetchall()
+
+            # رابعاً: جلب معاينات القلاع الخفيفة للمستخدمين في هذه الصفحة فقط
+            target_uids = [row["uid"] for row in user_rows]
+            target_emails = [str(row["email"]).lower() for row in user_rows if row["email"]]
+
+            previews_by_user: Dict[str, List[Dict[str, Any]]] = {}
+            if target_uids or target_emails:
+                u_conds = []
+                u_params = []
+                if target_uids:
+                    ph_uids = ", ".join("?" for _ in target_uids)
+                    u_conds.append(f"user_id IN ({ph_uids})")
+                    u_params.extend(target_uids)
+                if target_emails:
+                    ph_ems = ", ".join("?" for _ in target_emails)
+                    u_conds.append(f"lower(user_id) IN ({ph_ems})")
+                    u_params.extend(target_emails)
+
+                preview_sql = f"""
+                SELECT castle_id, user_id, email, is_active, state, conn_state, castle_name, lord_name
+                FROM castle_states
+                WHERE {" OR ".join(u_conds)}
+                ORDER BY created_at DESC
+                """
+                cur_prev = conn.execute(preview_sql, u_params)
+                for prow in cur_prev.fetchall():
+                    cid = str(prow["castle_id"])
+                    uid_val = str(prow["user_id"] or "").strip()
+                    em_val = str(prow["email"] or "").strip().lower()
+                    prev_entry = {
+                        "id": cid,
+                        "email": em_val,
+                    }
+                    if uid_val:
+                        previews_by_user.setdefault(uid_val, []).append(prev_entry)
+                    if em_val and em_val != uid_val:
+                        previews_by_user.setdefault(em_val, []).append(prev_entry)
+
+            # خامساً: تجميع النتيجة النهائية
+            users_list: List[Dict[str, Any]] = []
+            for u in user_rows:
+                uid_str = str(u["uid"]).strip()
+                email_str = str(u["email"] or "").strip()
+                email_lower = email_str.lower()
+
+                u_previews = previews_by_user.get(uid_str) or previews_by_user.get(email_lower) or []
+                seen_cids = set()
+                unique_previews = []
+                for prev in u_previews:
+                    cid = prev.get("id") or prev.get("castle_id")
+                    if cid and cid not in seen_cids:
+                        seen_cids.add(cid)
+                        unique_previews.append(prev)
+
+                is_super = (u["role"] == "admin" and email_lower == "ibraboths@gmail.com")
+                is_banned = bool(u["is_banned"])
+                c_cnt = int(u["castles_count"] or 0)
+                r_cnt = int(u["running_count"] or 0)
+                p_cnt = int(u["pending_count"] or 0)
+
+                user_obj = {
+                    "uid": uid_str,
+                    "email": email_str,
+                    "display_name": u["username"] or (email_str.split("@")[0] if email_str else "User"),
+                    "role": u["role"] or "user",
+                    "is_banned": is_banned,
+                    "created_at": u["created_at"] or "",
+                    "tenant_domain": u["tenant_domain"] or "",
+                    "subscription": {
+                        "plan_id": "super_admin_unlimited" if is_super else (u["plan_id"] or "basic"),
+                        "plan_name": "باقة المشرف الأعلى" if is_super else (u["plan_name"] or "باقة أساسية"),
+                        "status": "active" if is_super else ("suspended" if is_banned else (u["subscription_status"] or "active")),
+                        "expires_at": "2099-01-01T00:00:00Z" if is_super else (u["subscription_expires_at"] or ""),
+                        "max_castles_allowed": 999999 if is_super else (u["max_castles_allowed"] or 0),
+                    },
+                    "castle_count": c_cnt,
+                    "castles_count": c_cnt,
+                    "active_count": r_cnt,
+                    "running_count": r_cnt,
+                    "pending_count": p_cnt,
+                    "castle_previews": unique_previews,
+                }
+                users_list.append(user_obj)
+
+            total_pages = max(1, (total_count + ps - 1) // ps) if is_paginated and ps else 1
+            has_more = (p < total_pages) if is_paginated else False
+
+            return {
+                "items": users_list,
+                "users": users_list,
+                "total": total_count,
+                "total_count": total_count,
+                "page": p,
+                "page_size": ps if is_paginated else total_count,
+                "total_pages": total_pages,
+                "has_more": has_more,
+                "summary_stats": summary_stats,
+            }
+
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء استعلام ترقيم قلاع المشرفين: {e}")
+        return {
+            "items": [],
+            "users": [],
+            "total": 0,
+            "total_count": 0,
+            "page": p,
+            "page_size": ps or 25,
+            "total_pages": 1,
+            "has_more": False,
+            "summary_stats": {"total_users": 0, "total_castles": 0, "total_running": 0},
+        }
+
+
 def get_castle_by_id(castle_id: str, user_id: Optional[str] = None, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """جلب بيانات قلعة محددة (بدون كلمة المرور)."""
     _ensure_init(db_path)
@@ -994,44 +1438,155 @@ def _deep_merge_dict(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, 
     return result
 
 
-def update_castle_config(castle_id: str, config_dict: Dict[str, Any], user_id: Optional[str] = None, db_path: Optional[str] = None) -> bool:
-    """تحديث إعدادات المهام لقلعة محددة مع الدمج التكراري (Deep Merge) لحماية بقية المهام من المسح."""
+def _sanitize_castle_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """تعقيم وتطهير إعدادات القلعة لضمان سلامة القيم ومطابقتها لقواعد اللعبة الرسمية."""
+    if not isinstance(cfg, dict):
+        return cfg
+    VALID_RUINS_EXPLORE_TIMES = (900, 3600, 14400, 28800)
+    mm_cfg = cfg.get("march_manager")
+    if isinstance(mm_cfg, dict):
+        # 1. ترحيل إعدادات abra من المستوى العام إلى داخل march_manager إن وُجدت
+        if "abra" in cfg:
+            top_abra = cfg.pop("abra")
+            if isinstance(top_abra, dict):
+                if "abra" not in mm_cfg or not isinstance(mm_cfg.get("abra"), dict):
+                    mm_cfg["abra"] = top_abra
+                else:
+                    for ak, av in top_abra.items():
+                        if ak not in mm_cfg["abra"]:
+                            mm_cfg["abra"][ak] = av
+
+        # عزل إعدادات العفريت تماماً في جذر config وحذفها من march_manager
+        if "elf" in mm_cfg:
+            mm_elf = mm_cfg.pop("elf")
+            if isinstance(mm_elf, dict) and "elf" not in cfg:
+                cfg["elf"] = mm_elf
+
+        ruins_cfg = mm_cfg.get("ruins")
+        if isinstance(ruins_cfg, dict) and "explore_time" in ruins_cfg:
+            try:
+                raw_t = int(ruins_cfg["explore_time"])
+                if raw_t not in VALID_RUINS_EXPLORE_TIMES:
+                    ruins_cfg["explore_time"] = min(VALID_RUINS_EXPLORE_TIMES, key=lambda x: abs(x - raw_t))
+            except (ValueError, TypeError):
+                ruins_cfg["explore_time"] = 900
+
+    sb_cfg = cfg.get("savings_bank")
+    if isinstance(sb_cfg, dict) and "deposit" in sb_cfg:
+        try:
+            d_val = int(sb_cfg["deposit"])
+            sb_cfg["deposit"] = max(100, min(6000, d_val))
+        except (ValueError, TypeError):
+            sb_cfg["deposit"] = 2000
+    return cfg
+
+
+class OCCResult(dict):
+    """قاموس يدعم التقييم المنطقي boolean بناءً على نجاح العملية للتوافق العكسي الكامل."""
+    def __bool__(self) -> bool:
+        return bool(self.get("success", False))
+
+
+def update_castle_config(
+    castle_id: str,
+    config_dict: Dict[str, Any],
+    user_id: Optional[Any] = None,
+    expected_version: Optional[int] = None,
+    db_path: Optional[str] = None
+) -> OCCResult:
+    """
+    تحديث إعدادات المهام لقلعة محددة مع الدمج التكراري (Deep Merge) والتحكم بالتعديلات المتزامنة (OCC).
+    يستخدم معاملة ذرية BEGIN IMMEDIATE لمنع التضارب وضمان عدم فقدان أي تحديثات (Zero Lost Updates).
+    إذا تم تقديم expected_version، يتم التحقق من تطابقه مع النسخة الحالية، وتُرفض العملية عند التعارض.
+    """
+    if isinstance(user_id, int) and expected_version is None:
+        expected_version = user_id
+        user_id = None
+
     _ensure_init(db_path)
     if not castle_id or config_dict is None:
-        return False
+        return OCCResult({"success": False, "error": "Invalid arguments: castle_id or config_dict missing"})
+
+    path = get_db_path(db_path)
+    conn = sqlite3.connect(path, timeout=15.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA foreign_keys = ON;")
+
     try:
-        with get_connection(db_path) as conn:
-            # 1. جلب الإعدادات المخزنة حالياً للقلعة لدمج التعديلات فوقها
-            cur = conn.execute("SELECT config FROM castle_states WHERE castle_id = ?", (castle_id,))
-            row = cur.fetchone()
-            current_config: Dict[str, Any] = {}
-            if row and row["config"]:
-                try:
-                    loaded = json.loads(row["config"])
-                    if isinstance(loaded, dict):
-                        current_config = loaded
-                except Exception:
-                    current_config = {}
+        conn.execute("BEGIN IMMEDIATE")
 
-            # 2. دمج التعديلات الجديدة فوق الإعدادات الحالية بشكل عميق
-            merged_config = _deep_merge_dict(current_config, config_dict)
-            config_json = json.dumps(merged_config, ensure_ascii=False)
+        # 1. جلب الإعدادات والنسخة الحالية للقلعة
+        if user_id:
+            cur = conn.execute(
+                "SELECT config, version FROM castle_states WHERE castle_id = ? AND user_id = ?",
+                (castle_id, user_id)
+            )
+        else:
+            cur = conn.execute(
+                "SELECT config, version FROM castle_states WHERE castle_id = ?",
+                (castle_id,)
+            )
+        row = cur.fetchone()
+        if not row:
+            conn.rollback()
+            return OCCResult({"success": False, "error": f"Castle {castle_id} not found"})
 
-            if user_id:
-                conn.execute(
-                    "UPDATE castle_states SET config = ?, last_updated = ? WHERE castle_id = ? AND user_id = ?",
-                    (config_json, datetime.now(timezone.utc).isoformat(), castle_id, user_id)
-                )
-            else:
-                conn.execute(
-                    "UPDATE castle_states SET config = ?, last_updated = ? WHERE castle_id = ?",
-                    (config_json, datetime.now(timezone.utc).isoformat(), castle_id)
-                )
-            conn.commit()
-            return True
+        row_dict = dict(row)
+        current_version = int(row_dict.get("version") or 1)
+
+        # 2. فحص التعارض التزامني (Optimistic Concurrency Control)
+        if expected_version is not None:
+            if current_version != int(expected_version):
+                conn.rollback()
+                return OCCResult({
+                    "success": False,
+                    "conflict": True,
+                    "current_version": current_version,
+                    "expected_version": int(expected_version),
+                    "error": f"Concurrency conflict: expected version {expected_version}, but current version is {current_version}"
+                })
+
+        # 3. دمج التعديلات وتطهيرها
+        current_config: Dict[str, Any] = {}
+        if row_dict.get("config"):
+            try:
+                loaded = json.loads(row_dict["config"])
+                if isinstance(loaded, dict):
+                    current_config = loaded
+            except Exception:
+                current_config = {}
+
+        merged_config = _sanitize_castle_config(_deep_merge_dict(current_config, config_dict))
+        config_json = json.dumps(merged_config, ensure_ascii=False)
+        new_version = current_version + 1
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # 4. تحديث ذري وزيادة رقم النسخة
+        if user_id:
+            conn.execute(
+                "UPDATE castle_states SET config = ?, version = ?, last_updated = ? WHERE castle_id = ? AND user_id = ?",
+                (config_json, new_version, now_iso, castle_id, user_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE castle_states SET config = ?, version = ?, last_updated = ? WHERE castle_id = ?",
+                (config_json, new_version, now_iso, castle_id)
+            )
+
+        conn.commit()
+        return OCCResult({"success": True, "version": new_version, "config": merged_config})
     except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         log.warning(f"⚠️ تعذر تحديث إعدادات القلعة ({castle_id}): {e}")
-        return False
+        return OCCResult({"success": False, "error": str(e)})
+    finally:
+        conn.close()
 
 
 def update_castle_credentials(castle_id: str, email: str, password: str = "", user_id: Optional[str] = None, db_path: Optional[str] = None) -> bool:
@@ -1054,6 +1609,39 @@ def update_castle_credentials(castle_id: str, email: str, password: str = "", us
             return True
     except Exception as e:
         log.warning(f"⚠️ تعذر تحديث بيانات دخول القلعة ({castle_id}): {e}")
+        return False
+
+
+def update_castles_loop_interval(updates: Dict[str, int], user_id: Optional[str] = None, db_path: Optional[str] = None) -> bool:
+    """
+    تحديث مدة دورة البوت (loop_interval) لمجموعة قلاع دفعة واحدة في معاملة ذرية.
+    updates: {castle_id: interval_minutes} (محصور بين 30 و 180 دقيقة).
+    """
+    _ensure_init(db_path)
+    if not updates:
+        return True
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        with get_connection(db_path) as conn:
+            for cid, raw_interval in updates.items():
+                try:
+                    val = max(30, min(180, int(raw_interval)))
+                except (ValueError, TypeError):
+                    val = 40
+                if user_id:
+                    conn.execute(
+                        "UPDATE castle_states SET loop_interval = ?, last_updated = ? WHERE castle_id = ? AND user_id = ?",
+                        (val, now_iso, str(cid).strip(), str(user_id).strip())
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE castle_states SET loop_interval = ?, last_updated = ? WHERE castle_id = ?",
+                        (val, now_iso, str(cid).strip())
+                    )
+            conn.commit()
+        return True
+    except Exception as e:
+        log.error(f"⚠️ خطأ أثناء تحديث loop_interval للقلاع: {e}")
         return False
 
 
@@ -1260,6 +1848,16 @@ def upsert_castle_resources(
     gold = int(resources.get("gold", 0) or 0)
     stamina = int(resources.get("stamina", 100) or 100)
 
+    unprotected_food = int(resources.get("unprotected_food", 0) or 0)
+    unprotected_wood = int(resources.get("unprotected_wood", 0) or 0)
+    unprotected_iron = int(resources.get("unprotected_iron", 0) or 0)
+    unprotected_diamond = int(resources.get("unprotected_diamond", 0) or 0)
+
+    safe_food = int(resources.get("safe_food", 0) or 0)
+    safe_wood = int(resources.get("safe_wood", 0) or 0)
+    safe_iron = int(resources.get("safe_iron", 0) or 0)
+    safe_diamond = int(resources.get("safe_diamond", 0) or 0)
+
     lord_name = str(cinfo.get("lord_name", "")) if cinfo.get("lord_name") else None
     lord_power = int(cinfo.get("lord_power", 0) or 0)
     castle_level = int(cinfo.get("castle_level", 1) or 1)
@@ -1268,6 +1866,8 @@ def upsert_castle_resources(
     coords = cinfo.get("coordinates") or {}
     coord_x = int(coords.get("x", 0) or 0) if isinstance(coords, dict) else 0
     coord_y = int(coords.get("y", 0) or 0) if isinstance(coords, dict) else 0
+    avatar = str(cinfo.get("avatar", "") or "")
+    image_id = int(cinfo.get("image_id", 0) or 0)
 
     try:
         with get_connection(db_path) as conn:
@@ -1288,6 +1888,14 @@ def upsert_castle_resources(
                     diamond = ?,
                     gold = ?,
                     stamina = ?,
+                    unprotected_food = ?,
+                    unprotected_wood = ?,
+                    unprotected_iron = ?,
+                    unprotected_diamond = ?,
+                    safe_food = ?,
+                    safe_wood = ?,
+                    safe_iron = ?,
+                    safe_diamond = ?,
                     lord_name = COALESCE(?, lord_name),
                     lord_power = CASE WHEN ? > 0 THEN ? ELSE lord_power END,
                     castle_level = CASE WHEN ? > 1 THEN ? ELSE castle_level END,
@@ -1295,10 +1903,14 @@ def upsert_castle_resources(
                     server_id = CASE WHEN ? > 0 THEN ? ELSE server_id END,
                     coord_x = CASE WHEN ? > 0 THEN ? ELSE coord_x END,
                     coord_y = CASE WHEN ? > 0 THEN ? ELSE coord_y END,
+                    avatar = CASE WHEN ? != '' THEN ? ELSE avatar END,
+                    image_id = CASE WHEN ? > 0 THEN ? ELSE image_id END,
                     last_updated = ?
                 WHERE castle_id = ?
                 """, (
                     food, wood, iron, diamond, gold, stamina,
+                    unprotected_food, unprotected_wood, unprotected_iron, unprotected_diamond,
+                    safe_food, safe_wood, safe_iron, safe_diamond,
                     lord_name,
                     lord_power, lord_power,
                     castle_level, castle_level,
@@ -1306,6 +1918,8 @@ def upsert_castle_resources(
                     server_id, server_id,
                     coord_x, coord_x,
                     coord_y, coord_y,
+                    avatar, avatar,
+                    image_id, image_id,
                     now_iso,
                     target_cid
                 ))
@@ -1382,7 +1996,15 @@ def get_all_castles(user_id: Optional[str] = None, db_path: Optional[str] = None
             else:
                 cur = conn.execute("SELECT * FROM castle_states ORDER BY email ASC")
             for row in cur.fetchall():
-                result.append(dict(row))
+                d = dict(row)
+                d.pop("password", None)
+                d.pop("raw_json", None)
+                try:
+                    d["config"] = json.loads(d.get("config") or "{}") if isinstance(d.get("config"), str) else (d.get("config") or {})
+                except Exception:
+                    d["config"] = {}
+                d["is_active"] = bool(d.get("is_active", 1))
+                result.append(d)
     except Exception as e:
         log.warning(f"⚠️ خطأ أثناء استرجاع القلاع محلياً: {e}")
     return result
@@ -1437,23 +2059,58 @@ def delete_castle_by_id(castle_id: str, user_id: str, db_path: Optional[str] = N
         return False
 
 
-def get_admin_stats(db_path: Optional[str] = None) -> Dict[str, int]:
-    """إحصائيات لوحة الإدارة."""
+def get_admin_stats(tenant_domains: Optional[List[str]] = None, db_path: Optional[str] = None) -> Dict[str, int]:
+    """إحصائيات لوحة الإدارة (مع دعم تصفية التاجر حسب الدومين)."""
     _ensure_init(db_path)
     try:
+        from core.tenants import get_all_merchants, DEFAULT_TENANT
+        admin_emails = [DEFAULT_TENANT["admin_email"].strip().lower()]
+        for m in get_all_merchants():
+            ae = (m.get("admin_email") or "").strip().lower()
+            if ae and ae not in admin_emails:
+                admin_emails.append(ae)
+
         with get_connection(db_path) as conn:
+            email_placeholders = ",".join("?" for _ in admin_emails)
+            user_where = f"role NOT IN ('admin', 'merchant_admin') AND LOWER(email) NOT IN ({email_placeholders})"
+            user_params: List[Any] = list(admin_emails)
+            castle_where = "is_active = 1 AND state != 'pending'"
+            castle_params: List[Any] = []
+
+            if tenant_domains is not None:
+                cleaned_domains = [d.strip().lower() for d in tenant_domains if d.strip()]
+                if cleaned_domains:
+                    placeholders = ",".join("?" for _ in cleaned_domains)
+                    user_where += f" AND LOWER(tenant_domain) IN ({placeholders})"
+                    user_params.extend(cleaned_domains)
+                    castle_where += f" AND user_id IN (SELECT uid FROM users WHERE LOWER(tenant_domain) IN ({placeholders}))"
+                    castle_params.extend(cleaned_domains)
+                else:
+                    user_where += " AND 1=0"
+                    castle_where += " AND 1=0"
+
             total_users = conn.execute(
-                "SELECT COUNT(*) as cnt FROM users WHERE role != 'admin'"
+                f"SELECT COUNT(*) as cnt FROM users WHERE {user_where}",
+                user_params
             ).fetchone()["cnt"]
+
+            active_subs_where = f"subscription_status = 'active' AND {user_where}"
             active_subs = conn.execute(
-                "SELECT COUNT(*) as cnt FROM users WHERE subscription_status = 'active' AND role != 'admin'"
+                f"SELECT COUNT(*) as cnt FROM users WHERE {active_subs_where}",
+                user_params
             ).fetchone()["cnt"]
+
+            pending_where = f"subscription_status = 'pending_approval' AND {user_where}"
             pending_users = conn.execute(
-                "SELECT COUNT(*) as cnt FROM users WHERE subscription_status = 'pending_approval' AND role != 'admin'"
+                f"SELECT COUNT(*) as cnt FROM users WHERE {pending_where}",
+                user_params
             ).fetchone()["cnt"]
+
             total_castles = conn.execute(
-                "SELECT COUNT(*) as cnt FROM castle_states WHERE is_active = 1 AND state != 'pending'"
+                f"SELECT COUNT(*) as cnt FROM castle_states WHERE {castle_where}",
+                castle_params
             ).fetchone()["cnt"]
+
             return {
                 "totalUsers": total_users,
                 "activeSubscriptions": active_subs,
@@ -1465,45 +2122,139 @@ def get_admin_stats(db_path: Optional[str] = None) -> Dict[str, int]:
         return {"totalUsers": 0, "activeSubscriptions": 0, "pendingUsers": 0, "totalCastles": 0}
 
 
-def get_all_users_with_castles(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """جلب جميع المستخدمين مع عدد قلاعهم الفعلي (للإدارة)."""
+def get_all_users_with_castles(tenant_domains: Optional[List[str]] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """جلب المستخدمين مع عدد قلاعهم الفعلي (للإدارة، مع إمكانية الفلترة للتاجر) عبر استعلام SQL تجميعي واحد."""
     _ensure_init(db_path)
-    users = get_all_users(db_path)
+    result: List[Dict[str, Any]] = []
     try:
+        from core.tenants import get_all_merchants, DEFAULT_TENANT
+        admin_emails = [DEFAULT_TENANT["admin_email"].strip().lower()]
+        for m in get_all_merchants():
+            ae = (m.get("admin_email") or "").strip().lower()
+            if ae and ae not in admin_emails:
+                admin_emails.append(ae)
+
         with get_connection(db_path) as conn:
-            for u in users:
-                uid = u["uid"]
-                is_banned = bool(u.get("is_banned"))
-                row_a = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ? AND is_active = 1 AND state != 'pending'",
-                    (uid,)
-                ).fetchone()
-                row_p = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ? AND (is_active = 0 OR state = 'pending')",
-                    (uid,)
-                ).fetchone()
-                row_t = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM castle_states WHERE user_id = ?",
-                    (uid,)
-                ).fetchone()
-                u["current_castles_count"] = 0 if is_banned else (row_a["cnt"] if row_a else 0)
-                u["pending_castles_count"] = (row_t["cnt"] if row_t else 0) if is_banned else (row_p["cnt"] if row_p else 0)
-                u["total_castles_count"] = row_t["cnt"] if row_t else 0
-                is_super = u.get("role") == "admin" and str(u.get("email", "")).strip().lower() == "ibraboths@gmail.com"
-                u["subscription"] = {
-                    "plan_id": "super_admin_unlimited" if is_super else u.get("plan_id", "pending_trial"),
-                    "plan_name": "باقة المشرف الأعلى (غير محدود)" if is_super else u.get("plan_name", "بانتظار موافقة الإدارة"),
-                    "status": "active" if is_super else ("suspended" if is_banned else u.get("subscription_status", "pending_approval")),
-                    "started_at": u.get("subscription_started_at", ""),
-                    "expires_at": "2099-01-01T00:00:00Z" if is_super else u.get("subscription_expires_at", ""),
-                    "max_castles_allowed": 999999 if is_super else u.get("max_castles_allowed", 0),
-                    "current_castles_count": u["current_castles_count"],
-                    "pending_castles_count": u["pending_castles_count"],
-                    "total_castles_count": u["total_castles_count"],
+            email_placeholders = ",".join("?" for _ in admin_emails)
+            base_where = f"u.role NOT IN ('admin', 'merchant_admin') AND LOWER(u.email) NOT IN ({email_placeholders})"
+            params: List[Any] = list(admin_emails)
+
+            clean_domains = [d.strip().lower() for d in tenant_domains if d and d.strip()] if tenant_domains else []
+            if clean_domains:
+                placeholders = ",".join("?" for _ in clean_domains)
+                where_clause = f"WHERE {base_where} AND LOWER(u.tenant_domain) IN ({placeholders})"
+                params.extend(clean_domains)
+            else:
+                where_clause = f"WHERE {base_where}"
+
+            query = f"""
+                SELECT 
+                    u.*,
+                    COALESCE(c.active_cnt, 0) as _agg_active,
+                    COALESCE(c.pending_cnt, 0) as _agg_pending,
+                    COALESCE(c.total_cnt, 0) as _agg_total
+                FROM users u
+                LEFT JOIN (
+                    SELECT 
+                        user_id,
+                        SUM(CASE WHEN is_active = 1 AND (state != 'pending' OR state IS NULL) THEN 1 ELSE 0 END) as active_cnt,
+                        SUM(CASE WHEN is_active = 0 OR state = 'pending' THEN 1 ELSE 0 END) as pending_cnt,
+                        COUNT(*) as total_cnt
+                    FROM castle_states
+                    WHERE user_id IS NOT NULL AND user_id != ''
+                    GROUP BY user_id
+                ) c ON u.uid = c.user_id
+                {where_clause}
+                ORDER BY u.created_at DESC
+            """
+            cur = conn.execute(query, params)
+            for row in cur.fetchall():
+                d = dict(row)
+                is_banned = bool(d.get("is_banned", 0))
+                d["is_banned"] = is_banned
+
+                active_cnt = int(d.pop("_agg_active", 0) or 0)
+                pending_cnt = int(d.pop("_agg_pending", 0) or 0)
+                total_cnt = int(d.pop("_agg_total", 0) or 0)
+
+                d["current_castles_count"] = 0 if is_banned else active_cnt
+                d["pending_castles_count"] = total_cnt if is_banned else pending_cnt
+                d["total_castles_count"] = total_cnt
+
+                # توفير المفاتيح البديلة للتوافقية الكاملة
+                d["active_castles"] = d["current_castles_count"]
+                d["pending_castles"] = d["pending_castles_count"]
+                d["total_castles"] = d["total_castles_count"]
+
+                is_super = d.get("role") == "admin" and str(d.get("email", "")).strip().lower() == "ibraboths@gmail.com"
+                d["subscription"] = {
+                    "plan_id": "super_admin_unlimited" if is_super else d.get("plan_id", "pending_trial"),
+                    "plan_name": "باقة المشرف الأعلى (غير محدود)" if is_super else d.get("plan_name", "بانتظار موافقة الإدارة"),
+                    "status": "active" if is_super else ("suspended" if is_banned else d.get("subscription_status", "pending_approval")),
+                    "started_at": d.get("subscription_started_at", ""),
+                    "expires_at": "2099-01-01T00:00:00Z" if is_super else d.get("subscription_expires_at", ""),
+                    "max_castles_allowed": 999999 if is_super else d.get("max_castles_allowed", 0),
+                    "current_castles_count": d["current_castles_count"],
+                    "pending_castles_count": d["pending_castles_count"],
+                    "total_castles_count": d["total_castles_count"],
                 }
+                result.append(d)
     except Exception as e:
         log.warning(f"⚠️ خطأ أثناء جلب عدد القلاع: {e}")
-    return users
+    return result
+
+
+def get_merchants_overview_stats(merchants: List[Dict[str, Any]], db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """جلب إحصائيات التجار الشاملة (عدد المستخدمين، إجمالي القلاع، والقلاع الشغالة الآن)."""
+    _ensure_init(db_path)
+    overview = []
+    try:
+        with get_connection(db_path) as conn:
+            for m in merchants:
+                m_id = m.get("id", "")
+                domains = [d.strip().lower() for d in m.get("domains", []) if d.strip()]
+                if not domains:
+                    continue
+                placeholders = ",".join("?" for _ in domains)
+                
+                # 1. عدد المستخدمين التابعين لهذا الدومين (استبعاد حساب المشرف)
+                admin_mail = m.get("admin_email", "").strip().lower()
+                row_u = conn.execute(
+                    f"SELECT COUNT(*) as u_cnt FROM users WHERE LOWER(tenant_domain) IN ({placeholders}) AND role NOT IN ('admin', 'merchant_admin') AND LOWER(email) != ?",
+                    domains + [admin_mail]
+                ).fetchone()
+                user_count = row_u["u_cnt"] if row_u else 0
+
+                # 2. إجمالي القلاع والقلاع الشغالة الآن
+                row_c = conn.execute(
+                    f"""
+                    SELECT 
+                        COUNT(c.castle_id) as total_castles,
+                        COUNT(CASE WHEN c.state = 'running' OR c.conn_state = 'connected' THEN 1 END) as running_castles
+                    FROM castle_states c
+                    JOIN users u ON u.uid = c.user_id
+                    WHERE LOWER(u.tenant_domain) IN ({placeholders})
+                    """,
+                    domains
+                ).fetchone()
+                total_castles = row_c["total_castles"] if row_c else 0
+                running_castles = row_c["running_castles"] if row_c else 0
+
+                overview.append({
+                    "id": m_id,
+                    "brand_name": m.get("brand_name", m.get("name", "")),
+                    "domains": domains,
+                    "primary_domain": domains[0] if domains else "",
+                    "admin_email": m.get("admin_email", ""),
+                    "primary_color": m.get("primary_color", "#10b981"),
+                    "tagline": m.get("tagline", ""),
+                    "total_users": user_count,
+                    "total_castles": total_castles,
+                    "running_castles": running_castles,
+                })
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء حساب إحصائيات التجار: {e}")
+    return overview
 
 
 def reset_stuck_castles_db(exclude_castle_ids: Optional[List[str]] = None, db_path: Optional[str] = None) -> int:

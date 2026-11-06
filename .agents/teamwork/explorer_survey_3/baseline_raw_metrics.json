@@ -1,0 +1,323 @@
+{
+  "metadata": {
+    "title": "Baseline Performance Measurement Report (Pre-Optimization)",
+    "standard": "R1 Deep System Audit & AGENTS_CONSTITUTION.md Rule 13",
+    "generated_at": "2026-11-02T17:22:34Z"
+  },
+  "environment": {
+    "os": "Windows-10-10.0.19045-SP0",
+    "python_version": "3.12.8",
+    "cpu_count": 12,
+    "machine": "AMD64",
+    "timestamp": "2026-11-02T17:21:37Z",
+    "db_path": "E:\\osmanli\\database\\castles.db",
+    "db_size_bytes": 2994176
+  },
+  "database_audit": {
+    "counts": {
+      "users": 152,
+      "castles": 633,
+      "active_castles": 493,
+      "banned_users": 1,
+      "pending_users": 5
+    },
+    "columns": {
+      "users": [
+        "uid",
+        "email",
+        "username",
+        "phone",
+        "role",
+        "created_at",
+        "is_banned",
+        "banned_reason",
+        "plan_id",
+        "plan_name",
+        "subscription_status",
+        "subscription_started_at",
+        "subscription_expires_at",
+        "max_castles_allowed",
+        "current_castles_count",
+        "pending_castles_count",
+        "tenant_domain"
+      ],
+      "castle_states": [
+        "castle_id",
+        "email",
+        "user_id",
+        "password",
+        "config",
+        "is_active",
+        "created_at",
+        "lord_name",
+        "castle_name",
+        "lord_power",
+        "castle_level",
+        "walls_level",
+        "server_id",
+        "coord_x",
+        "coord_y",
+        "vip_level",
+        "alliance_name",
+        "state",
+        "conn_state",
+        "conn_message",
+        "next_run_time",
+        "last_run_time",
+        "last_run_message",
+        "food",
+        "wood",
+        "iron",
+        "diamond",
+        "gold",
+        "stamina",
+        "last_updated",
+        "raw_json",
+        "unprotected_food",
+        "unprotected_wood",
+        "unprotected_iron",
+        "unprotected_diamond",
+        "safe_food",
+        "safe_wood",
+        "safe_iron",
+        "safe_diamond",
+        "avatar",
+        "image_id"
+      ]
+    },
+    "indexes": [
+      {
+        "table": "users",
+        "name": "sqlite_autoindex_users_1",
+        "sql": null
+      },
+      {
+        "table": "users",
+        "name": "sqlite_autoindex_users_2",
+        "sql": null
+      },
+      {
+        "table": "castle_states",
+        "name": "sqlite_autoindex_castle_states_1",
+        "sql": null
+      },
+      {
+        "table": "users",
+        "name": "idx_users_email",
+        "sql": "CREATE INDEX idx_users_email ON users(email)"
+      },
+      {
+        "table": "users",
+        "name": "idx_users_role",
+        "sql": "CREATE INDEX idx_users_role ON users(role)"
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_email",
+        "sql": "CREATE INDEX idx_castle_email ON castle_states(email)"
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_user",
+        "sql": "CREATE INDEX idx_castle_user ON castle_states(user_id)"
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_state",
+        "sql": "CREATE INDEX idx_castle_state ON castle_states(state)"
+      },
+      {
+        "table": "users",
+        "name": "idx_users_tenant",
+        "sql": "CREATE INDEX idx_users_tenant ON users(tenant_domain)"
+      },
+      {
+        "table": "system_settings",
+        "name": "sqlite_autoindex_system_settings_1",
+        "sql": null
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_states_lower_email",
+        "sql": "CREATE INDEX idx_castle_states_lower_email ON castle_states(LOWER(email))"
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_states_lower_user",
+        "sql": "CREATE INDEX idx_castle_states_lower_user ON castle_states(LOWER(user_id))"
+      },
+      {
+        "table": "users",
+        "name": "idx_users_lower_email",
+        "sql": "CREATE INDEX idx_users_lower_email ON users(LOWER(email))"
+      },
+      {
+        "table": "users",
+        "name": "idx_users_created_at",
+        "sql": "CREATE INDEX idx_users_created_at ON users(created_at DESC)"
+      },
+      {
+        "table": "castle_states",
+        "name": "idx_castle_states_created_at",
+        "sql": "CREATE INDEX idx_castle_states_created_at ON castle_states(created_at DESC)"
+      }
+    ]
+  },
+  "backend_queries": {
+    "get_admin_stats": {
+      "samples": 50,
+      "p50_ms": 6.347,
+      "p95_ms": 7.769,
+      "mean_ms": 6.637,
+      "min_ms": 5.016,
+      "max_ms": 16.275,
+      "stdev_ms": 1.689,
+      "peak_memory_kb": 6.18
+    },
+    "get_merchants_overview_stats": {
+      "samples": 50,
+      "p50_ms": 6.348,
+      "p95_ms": 15.418,
+      "mean_ms": 7.202,
+      "min_ms": 5.62,
+      "max_ms": 26.654,
+      "stdev_ms": 3.477,
+      "peak_memory_kb": 4.24
+    },
+    "get_all_users_with_castles_current_3N_plus_1": {
+      "samples": 40,
+      "p50_ms": 13.64,
+      "p95_ms": 19.331,
+      "mean_ms": 14.67,
+      "min_ms": 11.889,
+      "max_ms": 51.747,
+      "stdev_ms": 6.112,
+      "peak_memory_kb": 269.15,
+      "queries_executed_per_call": 457,
+      "user_count": 152
+    },
+    "get_all_users_with_castles_optimized_single_query": {
+      "samples": 40,
+      "p50_ms": 9.981,
+      "p95_ms": 16.106,
+      "mean_ms": 10.376,
+      "min_ms": 8.091,
+      "max_ms": 17.27,
+      "stdev_ms": 1.823,
+      "peak_memory_kb": 175.05,
+      "queries_executed_per_call": 1
+    },
+    "speedup_factor_x": 1.41,
+    "get_admin_users_castles_full": {
+      "samples": 30,
+      "p50_ms": 535.284,
+      "p95_ms": 592.526,
+      "mean_ms": 537.903,
+      "min_ms": 482.823,
+      "max_ms": 594.165,
+      "stdev_ms": 32.35,
+      "peak_memory_kb": 14279.65,
+      "payload_size_kb": 2513.63
+    }
+  },
+  "scalability_scale_tests": {
+    "scale_10": {
+      "record_count": 10,
+      "payload_size_kb": 22.4,
+      "parse_p50_ms": 1.629,
+      "parse_p95_ms": 2.912,
+      "filter_p50_ms": 0.015,
+      "filter_p95_ms": 0.017,
+      "sort_p50_ms": 0.003,
+      "sort_p95_ms": 0.004,
+      "peak_memory_kb": 62.73
+    },
+    "scale_100": {
+      "record_count": 100,
+      "payload_size_kb": 224.65,
+      "parse_p50_ms": 16.884,
+      "parse_p95_ms": 23.517,
+      "filter_p50_ms": 0.132,
+      "filter_p95_ms": 0.202,
+      "sort_p50_ms": 0.02,
+      "sort_p95_ms": 0.024,
+      "peak_memory_kb": 624.03
+    },
+    "scale_1000": {
+      "record_count": 1000,
+      "payload_size_kb": 2253.89,
+      "parse_p50_ms": 199.632,
+      "parse_p95_ms": 285.822,
+      "filter_p50_ms": 1.598,
+      "filter_p95_ms": 2.365,
+      "sort_p50_ms": 0.208,
+      "sort_p95_ms": 0.264,
+      "peak_memory_kb": 6218.83
+    },
+    "scale_5000": {
+      "record_count": 5000,
+      "payload_size_kb": 11293.73,
+      "parse_p50_ms": 862.928,
+      "parse_p95_ms": 1307.061,
+      "filter_p50_ms": 7.408,
+      "filter_p95_ms": 13.054,
+      "sort_p50_ms": 2.992,
+      "sort_p95_ms": 6.014,
+      "peak_memory_kb": 31104.15
+    }
+  },
+  "log_tailing_benchmarks": {
+    "log_100_lines": {
+      "total_lines": 100,
+      "file_size_kb": 8.0,
+      "tail_100_p50_ms": 0.379,
+      "tail_100_p95_ms": 0.756,
+      "tail_500_p50_ms": 0.425,
+      "tail_500_p95_ms": 0.456
+    },
+    "log_1000_lines": {
+      "total_lines": 1000,
+      "file_size_kb": 80.95,
+      "tail_100_p50_ms": 1.07,
+      "tail_100_p95_ms": 2.496,
+      "tail_500_p50_ms": 2.154,
+      "tail_500_p95_ms": 2.572
+    },
+    "log_10000_lines": {
+      "total_lines": 10000,
+      "file_size_kb": 819.23,
+      "tail_100_p50_ms": 0.906,
+      "tail_100_p95_ms": 1.031,
+      "tail_500_p50_ms": 3.619,
+      "tail_500_p95_ms": 4.322
+    },
+    "log_50000_lines": {
+      "total_lines": 50000,
+      "file_size_kb": 4139.54,
+      "tail_100_p50_ms": 0.92,
+      "tail_100_p95_ms": 1.423,
+      "tail_500_p50_ms": 4.054,
+      "tail_500_p95_ms": 8.977
+    },
+    "log_100000_lines": {
+      "total_lines": 100000,
+      "file_size_kb": 8289.93,
+      "tail_100_p50_ms": 0.896,
+      "tail_100_p95_ms": 0.984,
+      "tail_500_p50_ms": 3.794,
+      "tail_500_p95_ms": 7.771
+    }
+  },
+  "local_api_latency": {
+    "samples": 50,
+    "p50_ms": 3.279,
+    "p95_ms": 23.269,
+    "mean_ms": 5.917,
+    "min_ms": 1.947,
+    "max_ms": 26.684,
+    "stdev_ms": 6.748,
+    "peak_memory_kb": 36.65,
+    "url": "http://127.0.0.1:8000/api/health",
+    "status": "online"
+  }
+}

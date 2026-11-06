@@ -1,7 +1,7 @@
 {
-  "name": "IBRA BOT",
-  "short_name": "IBRA BOT",
-  "description": "IBRA BOT — أول بوت عربي لإدارة وتحكم قلاع وحسابات Empire",
+  "name": "Empire Bot",
+  "short_name": "Empire Bot",
+  "description": "لوحة تحكم وإدارة قلاع وحسابات Empire",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -13,25 +13,25 @@
   "categories": ["utilities", "games", "productivity"],
   "icons": [
     {
-      "src": "/pwa-192x192.png?v=3",
+      "src": "/pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-512x512.png?v=3",
+      "src": "/pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-maskable-192x192.png?v=3",
+      "src": "/pwa-maskable-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/pwa-maskable-512x512.png?v=3",
+      "src": "/pwa-maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

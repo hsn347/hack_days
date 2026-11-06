@@ -33,6 +33,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional
 
@@ -47,7 +48,7 @@ from game_client import GameConnection
 DONATE_TYPE_GOLD = 1     # التبرع بالذهب
 DONATE_TYPE_FREE = 2     # التبرع المجاني بالموارد العادية
 DEFAULT_SCI_ID   = 33015 # التقنية الاحتياطية عند عدم وجود توصية
-DONATE_DELAY_SEC = 1.0   # فاصل زمني آمن بين طلبات التبرع لحماية الحساب
+DONATE_DELAY_RANGE = (1.6, 2.9)  # فاصل بشري عشوائي بين طلبات التبرع لمنع رصد البوت
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -155,7 +156,8 @@ class AllianceTask(BaseTask):
                             r_help = await self.conn.query('1012', '2', {"id": req_id}, timeout=6)
                             if r_help and str(r_help.get('err', '0')) == '0':
                                 helped += 1
-                            await asyncio.sleep(0.5)
+                            # تأخير بشري عشوائي بين مساعدة كل عضو والآخر
+                            await asyncio.sleep(round(random.uniform(0.9, 1.8), 2))
                     if helped > 0:
                         self.log.info(f"🤝 تمت مساعدة {helped} من طلبات أعضاء التحالف ✅")
         except Exception as e:
@@ -192,11 +194,8 @@ class AllianceTask(BaseTask):
 
         self.log.info(f"🏛️ بدء مهمة التحالف (التحالف ID: {alliance_id})")
 
-        # 2. مساعدة الأعضاء والتبرع لعلوم التحالف (إن كانت مفعّلة)
-        auto_help = bool(cfg.get("auto_help", True))
-        helped_count = 0
-        if auto_help:
-            helped_count = await self._help_members()
+        # 2. مساعدة أعضاء التحالف تلقائياً
+        helped_count = await self._help_members()
 
         # 3. استعلام رصيد التبرعات المتاحة (1010/81)
         r_81 = await self.conn.query('1010', '81', {"uid": uid}, timeout=8)
@@ -225,7 +224,7 @@ class AllianceTask(BaseTask):
         total_scipoints    = 0
 
         # 5. تنفيذ التبرعات المجانية بالمتاح (donatetype: 2)
-        if auto_help and free_available > 0:
+        if free_available > 0:
             self.log.info(f"🚀 جاري تنفيذ {free_available} تبرع مجاني للتقنية #{target_sciid}...")
             for i in range(free_available):
                 r_donate = await self.conn.query('1010', '48', {
@@ -243,16 +242,15 @@ class AllianceTask(BaseTask):
                     self.log.warning(f"⚠️ توقف التبرع المجاني عند المحاولة {i+1} (كود: {err_code})")
                     break
 
-                await asyncio.sleep(DONATE_DELAY_SEC)
+                # تأخير بشري عشوائي يحاكي نقر اليد البشرية الطبيعية
+                await asyncio.sleep(round(random.uniform(*DONATE_DELAY_RANGE), 2))
 
             self.log.info(f"✅ اكتملت التبرعات المجانية: {total_donated_free} تبرع (شرف: +{total_honor_earned:,} | نقاط علم: +{total_scipoints:,})")
-        elif not auto_help:
-            self.log.info("ℹ️ التبرع للتحالف معطّل من الإعدادات — تم تجاوز التبرعات.")
         else:
             self.log.info("ℹ️ رصيد التبرعات المجانية مستهلك حالياً (0/20) — بانتظار التجديد.")
 
         # 6. التبرع بالذهب إن حُدد في الإعدادات / Firebase (donatetype: 1 - الحد الأقصى 10)
-        target_gold_donations = min(10, max(0, int(cfg.get('gold_donations', 0)))) if auto_help else 0
+        target_gold_donations = min(10, max(0, int(cfg.get('gold_donations', 0))))
         if target_gold_donations > 0:
             self.log.info(f"🪙 جاري تنفيذ {target_gold_donations} تبرع بالذهب للتقنية #{target_sciid}...")
             for i in range(target_gold_donations):
@@ -271,7 +269,8 @@ class AllianceTask(BaseTask):
                     self.log.warning(f"⚠️ توقف التبرع بالذهب عند المحاولة {i+1} (كود: {err_code})")
                     break
 
-                await asyncio.sleep(DONATE_DELAY_SEC)
+                # تأخير بشري عشوائي يحاكي نقر اليد البشرية الطبيعية
+                await asyncio.sleep(round(random.uniform(*DONATE_DELAY_RANGE), 2))
 
             self.log.info(f"🪙 اكتمل التبرع بالذهب: {total_donated_gold} تبرع")
 

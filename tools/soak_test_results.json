@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-11-03T20:37:15.998465+00:00",
+  "config": {
+    "cycles": 3,
+    "bots_per_cycle": 3,
+    "cycle_duration_seconds": 0.5,
+    "max_slope_threshold_mb_per_cycle": 0.05
+  },
+  "platform": {
+    "system": "Windows",
+    "release": "10",
+    "version": "10.0.19045",
+    "machine": "AMD64",
+    "python_version": "3.12.8"
+  },
+  "baseline": {
+    "rss_mb": 65.2,
+    "rss_bytes": 68366336,
+    "private_mb": 52.6,
+    "peak_rss_mb": 65.2,
+    "tracemalloc_mb": 0.008,
+    "tracemalloc_peak_mb": 0.044,
+    "handles": 204,
+    "active_threads": 1
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "elapsed_s": 6.66,
+      "rss_mb": 65.21,
+      "delta_rss_mb": 0.01,
+      "private_mb": 52.6,
+      "peak_rss_mb": 65.24,
+      "tracemalloc_mb": 0.011,
+      "handles": 204,
+      "active_threads": 1,
+      "delta_threads": 0,
+      "all_joined": true,
+      "dict_leaks": 0
+    },
+    {
+      "cycle": 2,
+      "elapsed_s": 6.663,
+      "rss_mb": 65.21,
+      "delta_rss_mb": 0.01,
+      "private_mb": 52.6,
+      "peak_rss_mb": 65.24,
+      "tracemalloc_mb": 0.012,
+      "handles": 204,
+      "active_threads": 1,
+      "delta_threads": 0,
+      "all_joined": true,
+      "dict_leaks": 0
+    },
+    {
+      "cycle": 3,
+      "elapsed_s": 6.645,
+      "rss_mb": 65.21,
+      "delta_rss_mb": 0.01,
+      "private_mb": 52.6,
+      "peak_rss_mb": 65.24,
+      "tracemalloc_mb": 0.013,
+      "handles": 204,
+      "active_threads": 1,
+      "delta_threads": 0,
+      "all_joined": true,
+      "dict_leaks": 0
+    }
+  ],
+  "analysis": {
+    "rss_slope_mb_per_cycle": 0.003,
+    "rss_intercept_mb": 65.203,
+    "rss_r_squared": 0.6,
+    "thread_slope": 0.0,
+    "final_thread_delta": 0,
+    "total_dict_leaks": 0,
+    "slope_check_passed": true,
+    "threads_check_passed": true,
+    "leaks_check_passed": true,
+    "overall_verdict": "PASSED"
+  }
+}

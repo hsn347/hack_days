@@ -5,7 +5,7 @@ tasks/march_manager.py — منسق الفيالق والمسيرات الخار
 يدير مسيرات خريطة المملكة وفق تسلسل أولويات ذكي مع تطبيق نظام الحالات الخمس الصارم:
 
   1. الحالة 1 (نفاذ الفيالق المتاحة):
-     البقاء في نفس الأولوية والانتظار دقيقة كاملة (60 ثانية) ثم إعادة الفحص،
+     البقاء في نفس الأولوية والانتظار دقيقتين (120 ثانية) ثم إعادة الفحص،
      في ضوء وقت المهمة الكامل (افتراضياً 20 دقيقة).
   2. الحالة 2 (نقص جنود التشكيلة المحددة):
      الهجوم بأي جنود متوفرين بالقلعة لتعويض النقص بأفضل قوات قتالية متوازنة.
@@ -52,11 +52,11 @@ from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 from tasks.stronghold import StrongholdTask
 from tasks.gather import GatherTask
-from tasks.transport import TransportTask
+from tasks.transport import TransportTask, is_transport_daily_limit_reached, set_transport_daily_limit_reached
 from tasks.ruins import RuinsTask
 from tasks.monster import MonsterTask
-from tasks.elf_boss import ElfBossTask
 from tasks.gold_gather import GoldGatherTask
+from tasks.abra import AbraTask
 
 # ── معرفات مهام الهيبة من السيرفر (meritoriousTaskCtrl) ───────────────
 PRESTIGE_QUEST_IDS: Dict[str, int] = {
@@ -88,6 +88,7 @@ class MarchManagerTask(BaseTask):
     name = "march_manager"
 
     DEFAULT_PRIORITY_ORDER = [
+        "abra",
         "prestige_invaders",
         "prestige_stronghold",
         "prestige_gather",
@@ -109,7 +110,14 @@ class MarchManagerTask(BaseTask):
         self.max_duration_seconds: float = self.duration_minutes * 60.0
         self._busy_heroes: Set[int] = set()
         self._used_pets: Set[int] = set()
-        self.log.propagate = True
+        self._max_castle_queues: int = 0
+        self._last_queue_sync_time: float = 0.0
+        self.log.propagate = False
+
+    def get_castle_level(self) -> int:
+        """جلب المستوى الحقيقي للقلعة لمنع طلب موارد تتطلب مستوى أعلى (مثل الحديد 10 والفضة 15)."""
+        from tasks.march_capacity import get_castle_level
+        return get_castle_level(getattr(self.conn, "init_data", {}))
 
     # ────────────────────────────────────────────────────────────────
     #  إدارة الوقت والمهلة الزمنية (20 دقيقة)
@@ -133,14 +141,24 @@ class MarchManagerTask(BaseTask):
     #  استعلام بيانات مهام الهيبة (Prestige Quests State)
     # ────────────────────────────────────────────────────────────────
 
-    async def _refresh_merit_data(self) -> bool:
-        """تحديث بيانات مهام الهيبة اليومية من السيرفر مباشرة."""
+    async def _refresh_merit_data(self, force: bool = False) -> bool:
+        """تحديث بيانات مهام الهيبة من الذاكرة الحية فورياً مع كبح الاستعلامات المكررة."""
+        now = time.time()
+        last_sync = getattr(self, "_last_merit_sync_time", 0.0)
+
+        # 1. إذا كانت البيانات موجودة في الذاكرة الحية ومحملة، نعتمدها فوراً (Zero-Request)
+        if not force and "meritoriousTaskCtrl" in self.conn.init_data and (now - last_sync < 120.0):
+            return True
+
+        # 2. استعلام السيرفر فقط عند الحاجة القصوى
         try:
+            self.log.debug("🛑🛑🛑🛑🛑🛑🛑 جاري استدعاء 1013/1 للهيبة")
             r = await self.conn.query("1013", "1", {}, timeout=5)
             if r and isinstance(r, dict) and "data" in r:
                 merit_data = r["data"].get("meritoriousTaskCtrl")
                 if merit_data and isinstance(merit_data, dict):
                     self.conn.init_data["meritoriousTaskCtrl"] = merit_data
+                    self._last_merit_sync_time = now
                     return True
         except Exception as e:
             self.log.debug(f"استعلام 1013/1 لتحديث مهام الهيبة لم يكتمل: {e}")
@@ -151,6 +169,7 @@ class MarchManagerTask(BaseTask):
                 merit_data = r_all["data"].get("meritoriousTaskCtrl")
                 if merit_data and isinstance(merit_data, dict):
                     self.conn.init_data["meritoriousTaskCtrl"] = merit_data
+                    self._last_merit_sync_time = now
                     return True
         except Exception as e:
             self.log.debug(f"استعلام 1001/1 لتحديث مهام الهيبة لم يكتمل: {e}")
@@ -212,39 +231,70 @@ class MarchManagerTask(BaseTask):
         return {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "is_done": False, "remaining": 0}
 
     def _get_lord_stamina(self) -> int:
-        """جلب رصيد طاقة اللورد الحالي من بيانات القلعة المحملة."""
+        """جلب رصيد طاقة اللورد الحالي من بيانات القلعة المحملة (lordInfoCtrl.base.health)."""
         try:
-            base = self.conn.init_data.get('loginDataInitCtrl', {}).get('base', {}) if hasattr(self.conn, 'init_data') else {}
-            return int(float(base.get('health', 100)))
+            if not hasattr(self.conn, 'init_data') or not self.conn.init_data:
+                return 100
+            init = self.conn.init_data
+            base = (
+                init.get('lordInfoCtrl', {}).get('base', {})
+                or init.get('loginDataInitCtrl', {}).get('base', {})
+            )
+            val = base.get('health')
+            if val is not None:
+                return int(float(val))
+            return 100
         except Exception:
             return 100
 
     async def get_total_available_castle_army(self) -> int:
-        """حساب إجمالي عدد الجنود المتاحين داخل القلعة حالياً عبر CMD 1005/1."""
+        """حساب إجمالي الجنود المتاحين بالقلعة من الذاكرة الحية (RAM) بصفر طلبات شبكية."""
         total = 0
         try:
+            # 1. قراءة فورية من الذاكرة الحية (Zero-Request)
+            total_army = self.conn.init_data.get('armyCtrl', {}).get('totalArmy', {}) if hasattr(self.conn, 'init_data') else {}
+            if isinstance(total_army, dict) and total_army:
+                for k, v in total_army.items():
+                    if str(k).isdigit() and str(v).isdigit():
+                        tid = int(k)
+                        if not (800 <= tid < 900):  # استبعاد فخاخ الجدار
+                            total += int(v)
+                return total
+
+            # 2. استعلام احتياطي فقط في حال كانت الذاكرة غير محملة
+            self.log.debug("🛑🛑🛑🛑🛑🛑🛑")
             r_army = await self.conn.query("1005", "1", {}, timeout=5)
+            self.log.debug("جاري استدعاء استعلام 1005/1 نجح")
             if r_army and "data" in r_army:
-                total_army = r_army["data"].get("totalArmy", {})
-                if isinstance(total_army, dict):
-                    for k, v in total_army.items():
+                t_data = r_army["data"].get("totalArmy", {})
+                if isinstance(t_data, dict):
+                    for k, v in t_data.items():
                         if str(k).isdigit() and str(v).isdigit():
                             tid = int(k)
-                            # استبعاد فخاخ الجدار وأسلحة الدفاع (800..899)
                             if not (800 <= tid < 900):
                                 total += int(v)
         except Exception as e:
-            self.log.debug(f"خطأ غير حرج أثناء استعلام الجيش 1005/1: {e}")
+            self.log.debug(f"خطأ أثناء حساب الجيش: {e}")
 
         return total
 
-    async def get_active_marches_count(self) -> int:
-        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة مع تحديث فوري وتجنب التكرار."""
+    async def _sync_queues_if_needed(self, max_stale_seconds: float = 45.0, force: bool = False) -> None:
+        """مزامنة ذكية لطوابير الفيالق مع كبح القصف: تمنع سؤال السيرفر إذا كانت البيانات حديثة بالذاكرة إلا إذا فُرضت المزامنة."""
+        now_t = time.time()
+        last_t = getattr(self, "_last_queue_sync_time", 0.0)
+        if not force and last_t > 0 and (now_t - last_t) < max_stale_seconds:
+            return
+
         try:
-            await self.conn.query('1007', '1000', {}, timeout=2)
-            await asyncio.sleep(0.3)
+            await self.conn.query('1007', '1000', {}, timeout=3)
+            self._last_queue_sync_time = now_t
+            await asyncio.sleep(round(random.uniform(0.8, 1.5), 2))
         except Exception:
             pass
+
+    async def get_active_marches_count(self, force_sync: bool = False) -> int:
+        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة مع تحديث فوري وتجنب التكرار."""
+        await self._sync_queues_if_needed(force=force_sync)
 
         seen_ids = set()
         active = 0
@@ -262,7 +312,7 @@ class MarchManagerTask(BaseTask):
         for item in all_queue_data:
             q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
             for q in q_list:
-                if isinstance(q, dict) and q.get('status') in (1, 2, 3, 4, 7):
+                if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
                     qid = q.get('id') or q.get('queueId')
                     if qid:
                         if qid not in seen_ids:
@@ -272,43 +322,62 @@ class MarchManagerTask(BaseTask):
                         active += 1
         return active
 
-    async def wait_for_free_queue(self, context_desc: str = "") -> bool:
+    async def wait_for_free_queue(self, context_desc: str = "", caused_by_queue_full: bool = True) -> bool:
         """
         الانتظار الذكي عند نفاذ الفيالق (الحالة 1):
-          - يسجل سقف الفيالق الممتلئة للقلعة عند حدوث امتلاء الفيالق (كود 8004).
-          - يدخل حلقة انتظار بدقيقة كاملة (60 ثانية).
-          - بعد انتهاء الدقيقة: يستعلم من السيرفر فورياً (1007/1000) ويفحص حالة وعدد الفيالق.
-          - إذا وجد فيلقاً شاغراً (عاد أحد الفيالق)، يخرج فوراً ويسمح بإطلاق المسيرة.
-          - إذا كانت جميع الفيالق لا تزال مشغولة بالكامل، لا يطلق المسيرة ولا يرسل حزم للسيرفر، بل يواصل دورة انتظار 60 ثانية أخرى.
+          - إذا حدث امتلاء الفيالق (كود 8004 أو استجابة QUEUE_FULL):
+            يسجل سقف الفيالق الحقيقي للقلعة تلقائياً (_max_castle_queues = max(1, current_active)).
+          - يدخل حلقة انتظار إجبارية بـ دقيقتين (120 ثانية) فوراً دون أي تخطي.
+          - بعد انتهاء الدقيقتين: يستعلم من السيرفر فورياً (1007/1000) ويفحص حالة وعدد الفيالق.
+          - إذا وجد فيلقاً شاغراً (عاد أحد الفيالق: current_active < max_q)، يسمح بإطلاق المسيرة.
+          - إذا كانت الفيالق لا تزال مشغولة بالكامل، يواصل دورة انتظار دقيقتين أخرى دون إرسال محاولات فاشلة للسيرفر.
         """
-        current_active = await self.get_active_marches_count()
-        max_q = getattr(self, '_max_castle_queues', 0)
-        if current_active > max_q:
-            self._max_castle_queues = current_active
-            max_q = current_active
-        if max_q <= 0:
-            max_q = max(current_active, self.max_queues)
-            self._max_castle_queues = max_q
+        current_active = await self.get_active_marches_count(force_sync=True)
+        observed_active = max(1, current_active)
 
-        # إذا كان هناك فيلق شاغر بالفعل عند الفحص، السماح بالإطلاق فوراً دون انتظار 60 ثانية
-        if 0 <= current_active < max_q:
-            return True
+        # تحديث سقف القلعة ديناميكياً إذا رصدنا عدداً أكبر من الفيالق النشطة
+        prev_max = getattr(self, '_max_castle_queues', 0)
+        if current_active > prev_max:
+            self._max_castle_queues = current_active
+            if self.max_queues > 0:
+                self._max_castle_queues = min(self._max_castle_queues, self.max_queues)
+
+        if caused_by_queue_full:
+            # عند حدوث امتلاء الفيالق (كود 8004)، السقف الفعلي للقلعة هو عدد الفيالق النشطة حالياً
+            self._max_castle_queues = max(getattr(self, '_max_castle_queues', 0), observed_active)
+            max_q = self._max_castle_queues
+            if self.max_queues > 0:
+                max_q = min(max_q, self.max_queues)
+        else:
+            # استدعاء من فحص مسبق أو بعد إرسال مسيرات: إذا كان السقف معروفاً وتوفر فيلق شاغر، نسمح بالانطلاق فوراً
+            max_q = getattr(self, '_max_castle_queues', 0)
+            if max_q <= 0:
+                max_q = max(observed_active, self.max_queues)
+                self._max_castle_queues = max_q
+            if current_active < max_q:
+                return True
 
         wait_count = 0
         while not self.is_time_expired():
             wait_count += 1
+            wait_sec = random.randint(150, 180)
             self.log.info(
                 f"⏳ [الحالة 1: نفاذ الفيالق ({current_active}/{max_q})] "
-                f"جميع الفيالق مشغولة بالخارج — الانتظار دقيقة كاملة (60 ثانية) لتفريغ فيلق {context_desc} [دورة {wait_count}]..."
+                f"جميع الفيالق مشغولة بالخارج — الانتظار قرابة 2.5 إلى 3 دقائق ({wait_sec} ثانية) لتفريغ فيلق {context_desc} [دورة {wait_count}]..."
             )
-            await asyncio.sleep(60)
+            await asyncio.sleep(wait_sec)
 
             if self.is_time_expired():
                 self.log.warning("⏱️ [انتهاء المهلة] انتهت مهلة الـ 20 دقيقة المخصصة أثناء انتظار عودة الفيالق.")
                 return False
 
-            # فحص حالة الفيالق بعد انتهاء دقيقة الانتظار قبل القيام بأي محاولة إطلاق
-            current_active = await self.get_active_marches_count()
+            # فحص حالة الفيالق بعد انتهاء الانتظار قبل القيام بأي محاولة إطلاق مع تحديث فوري من السيرفر
+            current_active = await self.get_active_marches_count(force_sync=True)
+            if current_active > getattr(self, '_max_castle_queues', 0):
+                self._max_castle_queues = current_active
+                if self.max_queues > 0:
+                    self._max_castle_queues = min(self._max_castle_queues, self.max_queues)
+            max_q = getattr(self, '_max_castle_queues', max_q)
             self.log.info(f"🔍 [فحص الفيالق] الفيالق النشطة بالخارج حالياً: {current_active}/{max_q}")
 
             if current_active < max_q:
@@ -320,7 +389,7 @@ class MarchManagerTask(BaseTask):
             else:
                 self.log.info(
                     f"⏳ [الفيالق لا تزال ممتلئة ({current_active}/{max_q})] "
-                    f"لم يعد أي فيلق بعد — مواصلة الانتظار 60 ثانية أخرى دون إرسال محاولات فاشلة..."
+                    f"لم يعد أي فيلق بعد — مواصلة الانتظار قرابة 3 دقائق أخرى دون إرسال محاولات فاشلة..."
                 )
 
         return False
@@ -334,12 +403,7 @@ class MarchManagerTask(BaseTask):
           - يتيح تخطي إرسال مسيرة مكررة لنفس المورد إذا كانت هناك مسيرة تجمعه حالياً ولم تعد بعد.
         """
         active_res_types: Set[int] = set()
-        try:
-            # استعلام فوري لتحديث بيانات الفيالق من السيرفر
-            await self.conn.query('1007', '1000', {}, timeout=3)
-            await asyncio.sleep(0.4)
-        except Exception:
-            pass
+        await self._sync_queues_if_needed()
 
         all_queue_data = []
         if getattr(self.conn, 'local_queues', None):
@@ -357,8 +421,8 @@ class MarchManagerTask(BaseTask):
             for q in q_list:
                 if not isinstance(q, dict):
                     continue
-                # مسيرة نشطة (1=متجهة, 2=تجمع بالحقل, 3=عائدة, 4=مرابطة, 7=حشد)
-                if q.get('status') not in (1, 2, 3, 4, 7):
+                # مسيرة نشطة (0=حشد بتجمع القلعة, 1=متجهة, 2=تجمع بالحقل, 3=عائدة, 4=مرابطة, 7=حشد منطلق)
+                if q.get('status') not in (0, 1, 2, 3, 4, 7):
                     continue
 
                 res_sub_type = None
@@ -398,73 +462,111 @@ class MarchManagerTask(BaseTask):
 
         return active_res_types
 
-    async def ensure_army_or_wait(self, context_desc: str = "") -> bool:
+    async def ensure_army_or_wait(
+        self, 
+        context_desc: str = "", 
+        is_retry: bool = False,
+        min_needed: Optional[int] = None
+    ) -> bool:
         """
         التحقق الذكي من توفر الجيش بالقلعة أو الانتظار لعودته من المسيرات:
-          - إذا كانت قوات القلعة >= 300: يعيد True فوراً (جاهزية تامة).
-          - إذا كانت قوات القلعة < 300 وتوجد مسيرات نشطة بالخارج:
-            تُطبق الحالة 1 بالانتظار 60 ثانية لعودة الفيالق، وتتكرر طالما لم تنته مهلة الـ 20 دقيقة.
-          - إذا كانت قوات القلعة < 300 والمسيرات بالخارج = 0 (جميع الفيالق داخل القلعة):
-            تُطبق الحالة 3 (انعدام القوات كلياً) ويعيد False للخروج الفوري.
+          - عند الفحص المسبق (is_retry=False):
+            إذا كانت قوات القلعة >= الحد الأدنى، يعيد True فوراً (جاهزية تامة).
+          - عند إعادة المحاولة بعد فشل المهمة بنقص القوات (is_retry=True أو سياق "متابعة"):
+            القوات الحالية بالقلعة أثبتت التجربة أنها غير كافية، فلا يُعاد True إلا بعد عودة قوات جديدة من الخارج!
+          - إذا كانت هناك مسيرات نشطة بالخارج (active_marches > 0):
+            تُطبق الحالة 1 بالانتظار دقيقتين (120 ثانية) لعودة الفيالق، وتتكرر حتى عودة قوات أو انتهاء مهلة الـ 20 دقيقة.
+          - إذا كانت المسيرات بالخارج = 0 (جميع الفيالق داخل القلعة):
+            تُطبق الحالة 3 (انعدام القوات كلياً) ويعيد False للخروج الفوري لتجنب التكرار العبثي.
         """
-        min_needed = 50 if any(k in context_desc for k in ("جمع", "أطلال", "نقل")) else MIN_ATTACK_ARMY_COUNT
+        if min_needed is None:
+            min_needed = 50 if any(k in context_desc for k in ("جمع", "أطلال", "نقل")) else MIN_ATTACK_ARMY_COUNT
 
+        # كشف تلقائي إذا كانت العملية إعادة محاولة بعد نقص القوات
+        if "متابعة" in context_desc:
+            is_retry = True
+
+        initial_troops = await self.get_total_available_castle_army()
+
+        # في الفحص المسبق فقط: إذا كانت القوات متوفرة بالقلعة نسمح بالبدء
+        if not is_retry and initial_troops >= min_needed:
+            return True
+
+        wait_cycle = 0
         while not self.is_time_expired():
-            castle_troops = await self.get_total_available_castle_army()
-            if castle_troops >= min_needed:
-                return True
-
             active_marches = await self.get_active_marches_count()
             if active_marches == 0:
-                # إعادة التحقق بعد 2.5 ثانية لتفادي أي تأخير لحظي في تحديث السيرفر فور إرسال المسيرة
-                await asyncio.sleep(2.5)
+                # إعادة التحقق بعد مهلة عشوائية لتفادي أي تأخير لحظي في تحديث السيرفر
+                await asyncio.sleep(round(random.uniform(1.8, 2.8), 2))
                 active_marches = await self.get_active_marches_count()
 
             if active_marches > 0:
+                wait_cycle += 1
+                wait_sec = random.randint(115, 128)
                 self.log.info(
-                    f"⏳ [الحالة 1: القوات في مسيرات بالخارج ({active_marches} مسيرات نشطة)] "
-                    f"رصيد القلعة الحالي ({castle_troops}) — انتظار دقيقة كاملة (60 ثانية) لعودة الجيش {context_desc}..."
+                    f"⏳ [الحالة 1: نقص القوات / مسيرات بالخارج ({active_marches} مسيرة نشطة)] "
+                    f"القوات بالقلعة غير كافية حالياً ({initial_troops}) — "
+                    f"انتظار قرابة دقيقتين ({wait_sec} ثانية) لعودة الجيش {context_desc} [دورة {wait_cycle}]..."
                 )
-                await asyncio.sleep(60)
+                await asyncio.sleep(wait_sec)
                 await self._refresh_merit_data()
+
+                if self.is_time_expired():
+                    break
+
+                # فحص هل عاد جيش بعد انتهاء الدقيقتين انتظار
+                current_troops = await self.get_total_available_castle_army()
+                current_active = await self.get_active_marches_count()
+
+                troops_arrived = (current_troops > initial_troops) or (current_active < active_marches)
+                ready = (current_troops >= min_needed) if not is_retry else troops_arrived
+
+                if ready:
+                    self.log.info(
+                        f"✅ [توفر قوات جديدة] عاد جيش إلى القلعة (القوات: {initial_troops} ➔ {current_troops}) "
+                        f"— استئناف المحاولة {context_desc} الآن!"
+                    )
+                    return True
+                else:
+                    self.log.info(
+                        f"⏳ [الجيش لا يزال بالخارج] لم تعد أي قوات كافية بعد خلال الدقيقتين الماضيتين "
+                        f"(مسيرات نشطة: {current_active} | قوات بالقلعة: {current_troops}) — مواصلة دورة انتظار دقيقتين أخرى..."
+                    )
             else:
                 self.log.warning(
                     f"🛑 [الحالة 3: انعدام القوات كلياً] تم التأكد: لا توجد أي مسيرات بالخارج (0 مسيرة نشطة) "
-                    f"وإجمالي قوات القلعة ({castle_troops}) أقل من الحد الأدنى ({min_needed}) — الخروج فوراً."
+                    f"والقوات المتوفرة بالقلعة ({initial_troops}) غير كافية لتسيير المهمة {context_desc} — "
+                    f"الخروج فوراً لتجنب التكرار العبثي."
                 )
                 return False
 
         self.log.warning("⏱️ [انتهاء المهلة] انتهت الـ 20 دقيقة المحددة للمهمة أثناء انتظار عودة الجيش.")
         return False
 
-
     async def is_ruins_march_active(self) -> bool:
         """
         يفحص بشكل فوري ما إذا كانت هناك مسيرة استكشاف أطلال نشطة بالخارج حالياً.
         يعتمد على نوع المسار (moveLineType = 4) أو نوع خريطة الهدف (mapType = 7).
         """
-        try:
-            await self.conn.query('1007', '1000', {}, timeout=3)
-            await asyncio.sleep(0.3)
-        except Exception:
-            pass
 
         all_queue_data = []
         if getattr(self.conn, 'local_queues', None):
             all_queue_data.extend(self.conn.local_queues)
         for p in self.conn.cached_packets.values():
-            if isinstance(p, dict) and p.get('data', {}).get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                nd = p.get('data', {}).get('notifyData', [])
-                if isinstance(nd, list):
-                    all_queue_data.extend(nd)
+            if isinstance(p, dict):
+                d = p.get('data', {})
+                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
+                    nd = d.get('notifyData', [])
+                    if isinstance(nd, list):
+                        all_queue_data.extend(nd)
 
         for item in all_queue_data:
-            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
+            q_list = item.get('data', []) if (isinstance(item, dict) and 'data' in item) else ([item] if isinstance(item, dict) else (item if isinstance(item, list) else []))
             for q in q_list:
                 if not isinstance(q, dict):
                     continue
-                # حالة المسيرة نشطة
-                if q.get('status') in (1, 2, 3, 4, 7):
+                # حالة المسيرة نشطة (تشمل حشود 0 و 7)
+                if q.get('status') in (0, 1, 2, 3, 4, 7):
                     # استكشاف الأطلال يحمل moveLineType = 4
                     if q.get('moveLineType') == 4:
                         return True
@@ -483,7 +585,87 @@ class MarchManagerTask(BaseTask):
         if hasattr(subtask, "log") and subtask.log and hasattr(self, "log") and self.log:
             subtask.log.handlers = list(self.log.handlers)
             subtask.log.setLevel(self.log.level)
-            subtask.log.propagate = True
+            subtask.log.propagate = False
+
+    # ────────────────────────────────────────────────────────────────
+    #  الأولوية 0: وحش الذهب (Abra Boss Attack) عبر abra.py
+    # ────────────────────────────────────────────────────────────────
+
+    async def execute_priority_abra(self) -> Dict[str, Any]:
+        """
+        تنفيذ أولوية الهجوم على وحش الذهب Abra كأولوية أولى مطلقة خارج القلعة:
+          1. فحص تفعيل المهمة في الإعدادات.
+          2. فحص يوم الحدث (الإثنين والأربعاء) أو تجاوز الفحص عبر force.
+          3. فحص طاقة اللورد (الحالة 6: stamina_empty).
+          4. استدعاء AbraTask بنظام التدفق السريع وعقود الحالات الست.
+          5. تحديث الأبطال المشغولين والانتقال السلس لباقي الأولويات.
+        """
+        # قراءة الإعدادات من march_manager.abra أو الإعداد العام abra
+        abra_cfg = self.config.get("abra")
+        if abra_cfg is None:
+            abra_cfg = getattr(self.conn, "castle_config", {}).get("abra", {}) if hasattr(self.conn, "castle_config") else {}
+
+        if isinstance(abra_cfg, bool):
+            abra_cfg = {"enabled": abra_cfg}
+        elif not isinstance(abra_cfg, dict):
+            abra_cfg = {}
+
+        if not bool(abra_cfg.get("enabled", False)):
+            return {"status": "skipped", "reason": "disabled"}
+
+        # فحص اليوم والحدث (إثنين وأربعاء) بنظام UTC
+        from datetime import datetime, timezone
+        now_utc = datetime.now(timezone.utc)
+        is_event_day = bool(abra_cfg.get("force", False)) or (now_utc.weekday() in (0, 2))
+        if not is_event_day:
+            return {"status": "skipped", "reason": "not_event_day"}
+
+        target_x = int(abra_cfg.get("x", 0) or 0)
+        target_y = int(abra_cfg.get("y", 0) or 0)
+        if target_x <= 0 or target_y <= 0:
+            self.log.warning(f"⚠️ [أولوية 0: Abra] إحداثيات الوحش غير محددة ({target_x}, {target_y}) — تخطي.")
+            return {"status": "skipped", "reason": "invalid_coords"}
+
+        # فحص مسبق لطاقة اللورد (الحالة 6)
+        lord_stamina = self._get_lord_stamina()
+        if lord_stamina < 10:
+            self.log.warning(f"🛑 [أولوية 0: Abra] طاقة اللورد ({lord_stamina}) غير كافية للهجوم.")
+            return {"status": "stamina_empty", "stamina": lord_stamina}
+
+        # فحص مسبق لتوفر القوات بالقلعة (الحالة 3)
+        has_army = await self.ensure_army_or_wait("لهجوم وحش الذهب Abra")
+        if not has_army:
+            return {"status": "critical_no_army"}
+
+        # دمج تشكيلة القتال المشتركة إن لم تكن محددة
+        task_cfg = dict(abra_cfg)
+        shared_form = self.config.get("combat", {}).get("formation_id", 1)
+        if "formation_id" not in task_cfg and "formation" not in task_cfg:
+            task_cfg["formation_id"] = shared_form
+
+        task_cfg["busy_heroes"] = list(self._busy_heroes)
+
+        self.log.info(f"🐉 [وحش الذهب] بدء الهجوم على Abra عند ({target_x}, {target_y})")
+        abra_task = AbraTask(self.conn, task_cfg)
+        self._forward_subtask_logs(abra_task)
+
+        task_res = await abra_task.run()
+        self._busy_heroes.update(getattr(abra_task, '_busy_heroes', set()))
+
+        task_data = getattr(task_res, "data", {}) if (task_res is not None and isinstance(getattr(task_res, "data", None), dict)) else {}
+        ret_status = task_data.get("status") or ("completed" if task_res.success else "error")
+
+        if ret_status == "critical_no_army":
+            return {"status": "critical_no_army"}
+        if ret_status == "stamina_empty":
+            return {"status": "stamina_empty", "stamina": task_data.get("stamina", lord_stamina)}
+
+        return {
+            "status": ret_status,
+            "success": task_res.success,
+            "message": task_res.message,
+            "data": task_data
+        }
 
     # ────────────────────────────────────────────────────────────────
     #  الأولوية 1: غزاة الهيبة (Prestige Invaders) عبر monster.py
@@ -498,20 +680,12 @@ class MarchManagerTask(BaseTask):
           4. تطبيق الحالة 1 (انتظار 60ث عند امتلاء الطوابير) والحالة 2 (تعويض التشكيلة) والحالة 3 (الخروج عند انعدام القوات).
         """
 
-        # --- سطر الطباعة للتأكد من القيمة ---
-        main_enabled_value = self.config.get('is_main_prestige_enabled', True)
-        self.log.info(f"🔎 [فحص الحقل المحقون] قيمة is_main_prestige_enabled هي: {main_enabled_value}")
-
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
-            self.log.info("⏭️ [أولوية 1] تم تخطي غزاة الهيبة (قسم الهيبة الرئيسي معطل بالكامل).")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
-        
         cfg = self.config.get("prestige_invaders", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 1] تم تخطي غزاة الهيبة (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -519,7 +693,6 @@ class MarchManagerTask(BaseTask):
         q_info = self.get_quest_info("invaders")
 
         if q_info.get("is_done"):
-            self.log.info(f"✨ [أولوية 1: غزاة الهيبة] مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']}). الانتقال للأولوية التالية مباشرة.")
             return {"status": "already_done", "c_num": q_info["c_num"]}
 
         # حساب عدد الهجمات المتبقية لإنجاز المهمة بدقة
@@ -527,7 +700,7 @@ class MarchManagerTask(BaseTask):
         if q_info.get("found") and q_info.get("remaining", 0) > 0:
             needed = q_info["remaining"]
 
-        self.log.info(f"👾 ───【 الأولوية 1: قتل غزاة الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات) 】───")
+        self.log.info(f"👾 [غزاة الهيبة] بدء الهجوم (متبقي: {needed} هجمة)")
 
         # فحص مسبق لطاقة اللورد (Stamina) لتجنب أخطاء 8032 والمحاولات غير المجدية
         lord_stamina = self._get_lord_stamina()
@@ -540,9 +713,9 @@ class MarchManagerTask(BaseTask):
         if not has_army:
             return {"status": "critical_no_army"}
 
-        # حساب دورات الانتظار المتاحة لطوابير الفيالق ضمن مهلة الـ 20 دقيقة (الحالة 1: انتظار دقيقة = 60 ثانية)
+        # حساب دورات الانتظار المتاحة لطوابير الفيالق ضمن مهلة الـ 20 دقيقة (الحالة 1: انتظار دقيقتين = 120 ثانية)
         rem_seconds = self.get_remaining_seconds()
-        max_wait_cycles = max(1, int(rem_seconds // 60))
+        max_wait_cycles = max(1, int(rem_seconds // 120))
 
         # تجهيز إعدادات MonsterTask للهجوم على الغزاة
         monster_cfg = {
@@ -553,15 +726,17 @@ class MarchManagerTask(BaseTask):
             "formation_id": int(cfg.get("formation_id", 1)),
             "search_range": int(cfg.get("search_range", 80)),
             "wait_for_queue": True,          # الحالة 1: الانتظار عند امتلاء الفيالق
-            "wait_interval": 60.0,           # انتظار 60 ثانية كاملة كما هو مطلوب
+            "wait_interval": 165.0,          # انتظار قرابة دقيقتين ونصف إلى 3 دقائق (165 ثانية)
             "max_wait_cycles": max_wait_cycles,
-            "troops_count": int(cfg.get("troops_count", 30000)),
+            "troops_count": int(cfg.get("troops_count", 0)),
+            "busy_heroes": list(self._busy_heroes),
         }
 
         monster_task = MonsterTask(self.conn, monster_cfg)
         self._forward_subtask_logs(monster_task)
 
         task_res = await monster_task.run()
+        self._busy_heroes.update(getattr(monster_task, '_busy', set()))
 
         task_res_data = getattr(task_res, "data", {}) if (task_res is not None and isinstance(getattr(task_res, "data", None), dict)) else {}
 
@@ -571,7 +746,7 @@ class MarchManagerTask(BaseTask):
 
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res_data.get("stop_reason") == "NO_ARMY":
-            has_army = await self.ensure_army_or_wait("لمتابعة هجوم الغزاة")
+            has_army = await self.ensure_army_or_wait("لمتابعة هجوم الغزاة", is_retry=True)
             if not has_army:
                 return {"status": "critical_no_army"}
 
@@ -611,13 +786,10 @@ class MarchManagerTask(BaseTask):
 
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
-            self.log.info("⏭️ [أولوية 2] تم تخطي معقل الهيبة (قسم الهيبة الرئيسي معطل بالكامل).")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
         cfg = self.config.get("prestige_stronghold", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 2] تم تخطي معقل الهيبة (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -625,7 +797,6 @@ class MarchManagerTask(BaseTask):
         q_info = self.get_quest_info("stronghold")
 
         if q_info.get("is_done"):
-            self.log.info(f"✨ [أولوية 2: معقل الهيبة] مكتملة مسبقاً ({q_info['c_num']}/{q_info['l_num']}). الانتقال للأولوية التالية مباشرة.")
             return {"status": "already_done", "c_num": q_info["c_num"]}
 
         # مهمة المعقل باللعبة تتطلب مرتين كحد أقصى (وليس 5)
@@ -633,7 +804,7 @@ class MarchManagerTask(BaseTask):
         if q_info.get("found") and q_info.get("remaining", 0) > 0:
             needed = min(2, q_info["remaining"])
 
-        self.log.info(f"🏰 ───【 الأولوية 2: الهجوم على معقل الهيبة (المتبقي لإنجاز المهمة: {needed} هجمات [بحد أقصى مرتين]) 】───")
+        self.log.info(f"🏰 [معقل الهيبة] بدء الهجوم (متبقي: {needed} هجمة)")
 
         # فحص مسبق لطاقة اللورد (Stamina)
         lord_stamina = self._get_lord_stamina()
@@ -647,7 +818,7 @@ class MarchManagerTask(BaseTask):
             return {"status": "critical_no_army"}
 
         rem_seconds = self.get_remaining_seconds()
-        max_wait_cycles = max(1, int(rem_seconds // 60))
+        max_wait_cycles = max(1, int(rem_seconds // 120))
 
         # تجهيز إعدادات StrongholdTask للهجوم على المعقل
         stronghold_cfg = {
@@ -657,15 +828,17 @@ class MarchManagerTask(BaseTask):
             "formation_id": int(cfg.get("formation_id", 1)),
             "search_range": int(cfg.get("search_range", 80)),
             "wait_for_queue": True,          # الحالة 1: الانتظار عند امتلاء الفيالق
-            "wait_interval": 60.0,           # انتظار 60 ثانية كاملة
+            "wait_interval": 165.0,          # انتظار قرابة دقيقتين ونصف إلى 3 دقائق (165 ثانية)
             "max_wait_cycles": max_wait_cycles,
             "troops_count": int(cfg.get("troops_count", 30000)),
+            "busy_heroes": list(self._busy_heroes),
         }
 
         stronghold_task = StrongholdTask(self.conn, stronghold_cfg)
         self._forward_subtask_logs(stronghold_task)
 
         task_res = await stronghold_task.run()
+        self._busy_heroes.update(getattr(stronghold_task, '_busy', set()))
 
         task_res_data = getattr(task_res, "data", {}) if (task_res is not None and isinstance(getattr(task_res, "data", None), dict)) else {}
 
@@ -675,7 +848,7 @@ class MarchManagerTask(BaseTask):
 
         # فحص الحالة 3 بعد المحاولة: هل نفد الجيش كلياً؟
         if task_res_data.get("stop_reason") == "NO_ARMY":
-            has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعقل")
+            has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعقل", is_retry=True)
             if not has_army:
                 return {"status": "critical_no_army"}
 
@@ -710,19 +883,15 @@ class MarchManagerTask(BaseTask):
           1. استعلام حالة مهام جمع الموارد الأربعة من meritoriousTaskCtrl.
           2. تخطي الموارد المنجزة مسبقاً.
           3. إرسال مسيرة جمع عادية واحدة بحمولة الحقل كاملة لكل مورد غير مكتمل.
-          4. تطبيق الحالات الخمس (نفاذ الفيالق 60ث، نقص التشكيلة، انعدام الجيش، تعذر الأهداف).
+          4. تطبيق الحالات الخمس (نفاذ الفيالق 120ث، نقص التشكيلة، انعدام الجيش، تعذر الأهداف).
         """
 
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
-            self.log.info("⏭️ [أولوية 3] تم تخطي جمع موارد الهيبة (قسم الهيبة الرئيسي معطل بالكامل).")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
-
         cfg = self.config.get("prestige_gather", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 3] تم تخطي جمع موارد الهيبة (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -735,28 +904,38 @@ class MarchManagerTask(BaseTask):
         for item in PRESTIGE_GATHER_RESOURCES:
             q_info = self.get_quest_info(item["quest_id"])
             if q_info.get("is_done"):
-                self.log.info(f"✨ [أولوية 3] مهمة جمع {item['name']} مكتملة مسبقاً ({q_info.get('c_num', 1)}/{q_info.get('l_num', 1)}).")
+                pass
             elif item["res_type"] in active_gather_types:
-                self.log.info(
-                    f"🌾 [أولوية 3] توجد مسيرة نشطة بالخارج حالياً لجمع {item['name']} "
-                    f"(الفيلق قائم بالخريطة ولم يعد للقلعة بعد) — يتم تخطي إرسال مسيرة جديدة."
-                )
+                pass
             else:
                 uncompleted.append((item, q_info))
 
         if not uncompleted:
-            self.log.info("✨ [أولوية 3: جمع موارد الهيبة] جميع مهام جمع الموارد الأربعة مكتملة أو توجد لها مسيرات قائمة بالخارج.")
             return {"status": "already_done", "remaining": 0}
 
-        self.log.info(f"🌾 ───【 الأولوية 3: جمع موارد الهيبة (المتبقي: {len(uncompleted)} مهام من أصل 4) 】───")
+        self.log.info(f"🌾 [جمع موارد الهيبة] بدء الجمع (متبقي: {len(uncompleted)} مهام)")
 
         sent_total = 0
         results_by_res = {}
+
+        castle_lv = self.get_castle_level()
 
         for item, q_info in uncompleted:
             if self.is_time_expired():
                 self.log.warning("⏱️ [انتهاء المهلة] انتهت مدة الـ 20 دقيقة المخصصة للمهمة بالكامل.")
                 break
+
+            # فحص شرط مستوى القلعة لموارد الحديد (10) والفضة (15) لتفادي الأخطاء 8041 و 8042
+            if item["res_type"] == 4 and castle_lv < 10:
+                self.log.info(
+                    f"🌾 [أولوية 3] تخطي جمع {item['name']} — يتطلب قلعة لفل 10 على الأقل (لفل القلعة الحالي: {castle_lv}) [لتفادي خطأ 8041]."
+                )
+                continue
+            elif item["res_type"] == 5 and castle_lv < 15:
+                self.log.info(
+                    f"🌾 [أولوية 3] تخطي جمع {item['name']} — يتطلب قلعة لفل 15 على الأقل (لفل القلعة الحالي: {castle_lv}) [لتفادي خطأ 8042]."
+                )
+                continue
 
             self.log.info(f"🌾 ───【 جمع مورد الهيبة: {item['name']} (مهمة #{item['quest_id']}) 】───")
 
@@ -772,7 +951,7 @@ class MarchManagerTask(BaseTask):
                 if getattr(self, '_max_castle_queues', 0) > 0:
                     cur_act = await self.get_active_marches_count()
                     if cur_act >= self._max_castle_queues:
-                        has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}")
+                        has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}", caused_by_queue_full=False)
                         if not has_free_queue:
                             return {"status": "timeout_or_no_queue"}
 
@@ -783,6 +962,9 @@ class MarchManagerTask(BaseTask):
                     "search_range": int(cfg.get("search_range", 100)),
                     "busy_heroes": list(self._busy_heroes),
                     "used_pets": list(self._used_pets),
+                    "allow_partial": True,  # السماح بمسيرة جزئية لمهام الهيبة لإكمال المهمة اليومية (25k) للحسابات الصغيرة
+                    "min_load_ratio": 0.0,
+                    "max_heroes": 2,
                 }
 
                 gather_task = GatherTask(self.conn, gather_cfg)
@@ -802,16 +984,22 @@ class MarchManagerTask(BaseTask):
                     self.log.info(f"✅ تم إرسال مسيرة جمع عادية لـ {item['name']} بنجاح لإنجاز مهمة الهيبة!")
                     break
 
+                # فحص توقف المهمة لعدم كفاية مستوى القلعة (8041 أو 8042)
+                if res_data.get("stop_reason") == "CASTLE_LV_LOW":
+                    self.log.info(f"🌾 [أولوية 3] تجاوز جمع {item['name']} لعدم كفاية لفل القلعة.")
+                    results_by_res[item["key"]] = "skipped_castle_lv"
+                    break
+
                 # الحالة 1: الفيالق ممتلئة بالكامل بالخارج (كود 8004)
                 if res_data.get("queue_full"):
-                    has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}")
+                    has_free_queue = await self.wait_for_free_queue(f"لجمع {item['name']}", caused_by_queue_full=True)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue"}
                     continue
 
                 # فحص الحالة 3: انعدام الجيش بالقلعة
                 if res_data.get("stop_reason") == "NO_ARMY":
-                    has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {item['name']}")
+                    has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {item['name']}", is_retry=True)
                     if not has_army:
                         return {"status": "critical_no_army"}
                     continue
@@ -822,7 +1010,7 @@ class MarchManagerTask(BaseTask):
                     self.log.warning(f"⚠️ [الحالة 4] تكرر تعذر إرسال مسيرة جمع {item['name']} (3 محاولات) — الانتقال للمورد التالي.")
                     results_by_res[item["key"]] = "failed_max_retries"
                     break
-                await asyncio.sleep(3)
+                await asyncio.sleep(round(random.uniform(2.5, 4.2), 2))
 
             # مهلة أمان بين إطلاق مسيرات الموارد
             await asyncio.sleep(round(random.uniform(4.0, 7.0), 2))
@@ -847,9 +1035,7 @@ class MarchManagerTask(BaseTask):
           - يقتصر دور المنسق على مراقبة الفيالق (الحالة 1) وإدارة مهلة الـ 20 دقيقة.
         """
         cfg = self.config.get("transport", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 transport: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 4] تم تخطي مساعدة الموارد (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         target_x = cfg.get("target_x")
@@ -858,23 +1044,37 @@ class MarchManagerTask(BaseTask):
             self.log.warning("⚠️ [أولوية 4] لم يتم تحديد إحداثيات القلعة الهدف...")
             return {"status": "skipped", "reason": "no_target_coords"}
 
-        self.log.info(f"🚚 ───【 الأولوية 4: مساعدة ونقل الموارد إلى ({target_x}, {target_y}) 】───")
+        account_id = getattr(self.conn, 'email', '') or str(self.uid)
+        if is_transport_daily_limit_reached(account_id, int(target_x), int(target_y)):
+            return {"status": "skipped", "reason": "daily_limit_reached"}
+
+        self.log.info(f"🚚 [نقل الموارد] بدء النقل إلى ({target_x}, {target_y})")
 
         sent_total = 0
         total_transported = 0
+        target_max_marches = int(cfg.get("max_marches", 18))
 
         while not self.is_time_expired():
+            # فحص هل تم إرسال كامل المسيرات المطلوبة
+            remaining_needed = target_max_marches - sent_total
+            if remaining_needed <= 0:
+                break
+
             # فحص مسبق لامتلاء الفيالق (الحالة 1 الخاصة بالمنسق)
             if getattr(self, '_max_castle_queues', 0) > 0:
                 cur_act = await self.get_active_marches_count()
                 if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue("لنقل الموارد")
+                    has_free_queue = await self.wait_for_free_queue("لنقل الموارد", caused_by_queue_full=False)
                     if not has_free_queue:
                         break
+                free_queues = max(1, self._max_castle_queues - cur_act)
+            else:
+                free_queues = remaining_needed
 
-            # تجهيز الإعدادات لتشغيل مسيرة واحدة في كل دورة ليحتفظ المنسق بالسيطرة
+            # تمرير الفيالق الشاغرة دفعة واحدة للمهمة لتفحص مرة واحدة فقط
+            batch_size = min(free_queues, remaining_needed)
             transport_cfg = dict(cfg)
-            transport_cfg["max_marches"] = 1
+            transport_cfg["max_marches"] = batch_size
 
             # تشغيل المهمة الفرعية من ملف transport.py
             transport_task = TransportTask(self.conn, transport_cfg)
@@ -886,16 +1086,26 @@ class MarchManagerTask(BaseTask):
             res_data = getattr(res, "data", {}) if (res is not None and isinstance(getattr(res, "data", None), dict)) else {}
             sent_count = res_data.get("sent", 0)
             reason = res_data.get("reason")
+            daily_limit = res_data.get("daily_limit_reached", False)
 
-            if res is not None and res.success and sent_count > 0:
+            if daily_limit:
                 sent_total += sent_count
                 total_transported += res_data.get("total", 0)
-            elif reason == "queue_full" or res_data.get("queue_full"):
+                set_transport_daily_limit_reached(account_id, int(target_x), int(target_y))
+                self.log.info("🛑 [أولوية 4] تم تسجيل بلوغ القلعة الهدف للحد الأقصى اليومي — سيتم تخطي مهمة النقل لبقية اليوم والانتقال للأولويات التالية.")
+                break
+
+            if res is not None and sent_count > 0:
+                sent_total += sent_count
+                total_transported += res_data.get("total", 0)
+
+            if reason == "queue_full" or res_data.get("queue_full"):
                 self.log.info("🛑 [أولوية 4: نفاذ الفيالق] الفيالق ممتلئة، المنسق سيتولى الانتظار...")
-                has_free_queue = await self.wait_for_free_queue("لنقل الموارد")
+                has_free_queue = await self.wait_for_free_queue("لنقل الموارد", caused_by_queue_full=True)
                 if not has_free_queue:
                     break
-            else:
+                continue
+            elif not res or not res.success or sent_count == 0:
                 # توقف البوت إما بسبب نفاد الموارد أو حدوث أخطاء متتالية
                 break
 
@@ -917,12 +1127,10 @@ class MarchManagerTask(BaseTask):
           - ترسل مسيرة واحدة فقط حصراً ثم تنتقل للأولوية التالية.
         """
         cfg = self.config.get("ruins", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 ruins: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 5] تم تخطي استكشاف الأطلال (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
-        self.log.info("🏛️ ───【 الأولوية 5: استكشاف الأطلال (Ruins) 】───")
+        self.log.info("🏛️ [الأطلال] بدء استكشاف الأطلال")
 
         # 1. فحص مسبق وحاسم: هل توجد مسيرة أطلال بالخارج بالفعل؟
         is_active = await self.is_ruins_march_active()
@@ -940,19 +1148,24 @@ class MarchManagerTask(BaseTask):
             if getattr(self, '_max_castle_queues', 0) > 0:
                 cur_act = await self.get_active_marches_count()
                 if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue("لاستكشاف الأطلال")
+                    has_free_queue = await self.wait_for_free_queue("لاستكشاف الأطلال", caused_by_queue_full=False)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue"}
 
             ruins_cfg = dict(cfg)
             ruins_cfg["max_marches"] = 1  # إجبار البوت على إرسال مسيرة واحدة فقط
+            ruins_cfg["busy_heroes"] = list(self._busy_heroes)
             
             ruins_task = RuinsTask(self.conn, ruins_cfg)
             self._forward_subtask_logs(ruins_task)
             res = await ruins_task.run()
+            self._busy_heroes.update(getattr(ruins_task, '_busy', set()))
 
             # 3. معالجة النتيجة
             if res.success:
+                if res.data and res.data.get("already_active"):
+                    self.log.info("🏛️ [أولوية 5] توجد مسيرة استكشاف أطلال نشطة بالخارج بالفعل — سيتم التخطي والانتقال للأولوية التالية مباشرة.")
+                    return {"status": "already_active"}
                 self.log.info("✅ [أولوية 5] تم إرسال مسيرة استكشاف الأطلال بنجاح! سيتم الانتقال للأولوية التالية.")
                 return {"status": "completed", "sent": 1}
             else:
@@ -970,23 +1183,22 @@ class MarchManagerTask(BaseTask):
     async def execute_priority_combat(self) -> Dict[str, Any]:
         """
         تنفيذ أولوية القتال الشامل:
-          - يقرأ خيار المستخدم (elf, invaders, rebels).
-          - يستدعي ملف elf_boss.py أو monster.py حسب الهدف المختار.
+          - يقرأ خيار المستخدم (invaders, rebels).
+          - يستدعي monster.py حسب الهدف المختار.
           - يستمر بالهجوم حتى نفاذ طاقة اللورد، ويتولى المنسق إدارة مهلة الفيالق.
         """
         cfg = self.config.get("combat", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 combat: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 6] تم تخطي القتال الشامل (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         choice = str(cfg.get("choice", "elf")).strip().lower()
-        self.log.info(f"⚔️ ───【 الأولوية 6: القتال الشامل (الهدف: {choice}) 】───")
+        self.log.info(f"⚔️ [القتال الشامل] بدء الهجوم على ({choice})")
 
         # 1. فحص مسبق لطاقة اللورد
         lord_stamina = self._get_lord_stamina()
-        if lord_stamina < 10:
-            self.log.warning(f"🛑 [أولوية 6] طاقة اللورد الحالية ({lord_stamina}) غير كافية للقتال — الانتقال للأولوية التالية.")
+        min_required_stamina = 10
+        if lord_stamina < min_required_stamina:
+            self.log.warning(f"🛑 [أولوية 6] طاقة اللورد الحالية ({lord_stamina}) غير كافية لقتال {choice} (المطلوب {min_required_stamina}) — الانتقال للأولوية التالية فوراً.")
             return {"status": "stamina_empty", "stamina": lord_stamina}
 
         # 2. فحص توفر الجيش بالقلعة
@@ -1003,28 +1215,26 @@ class MarchManagerTask(BaseTask):
             if getattr(self, '_max_castle_queues', 0) > 0:
                 cur_act = await self.get_active_marches_count()
                 if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}")
+                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}", caused_by_queue_full=False)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue", "sent": total_sent}
 
-            # توجيه الدفة: عفريت أو (غزاة/متمردين)
+            # توجيه الدفة: (غزاة/متمردين) — العفريت محذوف
             if choice == "elf":
-                combat_cfg = {
-                    "formation_id": int(cfg.get("formation_id", 1)),
-                    "boss_type": 10,
-                    "all_legions": True,
-                }
-                combat_task = ElfBossTask(self.conn, combat_cfg)
+                # مهمة العفريت تمت إزالتها — تخطي فوري
+                self.log.info("ℹ️ [أولوية 6] مهمة العفريت (elf) غير متاحة — الانتقال للأولوية التالية.")
+                return {"status": "skipped", "reason": "elf_removed"}
             else:
                 combat_cfg = {
                     "monster_type": choice,
-                    "max_marches": 50,
+                    "max_marches": 15,
                     "min_lv": 1,
                     "max_lv": int(cfg.get("level", 35)),
                     "formation_id": int(cfg.get("formation_id", 1)),
                     "search_range": 120,
                     "wait_for_queue": False,  # تم التعطيل لأن المنسق هو من ينتظر
-                    "troops_count": int(cfg.get("troops_count", 50000)),
+                    "troops_count": int(cfg.get("troops_count", 0)),
+                    "busy_heroes": list(self._busy_heroes),
                 }
                 combat_task = MonsterTask(self.conn, combat_cfg)
 
@@ -1032,10 +1242,11 @@ class MarchManagerTask(BaseTask):
             
             # تنفيذ المهمة واستلام النتيجة
             res = await combat_task.run()
+            self._busy_heroes.update(getattr(combat_task, '_busy', set()) or getattr(combat_task, '_busy_heroes', set()))
             
             # 4. تجميع الإحصائيات وفحص الرد
             res_data = getattr(res, "data", {}) if (res is not None and isinstance(getattr(res, "data", None), dict)) else {}
-            sent_this = (res_data.get("attacks", 0) if choice == "elf" else res_data.get("sent", 0))
+            sent_this = res_data.get("sent", 0)
             total_sent += sent_this
 
             err_msg = str(getattr(res, "error", "") or "") if res is not None else ""
@@ -1044,55 +1255,62 @@ class MarchManagerTask(BaseTask):
             is_queue_full = bool(res_data.get("queue_full") or ("QUEUE_FULL" in err_msg) or ("QUEUE_FULL" in msg) or (stop_reason == "QUEUE_FULL"))
 
             # 5. معالجة حالات الاستمرار والتوقف:
-            # أ) في حال نجاح إرسال هجمات/مسيرات: تصفير الأخطاء والاستمرار فوراً
+            # أ) نفاذ طاقة اللورد بالكامل ➔ الانتقال للأولوية التالية فوراً دون أي انتظار
+            if "STAMINA_EMPTY" in err_msg or "STAMINA_EMPTY" in msg or stop_reason == "STAMINA_EMPTY":
+                self.log.warning("🛑 [أولوية 6] نفدت طاقة اللورد — سيتم الانتقال للأولوية التالية فوراً دون انتظار.")
+                break
+
+            # ب) في حال نجاح إرسال هجمات/مسيرات: تصفير الأخطاء والاستمرار
             if res is not None and res.success and sent_this > 0:
                 consecutive_errors = 0
                 if is_queue_full:
                     self.log.info(f"🛑 [أولوية 6: نفاذ الفيالق] الفيالق ممتلئة بعد إرسال الهجوم، المنسق سيتولى الانتظار...")
-                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}")
+                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}", caused_by_queue_full=True)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue", "sent": total_sent}
+                elif stop_reason == "NO_ARMY":
+                    has_army = await self.ensure_army_or_wait(f"لمتابعة قتال {choice}", is_retry=True)
+                    if not has_army:
+                        return {"status": "critical_no_army", "sent": total_sent}
                 else:
-                    await asyncio.sleep(round(random.uniform(4.0, 7.0), 2))
+                    # انتظار تفريغ فيلق فعلي بدلاً من حلقة 4-7 ثوانٍ عبثية
+                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}", caused_by_queue_full=False)
+                    if not has_free_queue:
+                        break
                 continue
-
-            # ب) نفاذ طاقة اللورد بالكامل ➔ الانتقال للأولوية التالية
-            if "STAMINA_EMPTY" in err_msg or "STAMINA_EMPTY" in msg or stop_reason == "STAMINA_EMPTY":
-                self.log.warning("🛑 [أولوية 6] نفدت طاقة اللورد — سيتم الانتقال للأولوية التالية.")
-                break
 
             # ج) امتلاء طوابير الفيالق دون إرسال مسيرات جديدة ➔ انتظار تفريغ فيلق
             elif is_queue_full:
                 self.log.info("🛑 [أولوية 6: نفاذ الفيالق] الفيالق ممتلئة، المنسق سيتولى الانتظار...")
-                has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}")
+                has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}", caused_by_queue_full=True)
                 if not has_free_queue:
                     return {"status": "timeout_or_no_queue", "sent": total_sent}
                 continue
 
             # د) نقص القوات بالقلعة ➔ فحص ذكي وانتظار عودة القوات
             elif "NO_ARMY" in err_msg or "NO_ARMY" in msg or stop_reason == "NO_ARMY":
-                has_army = await self.ensure_army_or_wait(f"لمتابعة قتال {choice}")
+                has_army = await self.ensure_army_or_wait(f"لمتابعة قتال {choice}", is_retry=True)
                 if not has_army:
                     return {"status": "critical_no_army", "sent": total_sent}
                 continue
 
-            # هـ) انعدام أهداف قريبة أو الحدث غير نشط ➔ الانتقال للأولوية التالية
+            # هـ) خطورة انتحار الجيش أمام هدف يفوق القوة ➔ الانتقال للأولوية التالية
+            elif "SUICIDE_RISK" in err_msg or "SUICIDE_RISK" in msg or stop_reason == "SUICIDE_RISK":
+                self.log.warning(f"🛑 [أولوية 6] تم إلغاء الهجوم على {choice} لتجنب انتحار الجيش أمام هدف يفوق قدرة القلعة — الانتقال للأولوية التالية.")
+                break
+
+            # و) انعدام أهداف قريبة أو الحدث غير نشط ➔ الانتقال للأولوية التالية
             elif "NO_TARGET" in err_msg or "لم يتم العثور" in msg or stop_reason == "NO_TARGET" or res_data.get("event_active") is False:
                 self.log.warning(f"⚠️ [أولوية 6] لا توجد أهداف ({choice}) قريبة متاحة حالياً أو الحدث غير نشط — سيتم الانتقال للأولوية التالية.")
                 break
 
-            # و) أخطاء غير مصنفة: المحاولة حتى 3 مرات قبل الانتقال للأولوية التالية
+            # و) أخطاء غير مصنفة: قاطع الدائرة الفوري (تخطي الأولوية فوراً دون أي إعادة محاولة لحماية الحساب)
             else:
-                consecutive_errors += 1
                 err_desc = err_msg or msg or stop_reason or "خطأ غير معروف"
-                self.log.warning(f"⚠️ [أولوية 6: قتال] خطأ غير مصنف ({consecutive_errors}/3): {err_desc}")
-                if consecutive_errors >= 3:
-                    self.log.warning("⚠️ [أولوية 6] 3 أخطاء متتالية غير مصنفة أثناء القتال — تخطي هذه الأولوية والانتقال للأولوية التالية.")
-                    break
-                await asyncio.sleep(3.0)
-                continue
+                self.log.warning(f"🛑 [أولوية 6: قاطع الدائرة الفوري] توقف القتال بسبب: {err_desc} — تخطي الأولوية فوراً دون أي تكرار لمنع الحظر.")
+                break
 
-        self.log.info(f"🏁 ───【 اكتمال أولوية القتال الشامل: تم إرسال {total_sent} هجمة على ({choice}) 】───")
+        self.log.info(f"🏁 [القتال الشامل] تم إرسال {total_sent} هجمة على ({choice})")
         return {"status": "completed", "sent": total_sent}
 
 
@@ -1108,14 +1326,12 @@ class MarchManagerTask(BaseTask):
           - يُسند مهام الانتظار (في حال نفاذ الفيالق) للوحدة مع تمرير دورات الانتظار.
         """
         cfg = self.config.get("stronghold", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 stronghold: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 7] تم تخطي الهجوم على المعاقل (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         needed = int(cfg.get("count", 2))
         target_lv = int(cfg.get("level", 30))
-        self.log.info(f"🏰 ───【 الأولوية 7: الهجوم على المعاقل (العدد المطلوب: {needed} هجمات | لفل: {target_lv}) 】───")
+        self.log.info(f"🏰 [المعاقل] بدء الهجوم على المعاقل (مطلوب: {needed} | لفل: {target_lv})")
 
         # 1. فحص مسبق لطاقة اللورد (Stamina)
         lord_stamina = self._get_lord_stamina()
@@ -1129,7 +1345,7 @@ class MarchManagerTask(BaseTask):
             return {"status": "critical_no_army"}
 
         rem_seconds = self.get_remaining_seconds()
-        max_wait_cycles = max(1, int(rem_seconds // 60))
+        max_wait_cycles = max(1, int(rem_seconds // 120))
 
         # 3. تجهيز إعدادات StrongholdTask
         stronghold_cfg = {
@@ -1139,15 +1355,17 @@ class MarchManagerTask(BaseTask):
             "formation_id": int(cfg.get("formation_id", 1)),
             "search_range": int(cfg.get("search_range", 100)),
             "wait_for_queue": True,          # نترك للمهمة مهمة الانتظار الذكي عند الامتلاء
-            "wait_interval": 60.0,
+            "wait_interval": 165.0,          # انتظار قرابة دقيقتين ونصف إلى 3 دقائق (165 ثانية)
             "max_wait_cycles": max_wait_cycles,
             "troops_count": int(cfg.get("troops_count", 50000)),
+            "busy_heroes": list(self._busy_heroes),
         }
 
         stronghold_task = StrongholdTask(self.conn, stronghold_cfg)
         self._forward_subtask_logs(stronghold_task)
 
         task_res = await stronghold_task.run()
+        self._busy_heroes.update(getattr(stronghold_task, '_busy', set()))
 
         # 4. معالجة أسباب التوقف من المهمة
         task_res_data = getattr(task_res, "data", {}) if (task_res is not None and isinstance(getattr(task_res, "data", None), dict)) else {}
@@ -1155,12 +1373,12 @@ class MarchManagerTask(BaseTask):
         if stop_reason == "STAMINA_EMPTY":
             self.log.warning("🛑 [أولوية 7] توقف الهجوم بسبب نفاد طاقة اللورد — الانتقال للأولوية التالية.")
         elif stop_reason == "NO_ARMY":
-            has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعاقل")
+            has_army = await self.ensure_army_or_wait("لمتابعة هجوم المعاقل", is_retry=True)
             if not has_army:
                 return {"status": "critical_no_army"}
 
         sent_cnt = task_res_data.get("sent", 0)
-        self.log.info(f"🏁 ───【 اكتمال أولوية المعاقل: تم إرسال {sent_cnt} هجمة من أصل {needed} 】───")
+        self.log.info(f"🏁 [المعاقل] تم إرسال {sent_cnt}/{needed} هجمة")
 
         return {
             "status": "completed",
@@ -1180,19 +1398,15 @@ class MarchManagerTask(BaseTask):
             إرسال مسيرات الذهب حتى استيفاء العدد المطلوب أو استنفاد الحقول.
         """
         cfg = self.config.get("gold_gather", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 gold_gather: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 8] تم تخطي جمع الذهب في أراضي التحالفات (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         locations = cfg.get("locations", [])
         if not locations:
-            self.log.warning("⚠️ [أولوية 8] تم تفعيل جمع الذهب لكن لم يتم تحديد أي مواقع (Locations) في الإعدادات.")
             return {"status": "skipped", "reason": "no_locations"}
 
         requested_marches = int(cfg.get("max_marches", 0))
-        target_desc = "استغلال كافة الفيالق الشاغرة" if requested_marches == 0 else f"{requested_marches} مسيرات"
-        self.log.info(f"💰 ───【 الأولوية 8: جمع الذهب (التحالفات: {len(locations)} | المطلوب: {target_desc}) 】───")
+        self.log.info(f"💰 [جمع الذهب] بدء المسح والجمع (تحالفات: {len(locations)})")
 
         total_sent = 0
 
@@ -1206,12 +1420,13 @@ class MarchManagerTask(BaseTask):
             if getattr(self, '_max_castle_queues', 0) > 0:
                 cur_act = await self.get_active_marches_count()
                 if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue("لجمع الذهب")
+                    has_free_queue = await self.wait_for_free_queue("لجمع الذهب", caused_by_queue_full=False)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue", "sent": total_sent}
 
             # 3. تجهيز الإعدادات لتشغيل المهمة
             gold_cfg = dict(cfg)
+            gold_cfg["busy_heroes"] = list(self._busy_heroes)
             if requested_marches > 0:
                 rem = requested_marches - total_sent
                 if rem <= 0:
@@ -1225,6 +1440,7 @@ class MarchManagerTask(BaseTask):
             self._forward_subtask_logs(gold_task)
             
             res = await gold_task.run()
+            self._busy_heroes.update(gold_task._busy)
             
             sent_this_round = res.data.get("sent", 0) if res.data else 0
             total_sent += sent_this_round
@@ -1233,7 +1449,7 @@ class MarchManagerTask(BaseTask):
             if res.success:
                 # إذا نجحت المهمة وأرسلت مسيرات (لكنها قد تكون توقفت بسبب امتلاء الفيالق)
                 # سنعيد الدوران: المحرك سيفحص الفيالق في بداية الحلقة، وإذا كانت ممتلئة سينتظر بذكاء!
-                await asyncio.sleep(2)
+                await asyncio.sleep(round(random.uniform(1.8, 3.2), 2))
                 continue
             else:
                 # إذا فشلت المهمة وأعادت (TaskResult.fail)، فهذا يعني أن sent_count = 0
@@ -1259,9 +1475,7 @@ class MarchManagerTask(BaseTask):
           - المنسق يتولى إدارة الانتظار بذكاء إذا نفدت الفيالق.
         """
         cfg = self.config.get("gather", {})
-        self.log.info(f"🔎🔎🔎🔎🔎🔎🔎🔎🔎 gather: {cfg.get('enabled')}")
         if not cfg.get("enabled", False):
-            self.log.info("⏭️ [أولوية 9] تم تخطي الجمع الخارجي المفتوح (معطلة من الإعدادات).")
             return {"status": "skipped", "reason": "disabled"}
 
         res_type = cfg.get("res_type", 2)
@@ -1271,12 +1485,31 @@ class MarchManagerTask(BaseTask):
         res_names = {1: "الذهب", 2: "القمح", 3: "الخشب", 4: "الحديد", 5: "الكوارنز"}
         res_name = res_names.get(int(res_type), str(res_type))
 
-        self.log.info(f"🌾 ───【 الأولوية 9: الجمع الخارجي المفتوح (المورد: {res_name} | لفل: {target_lv} | استغلال كافة الفيالق الشاغرة) 】───")
+        # فحص شرط مستوى القلعة لموارد الحديد (10) والفضة (15) لتفادي الأخطاء 8041 و 8042
+        castle_lv = self.get_castle_level()
+        if int(res_type) == 4 and castle_lv < 10:
+            self.log.warning(f"🛑 [الجمع المفتوح] جمع الحديد يتطلب قلعة لفل 10 على الأقل — تخطي.")
+            return {"status": "skipped", "reason": "castle_level_low"}
+        elif int(res_type) == 5 and castle_lv < 15:
+            self.log.warning(f"🛑 [الجمع المفتوح] جمع الفضة يتطلب قلعة لفل 15 على الأقل — تخطي.")
+            return {"status": "skipped", "reason": "castle_level_low"}
+
+        self.log.info(f"🌾 [الجمع المفتوح] بدء جمع ({res_name}) لفل {target_lv}")
 
         # فحص ذكي مسبق للجيش (الجمع لا يتطلب طاقة)
         has_army = await self.ensure_army_or_wait("للجمع المفتوح")
         if not has_army:
             return {"status": "critical_no_army"}
+
+        # فحص وتفعيل مكافأة سرعة الجمع من الحقيبة إذا كانت مفعلة في الإعدادات
+        if cfg.get("use_boost", False):
+            try:
+                from tasks.gather_boost import GatherBoostTask
+                boost_task = GatherBoostTask(self.conn, {"enabled": True})
+                self._forward_subtask_logs(boost_task)
+                await boost_task.run()
+            except Exception as e:
+                self.log.warning(f"⚠️ خطأ أثناء تشغيل مكافأة سرعة الجمع: {e}")
 
         total_sent = 0
 
@@ -1285,17 +1518,18 @@ class MarchManagerTask(BaseTask):
             if getattr(self, '_max_castle_queues', 0) > 0:
                 cur_act = await self.get_active_marches_count()
                 if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}")
+                    has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}", caused_by_queue_full=False)
                     if not has_free_queue:
                         return {"status": "timeout_or_no_queue", "sent": total_sent}
 
             gather_cfg = {
                 "res_type": res_type,
                 "level": target_lv,
-                "max_marches": 1, # المنسق يرسلها حبة حبة ليسيطر على الطوابير بذكاء
+                "max_marches": 6, # المنسق يرسلها حبة حبة ليسيطر على الطوابير بذكاء
                 "search_range": 100,
                 "busy_heroes": list(self._busy_heroes),
                 "used_pets": list(self._used_pets),
+                "max_heroes": 2,
             }
 
             gather_task = GatherTask(self.conn, gather_cfg)
@@ -1321,13 +1555,13 @@ class MarchManagerTask(BaseTask):
             # إذا توقف الإرسال، نحلل السبب
             if stop_reason in ("QUEUE_FULL", "8004", "9007004") or "QUEUE_FULL" in err_msg:
                 self.log.info(f"🛑 [أولوية 9: نفاذ الفيالق] الفيالق ممتلئة بالكامل، المنسق سيتولى الانتظار لجمع {res_name}...")
-                has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}")
+                has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}", caused_by_queue_full=True)
                 if not has_free_queue:
                     return {"status": "timeout_or_no_queue", "sent": total_sent}
                 continue
                 
             elif stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
-                has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {res_name}")
+                has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {res_name}", is_retry=True)
                 if not has_army:
                     return {"status": "critical_no_army", "sent": total_sent}
                 continue
@@ -1336,11 +1570,15 @@ class MarchManagerTask(BaseTask):
                 self.log.warning(f"⚠️ [أولوية 9] لا توجد حقول ({res_name}) قريبة متاحة باللفل المطلوب حالياً — سيتم إنهاء هذه الأولوية.")
                 break
                 
+            elif stop_reason == "CASTLE_LV_LOW":
+                self.log.warning(f"🛑 [أولوية 9] تم إنهاء الجمع لعدم كفاية لفل القلعة لجمع {res_name}.")
+                break
+                
             else:
                 self.log.warning(f"⚠️ تعذر استكمال الجمع المفتوح لسبب غير متوقع ({stop_reason}) — إنهاء الأولوية.")
                 break
 
-        self.log.info(f"🏁 ───【 اكتمال أولوية الجمع الخارجي: تم إرسال {total_sent} مسيرة لجمع {res_name} 】───")
+        self.log.info(f"🏁 [الجمع المفتوح] تم إرسال {total_sent} مسيرة لجمع {res_name}")
         return {
             "status": "completed",
             "sent": total_sent,
@@ -1352,21 +1590,14 @@ class MarchManagerTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تشغيل منسق الفيالق والمسيرات المركزي عبر استدعاء المهام المتخصصة بالترتيب."""
-        self.start_time = time.time()
-        self.log.info("🎖️" + "═" * 60)
-        self.log.info("🎖️ بدء مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager)")
-        self.log.info(f"   • الحد الأقصى لطوابير الفيالق: {self.max_queues}")
-        self.log.info(f"   • مدة تشغيل المهمة الإجمالية: {self.duration_minutes} دقيقة")
-        self.log.info(f"   • قائمة الأولويات النشطة حالياً: {self.priority_order}")
-        self.log.info("🎖️" + "═" * 60)
-
-        # 0. التهيئة واستعلام بيانات الهيبة والجيش
-        await self._refresh_merit_data()
+        self.log.info(f"🎖️ [منسق المسيرات] بدء التنسيق")
+        self.start_time = time.time() 
 
         pipeline_results: Dict[str, Any] = {}
 
         # خريطة دوال الأولويات
         handlers = {
+            "abra": self.execute_priority_abra,
             "prestige_invaders": self.execute_priority_prestige_invaders,
             "prestige_stronghold": self.execute_priority_prestige_stronghold,
             "prestige_gather": self.execute_priority_prestige_gather,
@@ -1417,29 +1648,10 @@ class MarchManagerTask(BaseTask):
 
             await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
 
-        # ── 🚨 فحص الفيالق المشغولة الإلزامي عند انتهاء مهمة مدير المسيرات ──
-        # سواء انتهت المهمة بالوقت أو باكتمال الأولويات: إذا لم يكن هناك أي فيلق مشغول (0 مسيرات نشطة)، فهذا خطأ خطير جداً
-        await asyncio.sleep(1.0)
-        final_busy_marches = await self.get_active_marches_count()
-        if final_busy_marches == 0:
-            finish_reason = "time_expired" if self.is_time_expired() else "priorities_completed"
-            finish_reason_ar = "انتهاء مهلة الوقت للمهمة (20 دقيقة)" if finish_reason == "time_expired" else "انتهاء وفحص كافة الأولويات"
-
-            danger_title = f"🚨 خطأ فادح: انتهت مهمة المسيرات دون وجود أي فيلق مشغول (0 مسيرات نشطة)!"
-            danger_msg = (
-                f"🚨 تنبيه إداري فائق الخطورة (CRITICAL FAILURE):\n"
-                f"انتهت مهمة مدير المسيرات للحساب [{self.email}] بسبب ({finish_reason_ar})، "
-                f"ولكن عند الفحص النهائي الشامل تبيّن عدم وجود أي فيلق مشغول أو نشط بالخارج (0 فيالق)!\n"
-                f"القلعة باتت خاملة تماماً دون جمع موارد أو تنفيذ مهام حربية، وتوقفت طوابير المسيرات بالكامل."
-            )
-            self.log.critical(danger_msg)
-
-            fail_msg = f"🚨 خطأ: انتهت المهمة دون وجود أي فيلق مشغول (0 فيالق مشغولة)."
-            return TaskResult.fail(fail_msg, data=pipeline_results, active_marches=0)
 
         # ── الحالة 5: انتهاء الأولويات بنجاح مع وجود فيالق نشطة ──────
-        msg = f"🎉 [الحالة 5: اكتمال الأولويات] تم الانتهاء من أولويات المسيرات بنجاح ({final_busy_marches} فيالق مشغولة بالخارج)."
+        msg = f"🎉 اكتملت أولويات المسيرات بنجاح."
         self.log.info(msg)
-        return TaskResult.ok(msg, data=pipeline_results, active_marches=final_busy_marches)
+        return TaskResult.ok(msg, data=pipeline_results)
 
         

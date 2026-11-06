@@ -4,8 +4,24 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
-    open: true,
+    port: 80,
+    host: true,
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: false,
+      },
+      '/manifest.json': {
+        target: 'http://localhost:8000',
+        changeOrigin: false,
+        rewrite: () => '/api/manifest.json',
+      },
+      '/ws': {
+        target: 'ws://localhost:8000',
+        ws: true,
+      },
+    },
   },
   build: {
     outDir: 'dist',

@@ -1,0 +1,178 @@
+{
+  "metadata": {
+    "tag": "postfix",
+    "generated_at": "2026-11-03T20:28:53Z",
+    "environment": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python_version": "3.12.8",
+      "python_compiler": "MSC v.1942 64 bit (AMD64)",
+      "cpu_count": 12,
+      "machine": "AMD64",
+      "pid": 24712,
+      "psutil_available": false,
+      "timestamp_utc": "2026-11-03T20:28:44Z"
+    }
+  },
+  "database_metrics": {
+    "db_path": "E:\\osmanli\\database\\castles.db",
+    "db_exists": true,
+    "db_size_bytes": 2994176,
+    "db_size_mb": 2.855,
+    "wal_path": "E:\\osmanli\\database\\castles.db-wal",
+    "wal_exists": false,
+    "wal_size_bytes": 0,
+    "wal_size_kb": 0.0,
+    "shm_path": "E:\\osmanli\\database\\castles.db-shm",
+    "shm_exists": false,
+    "shm_size_bytes": 0,
+    "users_count": 152,
+    "castles_count": 632,
+    "active_castles_count": 486,
+    "pragma": {
+      "journal_mode": "wal",
+      "page_size": 4096,
+      "page_count": 731,
+      "freelist_count": 31
+    }
+  },
+  "api_server_globals": {
+    "available": true,
+    "_threads_count": 0,
+    "_stop_events_count": 0,
+    "_bot_managers_count": 0,
+    "_reserved_count": 0,
+    "_log_qs_count": 0,
+    "_total_queued_logs": 0,
+    "_conn_states_count": 0,
+    "_conn_states_distribution": {},
+    "_user_stopped_count": 0,
+    "_castle_emails_count": 0,
+    "_castle_users_count": 0,
+    "_deleted_castles_count": 0,
+    "_deploy_mode": false,
+    "_gradual_running": false,
+    "summary_keys_total": 0
+  },
+  "idle_state": {
+    "cpu_percent": 0.0,
+    "rss_mb": 22.51,
+    "private_mb": 14.4,
+    "peak_rss_mb": 23.05,
+    "heap_current_kb": 236.4,
+    "heap_peak_kb": 246.43,
+    "handle_count": 164,
+    "socket_count": 0,
+    "threads": {
+      "active_count": 1,
+      "bot_threads_count": 0,
+      "system_threads_count": 1,
+      "daemon_threads_count": 0,
+      "bot_threads": [],
+      "system_threads": [
+        "MainThread"
+      ],
+      "thread_names": [
+        "MainThread"
+      ],
+      "threads": [
+        {
+          "name": "MainThread",
+          "ident": 10376,
+          "is_alive": true,
+          "daemon": false,
+          "is_bot": false
+        }
+      ]
+    }
+  },
+  "active_workload_state": {
+    "cpu_percent": 8.93,
+    "rss_mb": 95.78,
+    "private_mb": 82.36,
+    "peak_rss_mb": 96.07,
+    "heap_current_kb": 29279.78,
+    "heap_peak_kb": 30969.13,
+    "handle_count": 225,
+    "socket_count": 0,
+    "threads": {
+      "active_count": 1,
+      "bot_threads_count": 0,
+      "system_threads_count": 1,
+      "daemon_threads_count": 0,
+      "bot_threads": [],
+      "system_threads": [
+        "MainThread"
+      ],
+      "thread_names": [
+        "MainThread"
+      ],
+      "threads": [
+        {
+          "name": "MainThread",
+          "ident": 10376,
+          "is_alive": true,
+          "daemon": false,
+          "is_bot": false
+        }
+      ]
+    },
+    "workload": {
+      "concurrency": 10,
+      "total_workers": 10,
+      "total_records_processed": 3750,
+      "total_configs_parsed": 3750,
+      "total_duration_seconds": 0.94,
+      "throughput_records_per_sec": 3987.5
+    }
+  },
+  "post_teardown_state": {
+    "cpu_percent": 0.0,
+    "rss_mb": 96.54,
+    "private_mb": 83.15,
+    "peak_rss_mb": 96.54,
+    "heap_current_kb": 29227.06,
+    "heap_peak_kb": 30969.13,
+    "handle_count": 225,
+    "socket_count": 0,
+    "threads": {
+      "active_count": 1,
+      "bot_threads_count": 0,
+      "system_threads_count": 1,
+      "daemon_threads_count": 0,
+      "bot_threads": [],
+      "system_threads": [
+        "MainThread"
+      ],
+      "thread_names": [
+        "MainThread"
+      ],
+      "threads": [
+        {
+          "name": "MainThread",
+          "ident": 10376,
+          "is_alive": true,
+          "daemon": false,
+          "is_bot": false
+        }
+      ]
+    }
+  },
+  "deltas": {
+    "active_vs_idle": {
+      "delta_rss_mb": 73.27,
+      "delta_private_mb": 67.96,
+      "delta_heap_kb": 29043.38,
+      "delta_handles": 61,
+      "delta_sockets": 0,
+      "delta_threads": 0
+    },
+    "residual_post_gc_vs_idle": {
+      "delta_rss_mb": 74.03,
+      "delta_private_mb": 68.75,
+      "delta_heap_kb": 28990.66,
+      "delta_handles": 61,
+      "delta_sockets": 0,
+      "delta_threads": 0
+    }
+  }
+}

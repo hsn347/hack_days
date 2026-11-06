@@ -31,6 +31,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -88,7 +89,7 @@ class WatermillTask(BaseTask):
     async def run(self) -> TaskResult:
         cfg = self.config
         raw_types = cfg.get('types') or cfg.get('res_type', 'all')
-        auto_buy  = bool(cfg.get('allow_shop_buy', cfg.get('auto_buy', True)))
+        auto_buy  = bool(cfg.get('allow_shop_buy', cfg.get('auto_buy', False)))
 
         TYPE_MAP = {
             "all": "all", "الكل": "all", "جميع": "all",
@@ -266,30 +267,57 @@ class WatermillTask(BaseTask):
                             err_b = r_buy.get('err', 'unknown') if r_buy else 'timeout'
                             self.log.warning(f"⚠️ تعذر شراء الأداة {item_id} (كود {err_b})")
 
+            # تحديث الرصيد المتوفر بعد الشراء
+            avail_in_bag = sum(bag_counts.get(iid, 0) for iid in item_candidates)
+            if avail_in_bag <= 0:
+                self.log.info(f"⏭️ {bname}: تم تخطي التفعيل لعدم توفر أدوات تعزيز بالحقيبة أو متجر التحالف.")
+                continue
+
+            # تفعيل فقط المباني التي تكفيها الأدوات المتوفرة لتفادي الرفض من السيرفر
+            can_activate = type_needed[:avail_in_bag]
+            can_len = len(can_activate)
+            if can_len < needed_len:
+                self.log.info(f"⚠️ {bname}: سيتم تفعيل {can_len} مبنى فقط بناءً على رصيد الأدوات المتوفر ({avail_in_bag}).")
+
             # إرسال دفعة التفعيل لهذا النوع
-            r_batch = await self.conn.query('1001', '9', {"allData": type_needed}, timeout=8)
+            r_batch = await self.conn.query('1001', '9', {"allData": can_activate}, timeout=8)
             if r_batch and str(r_batch.get('err', '0')) == '0':
-                success_count += needed_len
-                activated_details[bname] = needed_len
-                self.log.info(f"🎉 تم تفعيل {bname} بنجاح ({needed_len} مبنى) دفعة واحدة! ✅")
+                success_count += can_len
+                activated_details[bname] = can_len
+                self.log.info(f"🎉 تم تفعيل {bname} بنجاح ({can_len} مبنى) دفعة واحدة! ✅")
+                # خصم الأدوات المستخدمة من bag_counts
+                used = can_len
+                for item_id in item_candidates:
+                    c = bag_counts.get(item_id, 0)
+                    sub = min(c, used)
+                    bag_counts[item_id] = c - sub
+                    used -= sub
+                    if used <= 0:
+                        break
             else:
-                # إذا فشلت الدفعة الكاملة، نفعّل مبنى مبنى
+                # إذا فشلت الدفعة الكاملة، نفعّل مبنى مبنى مع قاطع دارة ذكي
                 err_b = r_batch.get('err', 'unknown') if r_batch else 'timeout'
                 self.log.warning(f"⚠️ دفعة {bname} لم تقبل بالكامل (كود {err_b}) — محاولة التفعيل الفردي...")
                 type_ok = 0
-                for item in type_needed:
+                consecutive_fails = 0
+                for item in can_activate:
                     r_s = await self.conn.query('1001', '9', {"allData": [item]}, timeout=5)
                     if r_s and str(r_s.get('err', '0')) == '0':
                         success_count += 1
                         type_ok += 1
+                        consecutive_fails = 0
                     else:
                         failed_count += 1
-                    await asyncio.sleep(0.3)
+                        consecutive_fails += 1
+                        if consecutive_fails >= 2:
+                            self.log.warning(f"⚠️ توقف التفعيل الفردي لـ {bname} بعد فشلين متتاليين.")
+                            break
+                    await asyncio.sleep(random.uniform(0.9, 1.8))
                 if type_ok > 0:
                     activated_details[bname] = type_ok
                     self.log.info(f"✅ تم تفعيل {type_ok} من {bname}")
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(random.uniform(1.2, 2.4))
 
         self.log.info(f"🏁 النتيجة النهائية: تم تفعيل {success_count} مبنى | فشل/تجاوز: {failed_count}")
 
@@ -301,9 +329,12 @@ class WatermillTask(BaseTask):
                 details=activated_details
             )
         else:
-            return TaskResult.fail(
-                "لم يتم تفعيل أي مبنى (الأدوات غير كافية)",
-                retry_after=1800
+            return TaskResult.ok(
+                "تم تخطي تفعيل الساقية (الأدوات غير متوفرة بالحقيبة أو متجر التحالف)",
+                skipped=True,
+                no_items=True,
+                activated=0,
+                retry_after=3600
             )
 
 

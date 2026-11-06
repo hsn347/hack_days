@@ -56,6 +56,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -251,7 +252,7 @@ class TacticsHallTask(BaseTask):
         if r_claim and str(r_claim.get("err", "0")) == "0":
             self.log.info("🎁 تم استلام نتائج ومكافآت البحث التكتيكي السابق بنجاح!")
             actions_performed.append("استلام البحث المكتمل")
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(random.uniform(1.2, 2.2))
 
         # ── الخطوة 3: فحص مسار البحث الحالي (queueCtrl -> 1257) ──
         queue_ctrl = self.conn.init_data.get("queueCtrl", {})

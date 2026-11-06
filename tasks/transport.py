@@ -12,7 +12,7 @@ tasks/transport.py — مهمة نقل وإمداد الموارد (Resource Tra
     1005 : 💎 ألماس / ذهب (Diamond / Gold).
 
 
-python tasks/transport.py --email "x.abd3@gmail.com"
+python tasks/transport.py --email "azadibrahim63@hotmail.com"
 
 
 الإعدادات (config / Firebase):
@@ -35,19 +35,22 @@ if _ROOT_DIR not in sys.path:
 
 import asyncio
 import logging
+import random
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 
 
+
 # ════════════════════════════════════════════════════════════════════
 #  إعدادات افتراضية في رأس الملف (قابلة للتعديل والربط بـ Firebase)
 # ════════════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_X           = 484              # إحداثي X للهدف
-DEFAULT_TARGET_Y           = 287              # إحداثي Y للهدف
-DEFAULT_RESOURCE_IDS       = [1002,1003,1004]           # [1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس/ذهب]
+DEFAULT_TARGET_X           = 488              # إحداثي X للهدف
+DEFAULT_TARGET_Y           = 499              # إحداثي Y للهدف
+DEFAULT_RESOURCE_IDS       = [1002,1005,1004]           # [1002=قمح, 1003=خشب, 1004=حديد, 1005=ألماس/ذهب]
 
 
 DEFAULT_MAX_CAPACITY       = 690000           # سعة الحمولة لمبنى السوق بالحد الأقصى (المستوى 30)
@@ -69,6 +72,34 @@ RESOURCE_NAMES = {
     1004: "⛏️ حديد/حجر",
     1005: "💎 ألماس/ذهب",
 }
+
+# ════════════════════════════════════════════════════════════════════
+#  ذاكرة التخزين المؤقت للحد اليومي لمساعدة الموارد (Daily Limit Cache)
+# ════════════════════════════════════════════════════════════════════
+_DAILY_TRANSPORT_LIMIT_CACHE: Dict[str, str] = {}
+
+
+def _get_utc_today_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def is_transport_daily_limit_reached(account_id: str, target_x: int, target_y: int) -> bool:
+    """فحص ما إذا كانت القلعة الهدف قد بلغت الحد الأقصى اليومي لاستقبال الموارد اليوم (توقيت UTC الرسمي للعبة)"""
+    try:
+        key = f"{str(account_id).strip().lower()}:{int(target_x)}:{int(target_y)}"
+        return _DAILY_TRANSPORT_LIMIT_CACHE.get(key) == _get_utc_today_str()
+    except Exception:
+        return False
+
+
+def set_transport_daily_limit_reached(account_id: str, target_x: int, target_y: int) -> None:
+    """تسجيل بلوغ القلعة الهدف للحد الأقصى اليومي لليوم الحالي"""
+    try:
+        key = f"{str(account_id).strip().lower()}:{int(target_x)}:{int(target_y)}"
+        _DAILY_TRANSPORT_LIMIT_CACHE[key] = _get_utc_today_str()
+    except Exception:
+        pass
+
 
 # ════════════════════════════════════════════════════════════════════
 #  جدول سعة السوق والضريبة الرسمية من بيانات اللعبة (build112.lua)
@@ -157,26 +188,40 @@ async def get_full_market_capacity(conn: GameConnection) -> Tuple[int, float, in
 
         base_cap, tax = get_market_capacity_for_level(market_lv)
 
-        # استعلام علوم التحالف لتقنية TRADING_WEIGHT (33002)
+        # فحص علوم التحالف لتقنية TRADING_WEIGHT (33002) من الذاكرة الحية (Zero-Request)
         sci_bonus_pct = 0.0
-        try:
-            r_sci = await conn.query('1010', '75', {}, timeout=5)
-            if r_sci and 'data' in r_sci:
-                scilist = r_sci['data'].get('retdata', {}).get('scilist', {})
-                if isinstance(scilist, dict):
-                    for group in scilist.values():
-                        if isinstance(group, list):
-                            for item in group:
-                                if item.get('id') == 33002:
-                                    sci_lv = int(item.get('lv', 0))
-                                    sci_bonus_pct = sci_lv * 0.01  # كل مستوى يمنح 1% زيادة
-                                    break
-                else:
-                    _log.warning(f"⚠️ scilist ليس dict بل {type(scilist).__name__} — تخطي بونص علوم التحالف")
-            else:
-                _log.warning(f"⚠️ استعلام علوم التحالف (1010/75) لم يرجع data — بدون بونص سعة")
-        except Exception as e:
-            _log.warning(f"⚠️ فشل استعلام علوم التحالف (1010/75): {e} — بدون بونص سعة")
+        scilist = None
+        init_data = getattr(conn, 'init_data', {}) if isinstance(getattr(conn, 'init_data', None), dict) else {}
+        for k, v in init_data.items():
+            if isinstance(v, dict) and 'sciencelist' in v:
+                scilist = v['sciencelist'].get('scilist')
+                if scilist:
+                    break
+
+        if isinstance(scilist, dict):
+            for group in scilist.values():
+                if isinstance(group, list):
+                    for item in group:
+                        if isinstance(item, dict) and item.get('id') == 33002:
+                            sci_lv = int(item.get('lv', 0))
+                            sci_bonus_pct = sci_lv * 0.01
+                            break
+        else:
+            # خطة احتياطية فقط عند فراغ الذاكرة
+            try:
+                r_sci = await conn.query('1010', '75', {}, timeout=5)
+                if r_sci and 'data' in r_sci:
+                    s_data = r_sci['data'].get('retdata', {}).get('scilist', {})
+                    if isinstance(s_data, dict):
+                        for group in s_data.values():
+                            if isinstance(group, list):
+                                for item in group:
+                                    if isinstance(item, dict) and item.get('id') == 33002:
+                                        sci_lv = int(item.get('lv', 0))
+                                        sci_bonus_pct = sci_lv * 0.01
+                                        break
+            except Exception:
+                pass
 
         add_cap = int(base_cap * sci_bonus_pct)
         total_cap = base_cap + add_cap
@@ -280,10 +325,12 @@ async def get_target_castle_info(conn: GameConnection, tx: int, ty: int, search_
                 if obj.get('x') == tx and obj.get('y') == ty:
                     return obj
 
+            logger = getattr(conn, 'log', None) or logging.getLogger("transport")
             if results:
-                conn.log.warning(f"⚠️ لم يُعثر على قلعة بالضبط عند ({tx}, {ty}) — النتائج الأقرب: {[(o.get('x'), o.get('y'), o.get('id')) for o in results[:3]]}")
+                logger.warning(f"⚠️ لم يُعثر على قلعة بالضبط عند ({tx}, {ty}) — النتائج الأقرب: {[(o.get('x'), o.get('y'), o.get('id')) for o in results[:3]]}")
     except Exception as e:
-        conn.log.warning(f"خطأ في استعلام موقع القلعة ({tx}, {ty}): {e}")
+        logger = getattr(conn, 'log', None) or logging.getLogger("transport")
+        logger.warning(f"خطأ في استعلام موقع القلعة ({tx}, {ty}): {e}")
 
     return None
 
@@ -308,6 +355,19 @@ class TransportTask(BaseTask):
         if not isinstance(res_ids, list):
             res_ids = [res_ids]
 
+        account_id = getattr(self.conn, 'email', '') or str(self.uid)
+
+        # 0. فحص استباقي: هل بلغت القلعة الهدف الحد الأقصى اليومي مسبقاً؟
+        if is_transport_daily_limit_reached(account_id, target_x, target_y):
+            today_str = _get_utc_today_str()
+            self.log.info(f"⏭️ القلعة الهدف عند ({target_x}, {target_y}) بلغت الحد الأقصى اليومي لاستقبال الموارد مسبقاً — تم تخطي النقل لليوم ({today_str}).")
+            return TaskResult.ok(
+                f"تم تخطي مساعدة الموارد (الهدف بلغ الحد الأقصى اليومي)",
+                daily_limit_reached=True,
+                sent=0,
+                total=0
+            )
+
         res_desc = ", ".join([RESOURCE_NAMES.get(rid, str(rid)) for rid in res_ids])
         self.log.info(f"🚚 بدء مهمة نقل الموارد إلى ({target_x}, {target_y}) | الموارد: [{res_desc}] | الحد الأقصى للمسيرات: {max_marches}")
 
@@ -322,9 +382,12 @@ class TransportTask(BaseTask):
             c_lv      = castle_info.get('level', '?')
             self.log.info(f"🎯 تم العثور على القلعة: ID={target_id} عند ({actual_x}, {actual_y}) لفل={c_lv}")
         else:
-            target_id = f"{target_x + 1}-{target_y + 1}-4-0-0"
-            actual_x, actual_y = target_x, target_y
-            self.log.warning(f"⚠️ لم يتم جلب الـ ID تلقائياً، سيتم استخدام المعرف القياسي: {target_id}")
+            self.log.warning(f"🛑 لم يتم العثور على القلعة الهدف عند ({target_x}, {target_y}) — إنهاء مهمة النقل.")
+            return TaskResult.fail(
+                f"لم يتم العثور على القلعة الهدف عند ({target_x}, {target_y})",
+                data={"sent": 0, "reason": "TARGET_NOT_FOUND"}
+            )
+
 
         # 2. جلب معرف المملكة (kingdom_id / mapId)
         kingdom_id = 0
@@ -334,20 +397,18 @@ class TransportTask(BaseTask):
                 kingdom_id = int(parts[2])
 
         if not kingdom_id:
-            uid_int = int(self.uid) if str(self.uid).isdigit() else 0
-            if not uid_int:
-                uid_int = int(getattr(self.conn, 'uid', 0) or 0)
-            try:
-                r_map = await self.conn.query('1002', '7', {"uid": uid_int}, timeout=4)
-                if r_map and 'data' in r_map:
-                    kingdom_id = int(r_map['data'].get('base', {}).get('partition', 0))
-            except Exception:
-                pass
+            if getattr(self.conn, 'kingdom_id', None):
+                try: kingdom_id = int(self.conn.kingdom_id)
+                except Exception: pass
 
         if not kingdom_id:
-            kingdom_id = getattr(self.conn, 'server_id', 0) or getattr(self.conn, 'kingdom_id', 0)
+            lord_base = self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}) if hasattr(self.conn, 'init_data') else {}
+            if isinstance(lord_base, dict):
+                kingdom_id = int(lord_base.get('partition', 0))
+
         if not kingdom_id:
-            kingdom_id = 4
+            kingdom_id = getattr(self.conn, 'server_id', 0) or 4
+
 
         # 3. حساب سعة الحمولة والضريبة بدقة
         if cfg.get('max_capacity'):
@@ -374,8 +435,9 @@ class TransportTask(BaseTask):
             r_name = RESOURCE_NAMES.get(int(rid), rid_str)
             self.log.info(f"📦 رصيد {r_name}: {int(tot):,} (إجمالي)")
 
-        for i in range(1, max_marches + 1):
-            self.log.info(f"⚔️ محاولة إرسال فيلق النقل رقم ({i}/{max_marches})...")
+        cmd_opting_retries = 0
+        while sent_count < max_marches:
+            self.log.info(f"⚔️ محاولة إرسال فيلق النقل رقم ({sent_count + 1}/{max_marches})...")
 
             # النقل يرسل من كل الموارد — لا نخصم saferes (المحمي يحمي فقط من النهب)
             avail_dict = {}
@@ -429,9 +491,10 @@ class TransportTask(BaseTask):
             err = str(r_send.get('err', '0'))
             if err == '0':
                 sent_count += 1
+                cmd_opting_retries = 0
                 total_transported += current_payload_weight
                 res_detail = " + ".join([f"{RESOURCE_NAMES.get(r['id'], r['id'])}:{r['num']:,}" for r in current_march_resources])
-                self.log.info(f"✅ تم إرسال فيلق النقل ({i}) بنجاح! 🚚 وزن: {current_payload_weight:,}/{max_cap:,} | {res_detail}")
+                self.log.info(f"✅ تم إرسال فيلق النقل ({sent_count}) بنجاح! 🚚 وزن: {current_payload_weight:,}/{max_cap:,} | {res_detail}")
 
                 for itm in current_march_resources:
                     r_str = str(itm['id'])
@@ -441,10 +504,26 @@ class TransportTask(BaseTask):
                         except Exception:
                             pass
 
-                try:
-                    await asyncio.sleep(5.0)  # حماية من الحظر - تأخير بين المسيرات
-                except (asyncio.CancelledError, ConnectionError):
-                    self.log.warning(f"⚠️ انقطع الاتصال أثناء الانتظار بين المسيرات — تم إرسال {sent_count} فيلق قبل الانقطاع")
+                if sent_count < max_marches:
+                    delay = round(random.uniform(10.0, 15.0), 2)
+                    try:
+                        self.log.info(f"⏳ [نقل الموارد] انتظار {delay} ثانية قبل إرسال الفيلق التالي...")
+                        await asyncio.sleep(delay)
+                    except (asyncio.CancelledError, ConnectionError):
+                        self.log.warning(f"⚠️ انقطع الاتصال أثناء الانتظار بين المسيرات — تم إرسال {sent_count} فيلق قبل الانقطاع")
+                        break
+            elif err == '16001':
+                cmd_opting_retries += 1
+                if cmd_opting_retries <= 2:
+                    wait_time = round(random.uniform(10.0, 16.0), 2)
+                    self.log.warning(
+                        f"⏳ [خادم اللعبة مشغول - كود 16001] انتظار {wait_time} ثانية لفك القفل "
+                        f"ثم إعادة إرسال فيلق النقل نظيفاً من البداية ({cmd_opting_retries}/2)..."
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    self.log.warning("🏁 استمر انشغال خادم اللعبة (كود 16001) بعد المحاولات — إيقاف الدورة مؤقتاً.")
                     break
             elif err in ('8004', '9007004'):
                 self.log.info(f"🛑 اكتملت طوابير المسيرات للقلعة (الحد الأقصى - كود {err}).")
@@ -457,6 +536,24 @@ class TransportTask(BaseTask):
             elif err in ('8062', '8063', '8060'):
                 self.log.warning(f"⚠️ تعذر الإرسال للهدف (كود {err})")
                 break
+            elif err == '8095':
+                # Err_MAP_QUEUE_RESOURCE_HELP_OUT_ONE_DAY (8095):
+                # القلعة الهدف بلغت الحد الأقصى اليومي لاستقبال الموارد من التحالف
+                err_data = r_send.get('data') or {}
+                err_parms = err_data.get('errParms') if isinstance(err_data, dict) else {}
+                capped_res = err_parms.get('resId') if isinstance(err_parms, dict) else None
+                res_name = RESOURCE_NAMES.get(int(capped_res), f"المورد #{capped_res}") if capped_res else "الموارد"
+
+                self.log.warning(f"🛑 بلغت القلعة الهدف عند ({actual_x}, {actual_y}) الحد الأقصى اليومي لاستقبال {res_name} (كود 8095: Err_MAP_QUEUE_RESOURCE_HELP_OUT_ONE_DAY).")
+                self.log.info("⏭️ سيتم تخطي مهمة نقل الموارد بالكامل لبقية اليوم الحالي لتجنب المحاولات الفاشلة واستغلال الفيالق في بقية المهام.")
+                set_transport_daily_limit_reached(account_id, target_x, target_y)
+                return TaskResult.ok(
+                    f"القلعة الهدف بلغت الحد الأقصى اليومي لاستقبال الموارد (كود 8095)",
+                    daily_limit_reached=True,
+                    sent=sent_count,
+                    total=total_transported,
+                    capped_res_id=capped_res,
+                )
             else:
                 self.log.error(f"❌ فشل إرسال فيلق النقل - كود الخطأ: {err}")
                 break

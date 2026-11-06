@@ -4,19 +4,40 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png?v=3" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Early PWA Brand Detector & Instant Head Sync -->
+    <script>
+      (function() {
+        try {
+          var h = window.location.hostname.toLowerCase().replace(/^www\./, '');
+          var isNurjan = h.indexOf('nurjan') !== -1;
+          var brand = isNurjan ? 'Nurjan bot' : 'IBRA BOT';
+          var logo = isNurjan ? '/nurjan_logo.jpeg' : '/logo.png?v=2';
+          var color = isNurjan ? '#d49835' : '#10b981';
+
+          document.title = brand;
+          var appName = document.querySelector('meta[name="application-name"]');
+          if (appName) appName.setAttribute('content', brand);
+          var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (appleTitle) appleTitle.setAttribute('content', brand);
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.setAttribute('content', color);
+          var iconLink = document.querySelector('link[rel="icon"]');
+          if (iconLink) iconLink.setAttribute('href', logo);
+          var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+          if (appleIcon) appleIcon.setAttribute('href', logo);
+        } catch (e) {}
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="IBRA BOT" />
-    <meta name="application-name" content="IBRA BOT" />
+    <meta name="apple-mobile-web-app-title" content="Empire Bot" />
+    <meta name="application-name" content="Empire Bot" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#0a0f0a" />
-    <link rel="manifest" href="/manifest.json?v=3" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/pwa-192x192.png?v=3" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/pwa-512x512.png?v=3" />
-    <meta name="description" content="IBRA BOT — أول بوت عربي لإدارة وتحكم قلاع وحسابات Empire" />
-    <title>IBRA BOT — أول بوت عربي</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/logo.png?v=2" />
+    <meta name="description" content="بوت إدارة وتحكم قلاع وحسابات Empire" />
+    <title>Empire Bot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet" />

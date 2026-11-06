@@ -54,7 +54,9 @@ from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 
 # ── ملف تاريخ الاستبعاد المشترك عبر الحسابات والجلسات ──────────────
-SHARED_HISTORY_FILE = os.path.join(_ROOT_DIR, "shared_gather_history.json")
+_DB_DIR = os.path.join(_ROOT_DIR, "database")
+SHARED_HISTORY_FILE = os.path.join(_DB_DIR, "shared_gather_history.json")
+_LEGACY_HISTORY_FILE = os.path.join(_ROOT_DIR, "shared_gather_history.json")
 SHARED_HISTORY_TTL  = 45 * 60  # صلاحية حجز الهدف: 45 دقيقة (مدة الذهاب والجمع والعودة)
 
 
@@ -98,6 +100,14 @@ def get_active_shared_history(ttl: int = SHARED_HISTORY_TTL) -> Tuple[Dict[str, 
     now = time.time()
     active_targets: Dict[str, dict] = {}
     active_coords: Set[Tuple[int, int]] = set()
+
+    if not os.path.exists(SHARED_HISTORY_FILE) and os.path.exists(_LEGACY_HISTORY_FILE):
+        try:
+            os.makedirs(_DB_DIR, exist_ok=True)
+            import shutil
+            shutil.move(_LEGACY_HISTORY_FILE, SHARED_HISTORY_FILE)
+        except Exception:
+            pass
 
     if not os.path.exists(SHARED_HISTORY_FILE):
         return active_targets, active_coords
@@ -163,6 +173,7 @@ def record_shared_target(target_id: str, x: int, y: int, email: str = "", uid: A
     }
 
     try:
+        os.makedirs(_DB_DIR, exist_ok=True)
         with open(SHARED_HISTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
@@ -229,12 +240,12 @@ def check_territory_inclusion(
 #  اختيار أبطال الجمع
 # ════════════════════════════════════════════════════════════════════
 
-def _pick_gather_heroes(heroes: list, max_count: int = 1, busy: Set[int] = None) -> List[int]:
+def _pick_gather_heroes(heroes: list, max_count: int = 2, busy: Set[int] = None) -> List[int]:
     """
-    يختار أفضل بطل جمع وفق 3 مستويات أولوية:
-    1. بطل 5502 + مهارة 5620 (أعلى كفاءة جمع)
-    2. بطل 5502 بدون مهارة 5620
-    3. أي بطل متاح في القلعة (احتياطي)
+    يختار أفضل أبطال جمع وفق التدرج:
+    1. أبطال جمع 5502 + مهارة 5620 (أعلى كفاءة جمع)
+    2. أبطال جمع 5502 بدون مهارة 5620
+    3. أي أبطال متاحين في القلعة كبديل اضطراري
     """
     busy = busy or set()
     t1, t2, t3 = [], [], []
@@ -259,8 +270,13 @@ def _pick_gather_heroes(heroes: list, max_count: int = 1, busy: Set[int] = None)
         else:
             t3.append(int(hid))
 
-    pool = t1 or t2 or t3
-    return pool[:max_count] if max_count else pool
+    gather_heroes = t1 + t2
+    if len(gather_heroes) >= 2:
+        return gather_heroes[:max_count]
+    elif len(gather_heroes) == 1:
+        return [gather_heroes[0]]
+    else:
+        return t3[:max_count] if max_count else t3
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -353,15 +369,21 @@ class GoldGatherTask(BaseTask):
             await asyncio.sleep(0.5)
         await self._load_heroes()
 
-        # تثبيت معرف المملكة (kingdom_id / partition) مسبقاً لاستعلامات 1006/1000
+        # تثبيت معرف المملكة (kingdom_id / partition) مسبقاً من الذاكرة الحية (Zero-Request)
         if self.conn.kingdom_id:
             try:
                 self.kingdom_id = int(self.conn.kingdom_id)
             except Exception:
                 pass
+        if not self.kingdom_id and hasattr(self.conn, 'init_data'):
+            try:
+                self.kingdom_id = int(self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}).get('partition', 0))
+            except Exception:
+                pass
         if not self.kingdom_id:
             uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
             try:
+                self.log.warning("🛑🛑🛑🛑🛑🛑")
                 r_map = await self.conn.query('1002', '7', {"uid": uid_int}, timeout=4)
                 if r_map and 'data' in r_map:
                     self.kingdom_id = int(r_map['data'].get('base', {}).get('partition', 0))
@@ -417,81 +439,28 @@ class GoldGatherTask(BaseTask):
         return target_ids, target_coords
 
     async def _load_heroes(self):
-        """تحميل قائمة الأبطال عبر init_data أو heroCtrl أو 3080/2"""
-        self._heroes = []
-        uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
-
-        if self.conn._gate and getattr(self.conn._gate, 'heroes', None):
-            self._heroes = list(self.conn._gate.heroes)
-            if self._heroes:
-                self.log.info(f"📋 تم تحميل {len(self._heroes)} بطل من init_data")
-                return
-
-        hctrl = self.conn.init_data.get('heroCtrl')
+        """جلب بيانات أبطال الحساب من الذاكرة الحية."""
+        hctrl = self.conn.init_data.get('heroCtrl') if hasattr(self.conn, 'init_data') else None
         if isinstance(hctrl, list) and hctrl:
             self._heroes = list(hctrl)
-            self.log.info(f"📋 تم تحميل {len(self._heroes)} بطل من heroCtrl (قائمة)")
             return
-        elif isinstance(hctrl, dict) and hctrl:
-            hlist = hctrl.get('heroList', hctrl)
-            if isinstance(hlist, dict):
-                self._heroes = list(hlist.values())
-            elif isinstance(hlist, list):
-                self._heroes = list(hlist)
-            if self._heroes:
-                self.log.info(f"📋 تم تحميل {len(self._heroes)} بطل من heroCtrl (قاموس)")
-                return
 
-        # محاولة طلب الأبطال الاحتياطية عبر 3080/2
-        try:
-            r_3080 = await self.conn.query('3080', '2', {'isSelf': True, 'uids': [uid_int]}, timeout=3)
-            if r_3080 and 'data' in r_3080:
-                list_data = r_3080['data'].get('list', {}).get(str(uid_int), {})
-                pages = list_data.get('pages', {})
-                if isinstance(pages, dict):
-                    for page in pages.values():
-                        if isinstance(page, dict):
-                            for h_obj in page.get('heros', []):
-                                hid = h_obj.get('id') if isinstance(h_obj, dict) else h_obj
-                                if hid and not any(h.get('id') == hid for h in self._heroes):
-                                    self._heroes.append({'id': int(hid), 'status': {'state': 0}, 'skillList': {}})
-        except Exception:
-            pass
-
-        if self._heroes:
-            self.log.info(f"📋 تم العثور على {len(self._heroes)} بطل عبر 3080/2")
-        else:
-            self.log.warning("⚠️ لم يتم العثور على أبطال بعد — سيتم الاستعلام عند أول مسيرة")
+        # احتياطي نادر إذا كانت الذاكرة غير محملة
+        self._heroes = []
+        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+        for h_list in army_ctrl.get('compileHeros', {}).values():
+            if isinstance(h_list, list):
+                for hid in h_list:
+                    if str(hid).isdigit() and int(hid) > 0:
+                        int_hid = int(hid)
+                        if not any(h.get('id') == int_hid for h in self._heroes):
+                            self._heroes.append({'id': int_hid, 'status': {'state': 0}, 'skillList': {}})
 
     # ── فحص مركز التحالف ──────────────────────────────────────────
 
     async def _verify_alliance_center(self, cx: int, cy: int, alliance_tag: str) -> bool:
-        """فحص مبنى مركز/قيادة التحالف أو نقطة الارتكاز الجغرافية عبر 1006/136"""
-        kid = int(self.conn.kingdom_id) if self.conn.kingdom_id else 0
-        try:
-            r136 = await self.conn.query('1006', '136', {"x": cx, "y": cy, "kingdomId": kid}, timeout=4)
-            ret = r136.get('retData') if (r136 and isinstance(r136, dict)) else None
-            if ret:
-                name = ret.get('allianceName')
-                abbr = ret.get('allianceAbbr')
-                aid  = ret.get('aid')
-                mtype = ret.get('mapType')
-
-                # إذا كانت الإحداثيات لمبنى تحالف فعلي (معقل أو مقر)
-                if abbr or name:
-                    self.log.info(f"🏛️ مبنى قيادة التحالف عند ({cx}, {cy}): [{abbr}] {name} (AID: {aid})")
-                    if alliance_tag.upper() in str(abbr).upper():
-                        self.log.info(f"✅ تطابق مؤكد مع التحالف المستهدف [{alliance_tag}]!")
-                        return True
-                    else:
-                        self.log.warning(f"⚠️ اختصار المبنى [{abbr}] يختلف عن المطلوب [{alliance_tag}]، سيتم البحث عن حقول تابعة لـ [{alliance_tag}]")
-                        return True
-                else:
-                    # الإحداثيات هي نقطة ارتكاز جغرافية لوسط أراضي التحالف وليست مبنى المعقل نفسه
-                    self.log.info(f"📍 نقطة الارتكاز عند ({cx}, {cy}) — جاري مسح حقول أراضي [{alliance_tag}] في محيطها")
-                    return True
-        except Exception as e:
-            self.log.info(f"📍 نقطة الارتكاز عند ({cx}, {cy}) — جاري مسح حقول أراضي [{alliance_tag}] في محيطها")
+        """نقطة الارتكاز الجغرافية لتحالف [{alliance_tag}] (Zero-Request)"""
+        self.log.info(f"📍 نقطة الارتكاز عند ({cx}, {cy}) — جاري مسح حقول أراضي [{alliance_tag}] في محيطها")
         return True
 
     # ── استخراج رموز التحالف من terr ──────────────────────────────
@@ -797,7 +766,7 @@ class GoldGatherTask(BaseTask):
             await self._load_heroes()
 
         sent_count = 0
-        self._busy      = set()
+        self._busy      = set(self.config.get('busy_heroes', []))
         self._used_army = {}
         self._used_pets = set()
 
@@ -916,6 +885,7 @@ class GoldGatherTask(BaseTask):
                 )
 
             # إرسال المسيرات نحو الحقول المكتشفة في هذا التحالف
+            cmd_opting_retries = 0
             while mines and (all_marches_mode or sent_count < max_marches):
                 if failed_attempts >= max_failed_attempts:
                     self.log.warning(f"⚠️ تم الوصول للحد الأقصى من المحاولات المتتالية غير الناجحة ({max_failed_attempts}).")
@@ -929,6 +899,7 @@ class GoldGatherTask(BaseTask):
 
                 if result_code == "SUCCESS":
                     sent_count += 1
+                    cmd_opting_retries = 0
                     if alliance_tag and alliance_tag not in successful_alliances:
                         successful_alliances.append(alliance_tag)
                     self._exclude.add(target_mine['id'])
@@ -942,7 +913,7 @@ class GoldGatherTask(BaseTask):
                         tag=alliance_tag
                     )
                     failed_attempts = 0
-                    await asyncio.sleep(5.0)  # تأخير آمن بين المسيرات لحماية الحساب من الحظر
+                    await asyncio.sleep(round(random.uniform(4.5, 7.5), 2))  # تأخير آمن عشوائي بين المسيرات لحماية الحساب من الحظر
                 elif result_code == "QUEUE_FULL":
                     self.log.info("🛑 تم إشغال جميع الفيالق المتاحة للقلعة بنجاح (طوابير المسيرات مكتملة 100%).")
                     stop_reason = "QUEUE_FULL"
@@ -959,14 +930,31 @@ class GoldGatherTask(BaseTask):
                     failed_attempts += 1
                     if result_code == "TARGET_OCCUPIED":
                         self._exclude.add(target_mine['id'])
+                    await asyncio.sleep(round(random.uniform(1.2, 2.4), 2))
                     continue
+                elif result_code in ("CMD_OPTING", "16001", "CMD_OPTING_FAILED"):
+                    cmd_opting_retries += 1
+                    if cmd_opting_retries <= 2:
+                        wait_time = round(random.uniform(10.0, 16.0), 2)
+                        self.log.warning(
+                            f"⏳ [خادم اللعبة مشغول - كود 16001] انتظار {wait_time} ثانية لفك القفل "
+                            f"ثم إعادة تجهيز مسيرة الذهب نظيفاً من البداية (محاولة {cmd_opting_retries}/2)..."
+                        )
+                        mines.insert(0, target_mine)
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        self.log.warning("🏁 استمر انشغال خادم اللعبة (كود 16001) بعد المحاولات — إيقاف الدورة مؤقتاً.")
+                        stop_reason = "CMD_OPTING"
+                        break
                 else:
                     failed_attempts += 1
                     self.log.warning(f"⚠️ تعذر إرسال المسيرة (كود: {result_code}) — الانتقال للحقل التالي")
+                    await asyncio.sleep(round(random.uniform(1.5, 2.8), 2))
                     continue
 
-            # إذا امتلأت الطوابير أو نفد الجيش/الأبطال ننهي المهمة تماماً
-            if stop_reason in ("QUEUE_FULL", "NO_ARMY", "NO_HEROES"):
+            # إذا امتلأت الطوابير أو نفد الجيش/الأبطال أو استمر انشغال السيرفر ننهي المهمة تماماً
+            if stop_reason in ("QUEUE_FULL", "NO_ARMY", "NO_HEROES", "CMD_OPTING"):
                 break
 
             # إذا استُنفدت حقول هذا التحالف وما زالت هناك طوابير شاغرة، ننتقل للتحالف التالي
@@ -1163,29 +1151,38 @@ class GoldGatherTask(BaseTask):
         tx, ty    = mine['x'], mine['y']
         cur_res   = mine['remain']
 
-        # 1. اختيار بطل الجمع تلقائياً
+        # 1. اختيار أبطال الجمع تلقائياً (بطلان كهدف أساسي وفق الهرم)
         if not self._heroes:
             await self._load_heroes()
-        heroes = _pick_gather_heroes(self._heroes, max_count=1, busy=self._busy)
-        if not heroes:
-            self.log.warning("⚠️ لا يوجد بطل جمع متاح بالقلعة!")
+        chosen_heroes = _pick_gather_heroes(self._heroes, max_count=2, busy=self._busy)
+        if not chosen_heroes:
+            self.log.warning("⚠️ لا يوجد أي بطل متاح بالقلعة!")
             return "NO_HEROES"
 
-        chosen_hero = heroes[0]
+        self.log.info(f"   🦸 الأبطال المختارون لجمع الذهب ({len(chosen_heroes)}): {chosen_heroes}")
 
         # 2. اختيار الحيوان الأليف تلقائياً
         pets_list = select_gathering_pet(self.conn, self._used_pets)
 
-        # 3. جلب معرف المملكة (kingdom_id)
+        # 3. جلب معرف المملكة من الذاكرة الحية (Zero-Request)
         kingdom_id = 0
-        if self.conn.kingdom_id:
+        if getattr(self.conn, 'kingdom_id', None):
             try: kingdom_id = int(self.conn.kingdom_id)
             except: pass
+        if not kingdom_id and hasattr(self.conn, 'init_data'):
+            kingdom_id = self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}).get('partition', 0)
         if not kingdom_id:
             uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
-            r_map = await self.conn.query('1002', '7', {"uid": uid_int})
-            if r_map and 'data' in r_map:
-                kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
+            try:
+                self.log.warning("🛑🛑🛑🛑🛑🛑")
+                r_map = await self.conn.query('1002', '7', {"uid": uid_int})
+                if r_map and 'data' in r_map:
+                    kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
+            except Exception:
+                pass
+        if not kingdom_id:
+            kingdom_id = 4
+
 
         # نوع المورد في حزمة المسيرة 1007/2 هو: 1000 + actual_subtype
         resource_type_id = int(mine.get('resourceType') or (1000 + int(actual_subtype)))
@@ -1206,21 +1203,37 @@ class GoldGatherTask(BaseTask):
         target_load = int(cur_res * multiplier)
         self.log.info(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} مورد × مضاعف وزن {multiplier:g} = سعة حمولة مطلوبة: {target_load:,}")
 
-        # 6. جلب القوات المتوفرة بالقلعة لحظياً من السيرفر (فقط الجنود المتنقلون 400..799) وخصم المسيرات السابقة
+        # 6. جلب القوات المتوفرة بالقلعة من الذاكرة الحية armyCtrl (Zero-Request)
         available: Dict[int, int] = {}
-        r_army = await self.conn.query('1005', '1', {})
-        if r_army and 'data' in r_army:
-            for k, v in r_army['data'].get('totalArmy', {}).items():
+        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+        total_army = army_ctrl.get('totalArmy', {}) if isinstance(army_ctrl, dict) else {}
+        if isinstance(total_army, dict) and total_army:
+            for k, v in total_army.items():
                 if str(k).isdigit() and str(v).isdigit():
                     tid = int(k)
                     if 400 <= tid < 800:
                         val = int(v)
                         if val > 0:
                             available[tid] = val
+        else:
+            try:
+                self.log.warning("🛑🛑🛑🛑🛑🛑")
+                r_army = await self.conn.query('1005', '1', {})
+                if r_army and 'data' in r_army:
+                    for k, v in r_army['data'].get('totalArmy', {}).items():
+                        if str(k).isdigit() and str(v).isdigit():
+                            tid = int(k)
+                            if 400 <= tid < 800:
+                                val = int(v)
+                                if val > 0:
+                                    available[tid] = val
+            except Exception:
+                pass
 
         for tid, used in self._used_army.items():
             if tid in available:
                 available[tid] = max(0, available[tid] - used)
+
 
         # استعلام سمات الحرب للحمولة من السيرفر وتحديث الكاش إن لم تكن متوفرة
         try:
@@ -1232,11 +1245,8 @@ class GoldGatherTask(BaseTask):
         load_bonus = calculate_load_bonus(
             self.conn,
             sub_type=actual_subtype,
-            hero_list=[chosen_hero] if chosen_hero else []
+            hero_list=chosen_heroes
         )
-
-        min_load_ratio = float(self.config.get("min_load_ratio", 0.25))
-        allow_partial = bool(self.config.get("allow_partial", True))
 
         # تحديد سعة مسيرة اللورد ومعسكر التجمع القصوى (لمنع خطأ 8035)
         max_march_troops = self._learned_max_march_troops
@@ -1246,7 +1256,10 @@ class GoldGatherTask(BaseTask):
                 try: max_march_troops = int(cfg_troops)
                 except Exception: pass
         if not max_march_troops:
-            max_march_troops = calculate_estimated_march_capacity(getattr(self.conn, 'init_data', {}))
+            max_march_troops = calculate_estimated_march_capacity(
+                getattr(self.conn, 'init_data', {}),
+                chosen_heroes=chosen_heroes
+            )
 
         if troops_cfg:
             try: max_march_troops = min(max_march_troops or 999999, int(troops_cfg))
@@ -1256,16 +1269,15 @@ class GoldGatherTask(BaseTask):
             available,
             target_load=target_load,
             load_bonus=load_bonus,
-            allow_partial=allow_partial,
-            min_ratio=min_load_ratio,
             max_march_troops=max_march_troops
         )
         if not army_list:
-            self.log.warning(
-                f"⚠️ القوات المتاحة بالقلعة أقل من الحد الأدنى المقبول ({int(min_load_ratio * 100)}% - ربع الحقل) "
-                f"لمسح الحقل (سعة متوفرة: {carried_load:,} / مطلوب: {target_load:,}) — تجنب إرسال مسيرة هزيلة جداً."
-            )
+            self.log.warning(f"⚠️ لا توجد أي قوات متاحة بالقلعة حالياً لإرسال مسيرة جمع.")
             return "NO_ARMY"
+
+        # صمام أمان صارم: فرض سقف سعة المسيرة لمنع تجاوز طاقة الفيلق أو خطأ 8035
+        from tasks.march_capacity import enforce_safe_march_troops
+        army_list = enforce_safe_march_troops(army_list, max_march_troops)
 
         total_troops = sum(item['num'] for item in army_list)
         carts_troops = sum(item['num'] for item in army_list if 700 <= item['id'] < 800)
@@ -1288,7 +1300,7 @@ class GoldGatherTask(BaseTask):
         r_march = await self.conn.query('1007', '2', {
             "needSend": False,
             "runePages": {},
-            "heros": [chosen_hero],
+            "heros": chosen_heroes,
             "matrixType": 3,
             "mapId": int(kingdom_id),
             "moveLineType": 3,
@@ -1312,8 +1324,9 @@ class GoldGatherTask(BaseTask):
 
         err = str(r_march.get('err', '0'))
         if err == '0':
-            self.log.info(f"✅ مسيرة جمع ناجحة! → {target_id} عند ({tx}, {ty})")
-            self._busy.add(chosen_hero)
+            self.log.info(f"✅ مسيرة جمع ناجحة! → {target_id} عند ({tx}, {ty}) | أبطال={chosen_heroes}")
+            for hid in chosen_heroes:
+                self._busy.add(hid)
             for item in army_list:
                 self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
             return "SUCCESS"
@@ -1324,16 +1337,29 @@ class GoldGatherTask(BaseTask):
             self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
             return "NO_ARMY"
         elif err == '9007020':
-            self._busy.add(chosen_hero)
+            for hid in chosen_heroes:
+                self._busy.add(hid)
             return "HERO_BUSY"
         elif err == '8035':
             self.log.warning(f"⚠️ تجاوز سعة المسيرة القصوى (كود 8035) — سيتم تقليص سقف المسيرة تلقائياً")
-            self._learned_max_march_troops = int(total_troops * 0.9)
+            self._learned_max_march_troops = int(total_troops * 0.85)
+            from tasks.march_capacity import record_learned_march_capacity
+            record_learned_march_capacity(self.conn, self._learned_max_march_troops)
+            return "ERROR"
+        elif err in ('8041', '8042'):
+            self.log.warning(f"⚠️ المستوى المطلوب للقلعة غير كافٍ لجمع هذا المورد (كود {err}) — تخطي")
+            self._exclude.add(target_id)
             return "ERROR"
         elif err in ('8062', '8063', '8060', '9007062'):
             self.log.warning(f"⚠️ الهدف {target_id} مشغول أو ممتلئ (كود {err}) — تخطي")
             self._exclude.add(target_id)
             return "TARGET_OCCUPIED"
+        elif err == '16001':
+            self.log.warning(
+                f"   ⚠️ خادم اللعبة مشغول بعملية سابقة (كود 16001: Err_CMD_OPTING) — "
+                f"تحرير حقل الذهب {target_id} لإعادة تجهيز المسيرة نظيفاً من البداية..."
+            )
+            return "CMD_OPTING"
         else:
             self.log.error(f"❌ خطأ غير معروف في حزمة المسيرة: {err} | الهدف={target_id}")
             return "ERROR"

@@ -15,6 +15,7 @@ import asyncio
 import argparse
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -305,7 +306,7 @@ class HeroConsignTask(BaseTask):
                 cur_travel_hero = target_hero_id
                 voyage['heroId'] = target_hero_id
                 self.log.info(f"    ✓ تم اختيار البطل {target_hero_id} للترحال بنجاح.")
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(random.uniform(1.5, 2.5))
             else:
                 err_c = r_choose.get('err', 'Unknown') if r_choose else 'Timeout'
                 self.log.warning(f"    ✗ فشل اختيار البطل للترحال: {err_c}")
@@ -337,7 +338,7 @@ class HeroConsignTask(BaseTask):
                     self.log.warning(f"    ✗ توقف الترحال: {err_t}")
                     break
 
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(random.uniform(1.6, 2.8))
         else:
             self.log.info(f"ℹ️ رحلات الأبطال (الترحال): مكتملة مسبقاً ({used_physical}/10).")
 
@@ -374,7 +375,7 @@ class HeroConsignTask(BaseTask):
                     err_c = resp.get('err', 'Unknown') if resp else 'Timeout'
                     self.log.warning(f"    ✗ تعذر استلام جائزة الخانة #{idx_1}: {err_c}")
 
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(random.uniform(1.5, 2.7))
 
             voyage = self.conn.init_data.get('heroVoyageAgCtrl', voyage)
             consign_tasks = voyage.get('consignTasks', consign_tasks)
@@ -447,7 +448,7 @@ class HeroConsignTask(BaseTask):
                         self.log.warning(f"    ✗ فشل تنفيذ المهمة #{idx_1}: {err_msg}")
                         break
 
-                    await asyncio.sleep(2.0)
+                    await asyncio.sleep(random.uniform(1.6, 2.9))
             else:
                 self.log.info("ℹ️ لا توجد مهام تكليف جاهزة تتوفر شروطها مع الأبطال المتاحين حالياً.")
         else:
@@ -781,7 +782,9 @@ def main():
     email = args.email
     if not email:
         # اختيار أول حساب مسجل في session_cache
-        cache_path = os.path.join(_ROOT_DIR, 'session_cache.json')
+        cache_path = os.path.join(_ROOT_DIR, 'database', 'session_cache.json')
+        if not os.path.exists(cache_path):
+            cache_path = os.path.join(_ROOT_DIR, 'session_cache.json')
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, 'r', encoding='utf-8') as f:

@@ -33,6 +33,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional
 
@@ -126,7 +127,7 @@ class StaminaTask(BaseTask):
                     err_code = str(r_use.get('err', 'unknown')) if r_use else 'timeout'
                     self.log.warning(f"⚠️ فشل استخدام {info['name']} (كود السيرفر: {err_code})")
 
-                await asyncio.sleep(1.8)  # فاصل زمني آمن لحماية الحساب
+                await asyncio.sleep(round(random.uniform(1.4, 2.4), 2))  # فاصل زمني آمن لحماية الحساب
 
         # 3. شراء الطاقة بالذهب (2060/1) بالتكرار الدقيق بعدد المرات المطلوب
         max_price = int(cfg.get('max_price', cfg.get('price_limit', 0)))
@@ -150,11 +151,12 @@ class StaminaTask(BaseTask):
                     self.log.info(f"✅ تم تنفيذ طلب الشراء بالذهب #{i+1} بنجاح ✅")
                 else:
                     err_code = str(r_buy.get('err', 'unknown')) if r_buy else 'timeout'
-                    self.log.info(f"ℹ️ رد السيرفر لطلب الشراء #{i+1}: (كود: {err_code})")
+                    self.log.warning(f"⚠️ توقف شراء الطاقة بالذهب عند الطلب #{i+1} (كود: {err_code}) — إلغاء باقي المحاولات لمنع تكرار الخطأ.")
+                    break
 
-                # فاصل زمني آمن بين كل طلب وآخر
+                # فاصل زمني عشوائي بشري بين كل طلب وآخر
                 if i < gold_buys - 1:
-                    await asyncio.sleep(2.0)
+                    await asyncio.sleep(round(random.uniform(1.8, 2.8), 2))
 
         summary_msg = f"تم استخدام الجرعات المجانية (+{total_stamina_gained} طاقة إجمالية) | شراء ذهب: {gold_buys_done}"
         self.log.info(f"🎉 {summary_msg}")

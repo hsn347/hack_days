@@ -104,18 +104,24 @@ class CityHarvestTask(BaseTask):
         return selected if selected else list(RESOURCE_FARMS.keys())
 
     async def get_city_farms(self) -> List[Dict[str, Any]]:
-        """استعلام قائمة جميع مباني الموارد الموجودة بالمدينة وحالتها عبر 1001/1."""
+        """استخراج قائمة مباني الموارد من الذاكرة الحية بصفر طلبات (Zero-Request) مع خطة احتياطية."""
         blist = []
-        try:
-            r = await self.conn.query("1001", "1", {}, timeout=8)
-            if r and "data" in r:
-                blist = r["data"].get("blist", [])
-        except Exception as e:
-            self.log.warning(f"⚠️ تعذر الاستعلام المباشر عبر 1001/1: {e}")
 
-        # محاولة قراءة الحزم المحفوظة كاحتياط
-        if not blist and "cityCtrl" in self.conn.init_data:
-            blist = self.conn.init_data["cityCtrl"].get("blist", [])
+        # 1. القراءة الفورية المباشرة من الذاكرة الحية (Zero-Request)
+        if hasattr(self.conn, "init_data") and isinstance(self.conn.init_data, dict):
+            city_ctrl = self.conn.init_data.get("cityCtrl", {})
+            if isinstance(city_ctrl, dict):
+                blist = city_ctrl.get("blist", [])
+
+        # 2. خطة احتياطية فقط إذا لم تكن البيانات متوفرة بالذاكرة الحية
+        if not blist:
+            try:
+                self.log.info("🛑🛑🛑🛑🛑🛑🛑")
+                r = await self.conn.query("1001", "1", {}, timeout=8)
+                if r and isinstance(r.get("data"), dict):
+                    blist = r["data"].get("blist", [])
+            except Exception as e:
+                self.log.warning(f"⚠️ تعذر الاستعلام المباشر عبر 1001/1: {e}")
 
         # تصفية مباني الموارد المستهدفة
         farms = []
@@ -160,6 +166,9 @@ class CityHarvestTask(BaseTask):
         total_harvested = 0
         total_skipped_empty = 0
 
+        consecutive_failures = 0
+        effective_min = max(1.0, self.min_res)
+
         for farm in farms:
             bid = int(farm.get("bid", 0))
             iid = int(farm.get("iid", 0))
@@ -167,21 +176,26 @@ class CityHarvestTask(BaseTask):
             lv = int(farm.get("lv", 1))
             f_meta = RESOURCE_FARMS.get(bid, {"name": f"مبنى #{bid}", "icon": "📦"})
 
-            # إذا كانت المزرعة شبه فارغة وأقل من الحد الأدنى
-            if self.min_res > 0 and curres < self.min_res:
+            # تخطي إلزامي لأي مزرعة فارغة تماماً أو أقل من الحد الأدنى المحدد
+            if curres < effective_min:
                 total_skipped_empty += 1
                 continue
 
             success = await self.harvest_single_farm(bid, iid)
             if success:
+                consecutive_failures = 0
                 harvested_by_type[bid] = harvested_by_type.get(bid, 0) + 1
                 total_harvested += 1
                 self.log.info(f"   {f_meta['icon']} تم جني محصول {f_meta['name']} (رقم {iid} | مستوى {lv}) بنجاح! (+{int(curres):,} مورد)")
             else:
+                consecutive_failures += 1
                 self.log.warning(f"   ⚠️ تعذر جني محصول {f_meta['name']} (رقم {iid})")
+                if consecutive_failures >= 3:
+                    self.log.warning("🛑 [قاطع الدائرة] توقف الحصد تلقائياً بعد 3 إخفاقات متتالية لحماية الحساب من رصد السيرفر.")
+                    break
 
             # تأخير بشري عشوائي لمحاكاة النقر الطبيعي
-            await asyncio.sleep(round(random.uniform(0.6, 1.2), 2))
+            await asyncio.sleep(round(random.uniform(0.8, 1), 1))
 
         # تجهيز ملخص النتيجة
         summary_parts = []

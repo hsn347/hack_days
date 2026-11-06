@@ -28,6 +28,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -139,7 +140,7 @@ class ImperialMausoleumTask(BaseTask):
                 while isinstance(cur_award, dict) and cur_award.get("itemid") in self.DICE_ITEM_IDS and reroll_cnt < self.MAX_DICE_REROLLS:
                     reroll_cnt += 1
                     self.log.info(f"🎲 النتيجة هي نرد إضافي مجاني ({cur_award.get('itemid')}) — إعادة الرمي مجاناً #{reroll_cnt} (1045/3)...")
-                    await asyncio.sleep(0.4)
+                    await asyncio.sleep(round(random.uniform(1.2, 2.0), 2))
                     resp_dice = await self.conn.query(self.CMD_PYRAMID_MODULE, self.REQ_START_THROW, {}, timeout=10)
                     if resp_dice and str(resp_dice.get("err", "-1")) == "0":
                         cur_award = resp_dice.get("data", {}).get("award", {})
@@ -152,7 +153,7 @@ class ImperialMausoleumTask(BaseTask):
                 # بعد حسم النرد والحصول على جائزة فعلية، نستلمها فوراً بطلب 1045/5
                 if isinstance(cur_award, dict) and cur_award.get("itemid") and cur_award.get("itemid") not in self.DICE_ITEM_IDS:
                     self.log.info(f"✨ مكافأة جاهزة للاستلام: {cur_award} — جاري الاستلام بطلب (1045/5)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(0.9, 1.6), 2))
                     resp_claim = await self.conn.query(
                         self.CMD_PYRAMID_MODULE,
                         self.REQ_RECEIVE_REWARD,
@@ -166,7 +167,7 @@ class ImperialMausoleumTask(BaseTask):
                         total_received.append(rec_award)
                         self.log.info(f"🎉 تم استلام مكافأة الضريح بنجاح: {rec_award}")
                         self._update_local_cache(c_data)
-                        await asyncio.sleep(0.4)
+                        await asyncio.sleep(round(random.uniform(1.0, 1.8), 2))
                         continue  # فحص الجولة التالية إن كان هناك رمي مجاني آخر
                     else:
                         err = resp_claim.get("err") if resp_claim else "timeout"
@@ -197,7 +198,7 @@ class ImperialMausoleumTask(BaseTask):
                 while isinstance(cur_award, dict) and cur_award.get("itemid") in self.DICE_ITEM_IDS and reroll_cnt < self.MAX_DICE_REROLLS:
                     reroll_cnt += 1
                     self.log.info(f"🎲 سقطت الرمية على نرد إضافي مجاني ({cur_award.get('itemid')}) — مواصلة الرمي مجاناً #{reroll_cnt} (1045/3)...")
-                    await asyncio.sleep(0.4)
+                    await asyncio.sleep(round(random.uniform(1.2, 2.0), 2))
                     resp_dice = await self.conn.query(self.CMD_PYRAMID_MODULE, self.REQ_START_THROW, {}, timeout=10)
                     if resp_dice and str(resp_dice.get("err", "-1")) == "0":
                         cur_award = resp_dice.get("data", {}).get("award", {})
@@ -210,7 +211,7 @@ class ImperialMausoleumTask(BaseTask):
                 # استلام المكافأة النهائية فوراً بطلب 1045/5
                 if isinstance(cur_award, dict) and cur_award.get("itemid") and cur_award.get("itemid") not in self.DICE_ITEM_IDS:
                     self.log.info("✨ جاري استلام المكافأة الناتجة فوراً بطلب (1045/5)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(0.9, 1.6), 2))
                     resp_claim2 = await self.conn.query(
                         self.CMD_PYRAMID_MODULE,
                         self.REQ_RECEIVE_REWARD,

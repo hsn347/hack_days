@@ -37,6 +37,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+import random
 
 from game_client import GameConnection, AccountSession
 from core.session_manager import SessionManager
@@ -77,6 +78,8 @@ from tasks.hospital import HospitalTask
 from tasks.mail import MailTask
 from tasks.march_manager import MarchManagerTask
 from tasks.warrior_exchange import WarriorExchangeTask
+from tasks.elf_boss import ElfBossTask
+from tasks.auction import AuctionTask
 
 
 
@@ -114,10 +117,10 @@ class _LogCallbackStream:
 
 
 def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = logging.INFO) -> None:
-    """تنظيف أي StreamHandler سابق وربط callback والطباعة المباشرة لمنع تكرار السجلات نهائياً عبر الدورات مع السماح بالطباعة والانتشار."""
+    """تنظيف أي StreamHandler سابق وربط callback والطباعة المباشرة لمنع تكرار السجلات نهائياً عبر الدورات دون ازدواجية في الـ root logger."""
     if not hasattr(task, "log") or not task.log:
         return
-    task.log.propagate = True
+    task.log.propagate = False
     task.log.setLevel(level)
     try:
         task.log.handlers.clear()
@@ -145,14 +148,14 @@ def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = loggin
 
 
 def _safe_unbind_task_logger(task: Any) -> None:
-    """إزالة handler الـ callback بعد انتهاء تشغيل المهمة لمنع تراكمه في الذاكرة مع الحفاظ على propagate."""
+    """إزالة handler الـ callback بعد انتهاء تشغيل المهمة لمنع تراكمه في الذاكرة."""
     if not hasattr(task, "log") or not task.log:
         return
     try:
         task.log.handlers.clear()
     except Exception:
         task.log.handlers = []
-    task.log.propagate = True
+    task.log.propagate = False
 
 # تشغيل وضع الحلقة الدائمة من سطر الأوامر:
 #   python bot_manager.py --email "..." --loop
@@ -175,6 +178,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         "enabled": True,             # تفعيل/تعطيل مهام التحالف
         "auto_help": True,           # تقديم المساعدة التلقائية لطلبات أعضاء التحالف
         "gold_donations": 0,         # عدد تبرعات الذهب (0 = مجاني فقط بدون ذهب إطلاقاً لمنع استهلاك الذهب)
+        "open_treasure": True,       # استلام وفتح كنز التحالف
     },
 
     # 🚢 4. مهمة الميناء التجاري (Port Task)
@@ -324,6 +328,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "savings_bank": {
         "enabled": True,             # تفعيل/تعطيل استثمار الذهب وسحب الأرباح في دار الادخار تلقائياً
         "days": 7,                   # خطة الاستثمار والمدة المختارة بالأيام: 7 (أسبوعية), 15 (نصف شهرية), 30 (شهرية)
+        "deposit": 2000,             # مبلغ الذهب المراد إيداعه (100 - 6000)
     },
 
     # 🏗️ 20. مهمة ترقية القلعة والمباني والتسريع (Building Upgrade & Castle)
@@ -368,9 +373,12 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     },
 
     # 🏥 22b. مهمة معالجة الجنود الجرحى في المشفى (Hospital Cure Task)
-    # تفحص جاهزية المشفى وتعالج كافة الجنود المصابين تلقائياً بالمشفى (mode: 0) قبل تشغيل منسق الفيالق
+    # فحص المشفى وعلاج الجرحى استباقياً بحسب الموارد المتوفرة:
+    #   - "prestige": علاج العدد المتبقي فقط لإتمام مهمة الهيبة اليومية بأقل استهلاك للموارد (افتراضي).
+    #   - "all":      علاج كافة الجرحى الممكن علاجهم استباقياً بالموارد المتاحة دون التقيد بالهيبة.
     "hospital": {
-        "enabled": True,                   # تفعيل/تعطيل علاج الجنود بالمشفى تلقائياً
+        "enabled": False,                  # تفعيل/تعطيل علاج الجنود بالمشفى تلقائياً (ملغية افتراضياً)
+        "mode": "prestige",                # نمط العلاج: "prestige" (المتبقي للهيبة) | "all" (علاج الكل الممكن)
     },
 
     # 🛒 22f. مهمة استبدال متجر المحارب في مركز المنافع (Warrior Exchange Task)
@@ -378,6 +386,19 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "warrior_exchange": {
         "enabled": False,                  # تفعيل/تعطيل المهمة (افتراضياً معطلة حتى يفعلها المستخدم)
         "count": 15,                       # عدد مرات الاستبدال المطلوبة (1 إلى 15)
+    },
+
+    # 🧝 22g. مهمة نخبة العفريت (Elf Elite Boss Task)
+    "elf": {
+        "enabled": False,                  # تفعيل/تعطيل الهجوم على العفريت
+        "formation_id": 1,                 # رقم التشكيلة
+    },
+
+    # 🕊️ 22h. مهمة المزايدة على الحمام الزاجل في سوق المملكة (Auction Task)
+    # يزايد البوت على الحمام الزاجل (#501901) وشظاياه (#503001) بحد أقصى محدد بالذهب
+    "auction": {
+        "enabled": False,                  # تفعيل/تعطيل المزايدة (معطلة افتراضياً)
+        "max_gold": 2000,                  # الحد الأقصى للمزايدة بالذهب (افتراضي: 2000)
     },
 
     # 🎖️ 23. مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator)
@@ -419,10 +440,11 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
         # [6] إعدادات القتال الشامل (Combat) — يحدد المستخدم خياراً واحداً حصراً (عفريت أو غزاة أو متمردين)
         "combat": {
             "enabled": True,               # تفعيل أولوية القتال
-            "choice": "elf",               # الخيار المستهدف: "elf" (عفريت) أو "invaders" (غزاة) أو "rebels" (متمردين)
+            "choice": "invaders",             # الخيار المستهدف: "invaders" (غزاة) أو "rebels" (متمردين)
             "level": 30,                   # مستوى الهدف المطلوب مهاجمته (للغزاة/المتمردين)
             "formation_id": 1,             # رقم تشكيلة القتال (1 إلى 5)
         },
+
 
 
         # [7] إعدادات الهجوم على المعاقل والملاجئ العامة (Stronghold)
@@ -446,6 +468,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
             "res_type": 1,                 # نوع المورد: 1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=ألماس
             "level": 5,                    # مستوى حقل المورد بالضبط (1 إلى 7)
             "search_range": 100,           # نطاق البحث الأقصى حول القلعة
+            "use_boost": False,            # تفعيل مكافأة سرعة الجمع من الحقيبة تلقائياً (+50%)
         },
     },
 }
@@ -800,6 +823,66 @@ class AccountContext:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  دالة تعطيل مهمة العفريت لقلعة محددة حصراً في قاعدة البيانات
+# ════════════════════════════════════════════════════════════════════
+
+def disable_elf_task(identifier: Optional[str] = None) -> bool:
+    """
+    تعطيل مهمة العفريت لقلعة محددة حصراً في قاعدة البيانات (عمود config):
+    تضبط قيمة "elf": {"enabled": False, ...} مع الحفاظ التام على رقم التشكيلة المحدد.
+
+    :param identifier: البريد الإلكتروني للقلعة (email) أو معرف القلعة (castle_id).
+    :return: True عند نجاح الحفظ في SQLite، و False عند الفشل أو عدم العثور على القلعة.
+    """
+    if not identifier:
+        log.warning("⚠️ تعذر تعطيل مهمة العفريت: لم يتم تمرير معرّف القلعة أو البريد.")
+        return False
+
+    clean_id = str(identifier).strip()
+    try:
+        from core.database import get_castle, update_castle_config
+        c = get_castle(clean_id)
+        if not c:
+            log.warning(f"⚠️ القلعة غير مسجلة في قاعدة البيانات ({clean_id}).")
+            return False
+
+        cid = c.get("castle_id")
+        if not cid:
+            return False
+
+        # الحفاظ على رقم التشكيلة المسجل مسبقاً للقلعة
+        existing_formation = 1
+        raw_cfg = c.get("config")
+        if isinstance(raw_cfg, str):
+            try:
+                import json
+                raw_cfg = json.loads(raw_cfg)
+            except Exception:
+                raw_cfg = {}
+        if isinstance(raw_cfg, dict):
+            elf_val = raw_cfg.get("elf")
+            if isinstance(elf_val, dict):
+                existing_formation = int(elf_val.get("formation_id", 1))
+
+        patch = {
+            "elf": {
+                "enabled": False,
+                "formation_id": existing_formation,
+            }
+        }
+        res = update_castle_config(cid, patch)
+        ok = bool(res.get("success", False)) if isinstance(res, dict) else bool(res)
+        if ok:
+            log.info(f"🛑 تم بنجاح تعطيل مهمة العفريت للقلعة {clean_id} (elf.enabled = False) في قاعدة البيانات.")
+        return ok
+    except Exception as e:
+        log.error(f"❌ خطأ أثناء تعطيل مهمة العفريت للقلعة {clean_id}: {e}")
+        return False
+
+
+
+
+# ════════════════════════════════════════════════════════════════════
 #  كلاس مدير البوت الرئيسي (BotManager)
 # ════════════════════════════════════════════════════════════════════
 
@@ -874,12 +957,15 @@ class BotManager:
         # ── خصائص التشغيل اللحظية الحية في الذاكرة (Direct Thread Monitoring) ──
         self.start_time: float = time.time()
         self.iteration: int = 1
-        self.loop_interval_minutes: int = 90
+        self.loop_interval_minutes: int = 40
         self.conn_state: str = "starting"
         self.status_message: str = "جاري بدء التشغيل..."
         self.next_run_time: Optional[str] = None
         self.reconnect_attempt: int = 0
         self.last_activity_time: float = time.time()
+        self.last_heartbeat: float = time.time()
+        self.current_task: Optional[str] = None
+        self.current_task_name: Optional[str] = None
 
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وقاعدة البيانات المحلية بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
@@ -888,15 +974,16 @@ class BotManager:
         self.status_message = message
         self.next_run_time = next_run_time
         self.last_activity_time = time.time()
+        self.last_heartbeat = time.time()
 
         # 🛑 حظر صارم ولحظي: إذا طُلب إيقاف البوت، يُمنع منعاً باتاً بث أو تسجيل أي حالة نشطة (connected / reconnecting / waiting)
-        if self._stop_event.is_set() and conn_state in ("connected", "reconnecting", "waiting"):
+        if self._stop_event.is_set() and conn_state in ("connected", "reconnecting", "waiting", "waiting_next_cycle"):
             return
 
         nr_arg = f" next_run_time={next_run_time}" if next_run_time else ""
         event_line = f"[BOT_EVENT] conn_state={conn_state} message={message}{nr_arg}"
         # Thread Pool: توجيه عبر log_callback / CLI: print() مباشرة
-        if self._log_callback:
+        if getattr(self, "_log_callback", None):
             self._log_callback(event_line)
         else:
             print(event_line, flush=True)
@@ -918,34 +1005,61 @@ class BotManager:
     def get_live_info(self) -> Dict[str, Any]:
         """
         استخراج بيانات التشغيل الحية اللحظية من داخل كائن البوت نفسه في الذاكرة (Live Thread Memory).
-        بدون أي استعلام من قاعدة البيانات.
+        حصر الحالات بدقة في الحالات الست المعتمدة وفق Requirement R2:
+        1. Running (تنفيذ فعلي لمهمة محددة)
+        2. Waiting for Next Cycle (انتظار موعد الدورة القادمة مع التوقيت)
+        3. Other Device Login (تعليق مؤقت بسبب دخول من جهاز آخر)
+        4. Reconnecting (محاولات إعادة اتصال حقيقية)
+        5. Waiting for Re-login (انتظار إعادة تسجيل الدخول لمشكلة مصادقة)
+        6. Starting (فترة بدء حقيقية ومحددة دون بقاء معلق)
         """
         now = time.time()
-        uptime_sec = int(now - getattr(self, "start_time", now))
+        start_ts = getattr(self, "start_time", now)
+        uptime_sec = int(now - start_ts)
+        is_stopped = self._stop_event.is_set()
 
-        state = getattr(self, "conn_state", "unknown")
+        state = getattr(self, "conn_state", "starting")
         kick_reason = getattr(self, "_last_kick_reason", "")
         status_msg = getattr(self, "status_message", "")
+        next_run = getattr(self, "next_run_time", None)
+        conn_alive = bool(self.conn and self.conn.is_connected)
+        reconn_att = getattr(self, "reconnect_attempt", 0)
+        cur_task = getattr(self, "current_task", None)
+        cur_task_name = getattr(self, "current_task_name", None)
 
-        # تصنيف دقيق للحالات: شغالة، منتظرة، دخول من جهاز آخر، إعادة اتصال
-        if state == "disconnected" or "جهاز آخر" in status_msg or "تسجيل الدخول" in kick_reason or "other device" in kick_reason.lower():
-            live_category = "other_login"
-            category_label = "دخول من جهاز آخر"
-        elif state == "waiting" or getattr(self, "next_run_time", None):
-            live_category = "waiting"
-            category_label = "بانتظار الدورة التالية"
-        elif state == "reconnecting":
+        last_hb = getattr(self, "last_heartbeat", getattr(self, "last_activity_time", start_ts))
+
+        # فحص عزل الخيوط المتعطلة (Stalled detection)
+        is_stalled = False
+        if is_stopped and uptime_sec > 15:
+            is_stalled = True
+        elif (now - last_hb) > 300:  # أكثر من 5 دقائق بدون أي نبض
+            is_stalled = True
+        elif state == "starting" and (now - start_ts) > 45:  # أكثر من 45 ثانية في مرحلة البدء
+            is_stalled = True
+
+        # تصنيف دقيق للحالات الست المعتمدة:
+        if state == "reconnecting" or (reconn_att > 0 and state != "connected" and not conn_alive):
             live_category = "reconnecting"
             category_label = "جاري إعادة الاتصال"
-        elif state in ("connected", "running"):
+        elif state == "waiting_relogin" or "إعادة تسجيل الدخول" in status_msg or "re-login" in status_msg.lower():
+            live_category = "waiting_relogin"
+            category_label = "بانتظار إعادة تسجيل الدخول"
+        elif state in ("other_device_login", "disconnected") or "جهاز آخر" in status_msg or "other device" in kick_reason.lower() or "تسجيل الدخول" in kick_reason:
+            live_category = "other_device_login"
+            category_label = "دخول من جهاز آخر"
+        elif state in ("waiting_next_cycle", "waiting", "cycle_wait") or next_run:
+            live_category = "waiting_next_cycle"
+            category_label = "بانتظار الدورة التالية"
+        elif conn_alive or cur_task or state in ("connected", "running"):
             live_category = "running"
             category_label = "شغالة فعلياً"
-        elif state == "starting":
+        elif state == "starting" or (now - start_ts) < 45:
             live_category = "starting"
             category_label = "جاري بدء التشغيل"
         else:
-            live_category = state
-            category_label = state
+            live_category = "running"
+            category_label = "شغالة فعلياً"
 
         return {
             "castle_id": getattr(self, "castle_id", ""),
@@ -954,17 +1068,20 @@ class BotManager:
             "state": state,
             "live_category": live_category,
             "category_label": category_label,
+            "current_step": cur_task_name or cur_task or ("تنفيذ المهام" if live_category == "running" else None),
             "status_message": status_msg,
             "iteration": getattr(self, "iteration", 1),
-            "loop_interval_minutes": getattr(self, "loop_interval_minutes", 90),
-            "next_run_time": getattr(self, "next_run_time", None),
-            "reconnect_attempt": getattr(self, "reconnect_attempt", 0),
+            "loop_interval_minutes": getattr(self, "loop_interval_minutes", 40),
+            "next_run_time": next_run,
+            "reconnect_attempt": reconn_att,
             "max_reconnect_attempts": getattr(self, "max_reconnect_attempts", 10),
             "last_kick_reason": kick_reason,
             "uptime_seconds": uptime_sec,
-            "is_connection_alive": bool(self.conn and self.conn.is_connected),
-            "is_stopped": self._stop_event.is_set(),
-            "start_time": getattr(self, "start_time", 0),
+            "is_connection_alive": conn_alive,
+            "is_stopped": is_stopped,
+            "is_stalled": is_stalled,
+            "last_heartbeat": last_hb,
+            "start_time": start_ts,
         }
 
     def stop(self) -> None:
@@ -1040,16 +1157,35 @@ class BotManager:
             pos     = base_info.get("sourcePos", {}) if isinstance(base_info, dict) else {}
             coords  = {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
 
+                        # 🛡️ استخراج الموارد الآمنة والمكشوفة
+            safe_food    = int(float(saferes.get("1002", 0) or 0))
+            safe_wood    = int(float(saferes.get("1003", 0) or 0))
+            safe_iron    = int(float(saferes.get("1004", 0) or 0))
+            safe_diamond = int(float(saferes.get("1005", 0) or 0))
+
+            unprotected_food    = max(0, food - safe_food)
+            unprotected_wood    = max(0, wood - safe_wood)
+            unprotected_iron    = max(0, iron - safe_iron)
+            unprotected_diamond = max(0, diamond - safe_diamond)
+
             from datetime import timezone
             now_iso = datetime.now(timezone.utc).isoformat()
             res_data = {
-                "food":         food,
-                "wood":         wood,
-                "iron":         iron,
-                "diamond":      diamond,
-                "gold":         gold,
-                "stamina":      stamina,
-                "last_updated": now_iso,
+                "food":                 food,
+                "wood":                 wood,
+                "iron":                 iron,
+                "diamond":              diamond,
+                "gold":                 gold,
+                "stamina":              stamina,
+                "safe_food":            safe_food,
+                "safe_wood":            safe_wood,
+                "safe_iron":            safe_iron,
+                "safe_diamond":         safe_diamond,
+                "unprotected_food":     unprotected_food,
+                "unprotected_wood":     unprotected_wood,
+                "unprotected_iron":     unprotected_iron,
+                "unprotected_diamond":  unprotected_diamond,
+                "last_updated":         now_iso,
             }
 
             cinfo_data = {
@@ -1060,6 +1196,8 @@ class BotManager:
                 "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition", "")).isdigit() else 1,
                 "coordinates":  coords,
                 "uid":          str(base_info.get("uid", getattr(self.account, "user_id", ""))),
+                "avatar":       str(base_info.get("avatar", "") or ""),
+                "image_id":     int(base_info.get("imageId", 0) or 0),
             }
 
             # إرسال السطر للـ api_server (Thread Pool: log_callback / CLI: print)
@@ -1122,6 +1260,19 @@ class BotManager:
         except Exception as ex:
             log.warning(f"⚠️ تعذر استعلام إعدادات القلعة من قاعدة البيانات: {ex}")
 
+    def disable_elf_task(self, castle_id_or_email: Optional[str] = None) -> bool:
+        """
+        تعطيل مهمة العفريت للقلعة الحالية (أو المحددة) في قاعدة البيانات والذاكرة الحية للبوت:
+        يضبط 'elf': {'enabled': False} مع الحفاظ التام على رقم التشكيلة وبقية الإعدادات.
+        """
+        cid = castle_id_or_email or getattr(self, "castle_id", None) or getattr(self, "email", None)
+        ok = disable_elf_task(cid)
+        if isinstance(self.config, dict) and "elf" in self.config:
+            if isinstance(self.config["elf"], dict):
+                self.config["elf"]["enabled"] = False
+        return ok
+
+
     def is_connection_alive(self) -> bool:
         """التحقق هل اتصال الحساب مع السيرفر نشط وما زال يعمل بصحة كاملة."""
         if self._disconnected_event.is_set():
@@ -1142,6 +1293,68 @@ class BotManager:
         elif r:
             return f"انقطاع اتصال: {r}"
         return "دخول شخص آخر إلى الحساب"
+
+    async def is_event_active(self, activity_id: str = "9001083") -> Tuple[bool, str]:
+        """
+        التحقق الفوري من حالة حدث نخبة العفريت (أو أي حدث بالمعرف) عبر الذاكرة الحية (Zero-Request):
+        يتم فحص وحدة التحكم activityShowCtrl بالذاكرة الحية ومزامنة إشعارات السيرفر
+        للمعرف الرسمي للحدث 9001083 (elite_boss_title_01).
+        حالات الفعالية الرسمية (gActivityState):
+          - state = 3 (OPEN): الحدث مفتوح ونشط حالياً في المملكة.
+          - state = 2 (PREPARE): الحدث في مرحلة الاستعداد/المعاينة قبل البدء.
+          - state = 1 (CLOSE): الحدث مغلق أو منتهٍ.
+        """
+        ELF_ACTIVITY_ID = str(activity_id)
+        is_elf = (ELF_ACTIVITY_ID == "9001083")
+        event_title = "حدث نخبة العفريت" if is_elf else f"الحدث ({ELF_ACTIVITY_ID})"
+
+        if not self.conn:
+            return False, f"{event_title}: لا يوجد اتصال نشط بالسيرفر"
+
+        init_data = getattr(self.conn, 'init_data', {}) or {}
+        act_show = init_data.get('activityShowCtrl', {})
+
+        # 1. جلب البيانات الأولية من الذاكرة الحية
+        act_info = dict(act_show.get(ELF_ACTIVITY_ID, {})) if isinstance(act_show, dict) and isinstance(act_show.get(ELF_ACTIVITY_ID), dict) else {}
+
+        # 2. فحص أحدث إشعارات السيرفر المباشرة لتحديث الحالة بالثانية (NOTIFY_ACTIVITY_SHOW_CHANGE_TIME)
+        cached_packets = getattr(self.conn, 'cached_packets', {}) or {}
+        for p in cached_packets.values():
+            if isinstance(p, dict):
+                d = p.get('data', {})
+                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_ACTIVITY_SHOW_CHANGE_TIME':
+                    nd = d.get('notifyData') or d.get('data') or []
+                    items = nd if isinstance(nd, list) else [nd]
+                    for item in items:
+                        if isinstance(item, dict) and ELF_ACTIVITY_ID in item:
+                            val = item[ELF_ACTIVITY_ID]
+                            if isinstance(val, dict):
+                                act_info.update(val)
+
+        # إذا كانت بيانات الفعاليات غير متوفرة إطلاقاً بالذاكرة الحية (حالات نادرة جداً قبل التهيئة)
+        if not act_show or not isinstance(act_show, dict):
+            return True, f"بيانات الفعاليات بالذاكرة الحية قيد التحميل — المتابعة المباشرة"
+
+        if not act_info:
+            return False, f"{event_title} غير مدرج في جدول فعاليات السيرفر الحالية (معرف {ELF_ACTIVITY_ID})"
+
+        state = int(act_info.get('state', 1))
+        begintime = int(act_info.get('begintime', 0))
+        endtime = int(act_info.get('endtime', 0))
+        now = time.time()
+
+        if state == 3:
+            if endtime > 0 and now >= endtime:
+                end_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(endtime))
+                return False, f"{event_title} انتهى وقته (انتهى عند {end_str})"
+            left_seconds = max(0, int(endtime - now)) if endtime > 0 else 0
+            left_str = f" (متبقي {left_seconds // 3600}س و{(left_seconds % 3600) // 60}د)" if left_seconds > 0 else ""
+            return True, f"{event_title} نشط ومفتوح في المملكة{left_str}"
+        elif state == 2:
+            begin_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(begintime)) if begintime > 0 else "قريباً"
+            return False, f"{event_title} في مرحلة التحضير ولم يبدأ بعد (سيبدأ عند {begin_str})"
+        else:
+            return False, f"{event_title} مغلق حالياً على السيرفر (state=CLOSE)"
 
     async def wait_and_reconnect(self, reason: str = "") -> bool:
         """
@@ -2345,6 +2558,7 @@ class BotManager:
             ("🏥 معالجة الجنود بالمشفى (Hospital Cure)",        self.step_22b_hospital_task,           "hospital"),
             ("📬 جمع وحذف البريد (Mail Collect & Clean)",       self.step_22e_mail_task,               "mail"),
             ("🛒 استبدال متجر المحارب (Warrior Exchange)",      self.step_22f_warrior_exchange_task,   "warrior_exchange"),
+            ("🕊️ المزايدة على الحمام الزاجل (Auction Bid)",     self.step_22h_auction_task,            "auction"),
             ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
             # ──────────────────────────────────────────────────────────────────────────────
             # لإضافة مهمة جديدة أضف سطراً: ("📌 اسم المهمة", self.step_N_..., "config_key")
@@ -2359,6 +2573,9 @@ class BotManager:
                 break
 
             step_name, step_func, task_key = pipeline[step_idx]
+            self.current_task = task_key
+            self.current_task_name = step_name
+            self.last_heartbeat = time.time()
 
             # 1. التحقق من سلامة الاتصال قبل بدء المهمة
             if not self.is_connection_alive():
@@ -2490,6 +2707,9 @@ class BotManager:
                     break
                 await asyncio.sleep(1.5)
 
+        self.current_task = None
+        self.current_task_name = None
+        self.last_heartbeat = time.time()
         return results
 
     # ─────────────────────────────────────────────────────────────────
@@ -2526,7 +2746,7 @@ class BotManager:
 
         task_cfg = {
             "enabled": True,
-            "tree": res_cfg.get("tree", "defense"),
+            "tree": res_cfg.get("tree", "balanced"),
             "tech_id": res_cfg.get("tech_id", None),
             "check_only": bool(res_cfg.get("check_only", False))
         }
@@ -2556,10 +2776,36 @@ class BotManager:
             log.info(msg)
             return {"skipped": True, "message": msg}
 
+        # 🤝 [السفارة] مساعدة جميع أعضاء التحالف بضغطة زر واحدة (1010/47) عند وجود طلبات في الذاكرة الحية
+        if bool(all_cfg.get("auto_help", True)):
+            try:
+                helplist = self.conn.init_data.get("allianceCtrl", {}).get("helplist", [])
+                my_uid = int(self.conn.uid or self.context.uid or 0)
+                
+                # فحص الذاكرة الحية: هل يوجد طلب متاح للمساعدة؟
+                has_pending_help = any(
+                    isinstance(item, dict)
+                    and int(item.get("uid", 0)) != my_uid
+                    and int(item.get("curHp", 0)) < int(item.get("totalHp", 0))
+                    and my_uid not in (item.get("helper") or [])
+                    for item in helplist
+                ) if isinstance(helplist, list) else True
+
+                if has_pending_help:
+                    r_help_all = await self.conn.query("1010", "47", {}, timeout=8)
+                    if r_help_all and str(r_help_all.get("err", "0")) == "0":
+                        log.info("🤝 [السفارة] تم إرسال مساعدة الكل لأعضاء التحالف بنجاح (1010/47) ✅")
+                    else:
+                        log.debug(f"🤝 استجابة مساعدة الكل (1010/47): {r_help_all}")
+                else:
+                    log.info("🤝 [السفارة] لا توجد طلبات مساعدة معلقة بالحلف في الذاكرة الحية.")
+            except Exception as e:
+                log.warning(f"⚠️ خطأ غير حرج أثناء فحص/إرسال مساعدة التحالف (1010/47): {e}")
+
         log.info(f"🤝 بدء تنفيذ مهمة التحالف (المساعدة والتبرع لعلوم التحالف ID: {self.context.alliance_id})...")
         task_cfg = {
             "enabled": True,
-            "auto_help": bool(all_cfg.get("auto_help", True)),
+            "auto_help": False,  # تم إرسال مساعدة الكل مسبقاً وفورياً عبر 1010/47
             "donate_free": True,  # دائماً تبرع مجاني بالكامل
             "gold_donations": int(all_cfg.get("gold_donations", 0)),
             "sciid": all_cfg.get("sciid", None)  # تلقائي بالموصى به
@@ -2951,7 +3197,6 @@ class BotManager:
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
-
     # [11f] مهمة الهدية الفاخرة اليومية (مهمة أساسية إلزامية تنفذ دائماً في كل دورة)
     async def step_11f_daily_luxury_gift_task(self) -> Dict[str, Any]:
         """فحص وجمع كافة هدايا الهدية الفاخرة اليومية المتاحة تلقائياً في كل دورة."""
@@ -3183,10 +3428,17 @@ class BotManager:
         raw_days = sb_cfg.get("days", DEFAULT_SAVINGS_DAYS)
         target_days = parse_savings_days(raw_days)
 
-        plan_info = SAVINGS_PLANS.get(target_days, SAVINGS_PLANS[DEFAULT_SAVINGS_DAYS])
-        log.info(f"🏦 بدء مهمة دار الادخار (فحص الأرباح وإيداع الذهب بخطة: {plan_info['name']})...")
+        raw_deposit = sb_cfg.get("deposit")
+        try:
+            deposit_val = int(raw_deposit) if raw_deposit is not None else 2000
+            deposit_val = max(100, min(6000, deposit_val))
+        except (ValueError, TypeError):
+            deposit_val = 2000
 
-        task = SavingsBankTask(self.conn, {"days": target_days})
+        plan_info = SAVINGS_PLANS.get(target_days, SAVINGS_PLANS[DEFAULT_SAVINGS_DAYS])
+        log.info(f"🏦 بدء مهمة دار الادخار (فحص الأرباح وإيداع الذهب بخطة: {plan_info['name']} بمبلغ: {deposit_val:,} ذهب)...")
+
+        task = SavingsBankTask(self.conn, {"days": target_days, "deposit": deposit_val})
         await task.on_start()
         res = await task.run()
 
@@ -3351,19 +3603,18 @@ class BotManager:
     async def step_22b_hospital_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة فحص ومعالجة الجنود الجرحى في المشفى (Hospital Cure Task):
-          - الاستعلام التلقائي المسبق عن مهمة علاج الجرحى في مهام الهيبة (ID: 4112009) وتخطيها فوراً إذا كانت منجزة.
-          - التحقق من وجود مبنى المشفى (bid: 206) ومستواه في القلعة.
-          - فحص طابور العلاج (queueCtrl['1202']) والتأكد من إتاحته.
-          - استعلام أحدث بيانات الجيش (1005/1) لتحديد كافة الجنود الجرحى.
-          - إرسال طلب العلاج العادي (1005/4 mode: 0) بكافة الأعداد المصابة.
+          - دعم نمطين: "prestige" (علاج المتبقي للهيبة فقط) أو "all" (علاج كافة الجرحى الممكنين).
+          - فحص استباقي لموارد القلعة لتحديد وعلاج ما يمكن علاجه دون تلقي أي أخطاء من السيرفر.
+          - التحقق من وجود مبنى المشفى (bid: 206) وطابور العلاج (1202).
+          - قراءة الجرحى مباشرة من الذاكرة الحية (init_data['armyCtrl']['woundedArmy']).
         """
         hosp_cfg = self.config.get("hospital", {})
         if isinstance(hosp_cfg, bool):
-            hosp_cfg = {"enabled": hosp_cfg}
+            hosp_cfg = {"enabled": hosp_cfg, "mode": "prestige"}
         elif not isinstance(hosp_cfg, dict):
-            hosp_cfg = {"enabled": True}
+            hosp_cfg = {"enabled": False, "mode": "prestige"}
 
-        if not hosp_cfg.get("enabled", True):
+        if not hosp_cfg.get("enabled", False):
             msg = "⏭️ تم تخطي مهمة علاج الجرحى بالمشفى (hospital.enabled = False)."
             log.info(msg)
             return {"success": True, "message": msg, "skipped": True}
@@ -3461,6 +3712,52 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
 
+    async def step_22h_auction_task(self) -> Dict[str, Any]:
+        """
+        تنفيذ مهمة المزايدة التلقائية على الحمام الزاجل (#501901) وشظاياه (#503001) في سوق المملكة:
+          - التحقق من تفعيل المهمة في إعدادات الحساب (auction.enabled).
+          - التحقق من نشاط حدث المزاد في الذاكرة الحية (activityShowCtrl -> #9001034).
+          - جلب بيانات المزاد واستدعاء AuctionTask للمزايدة أو سحب الذهب تلقائياً.
+        """
+        auction_cfg = self.config.get("auction", {})
+        if isinstance(auction_cfg, bool):
+            auction_cfg = {"enabled": auction_cfg, "max_gold": 2000}
+        elif not isinstance(auction_cfg, dict):
+            auction_cfg = {"enabled": False, "max_gold": 2000}
+
+        # 1. التحقق من تفعيل المهمة
+        if not bool(auction_cfg.get("enabled", False)):
+            msg = "⏭️ تم تخطي مهمة المزاد (auction.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        # 2. التحقق من نشاط حدث المزاد عبر الذاكرة الحية (Zero-Request)
+        is_active, act_desc = await self.is_event_active("9001034")
+        if not is_active:
+            msg = f"⏭️ تخطي مهمة المزاد: {act_desc}."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        # 3. تشغيل المهمة
+        task = AuctionTask(self.conn, auction_cfg)
+        _safe_bind_task_logger(task, self._log_callback, level=logging.INFO)
+
+        try:
+            res = await task.run()
+        finally:
+            _safe_unbind_task_logger(task)
+
+        if self._log_callback:
+            self._log_callback(f"🕊️ {res.message}")
+
+        if res.success:
+            log.info(f"🎉 نتيجة مهمة المزاد: {res.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة المزاد: {res.message}")
+
+        return {"success": res.success, "message": res.message, "data": res.data}
+
+
     async def step_23_march_manager_task(self) -> Dict[str, Any]:
         """
         تنفيذ مهمة منسق الفيالق والمسيرات الذكي الموحد (March Manager & Orchestrator):
@@ -3507,6 +3804,115 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
 
+
+    async def run_elf_boss_mode(self) -> bool:
+        """
+        فحص وتشغيل بوت العفريت المستقل ذي الأولوية:
+        1. التحقق من تفعيل العفريت في قاعدة البيانات (elf.enabled).
+        2. التحقق من سريان الحدث باللعبة عبر الذاكرة الحية (is_event_active).
+        3. التحقق من أن طاقة اللورد أكثر من 30 (stamina > 30).
+        4. الجدولة الذكية بحسب دقيقة التشغيل الحالية (حتى :40 أو 5د أو انتظار فوري لرأس الساعة).
+        
+        تعيد: True إذا تم تفعيل وتنفيذ وضع العفريت (لحظر المهام الأخرى)، و False إذا تم تعطيله والمتابعة للبوت العادي.
+        """
+        elf_cfg = self.config.get("elf", {})
+        if not isinstance(elf_cfg, dict) or not bool(elf_cfg.get("enabled", False)):
+            return False
+
+        # إنشاء كائن مهمة العفريت
+        elf_task = ElfBossTask(self.conn, elf_cfg)
+
+        # الشرط 2: التحقق من سريان الحدث بالذاكرة الحية (Zero-Request)
+        is_active, active_reason = await elf_task.is_event_active()
+        if not is_active:
+            msg = f"⚠️ [بوت العفريت] الحدث غير نشط على السيرفر ({active_reason}) — تم تعطيل مهمة العفريت ومتابعة البوت العادي."
+            log.warning(f"[{self.email}] {msg}")
+            self.disable_elf_task()
+            if self._log_callback:
+                self._log_callback(msg)
+            return False
+
+        # الشرط 3: التحقق من طاقة اللورد > 30 (Zero-Request)
+        current_stamina = getattr(self.context, "stamina", 0) or int(float(
+            self.conn.init_data.get("lordInfoCtrl", {}).get("base", {}).get("health", 0)
+        ))
+        if current_stamina <= 30:
+            msg = f"⚠️ [بوت العفريت] طاقة اللورد غير كافية ({current_stamina}/30) — تم تعطيل مهمة العفريت ومتابعة البوت العادي."
+            log.warning(f"[{self.email}] {msg}")
+            self.disable_elf_task()
+            if self._log_callback:
+                self._log_callback(msg)
+            return False
+
+        # 🕒 4. حساب مدة الجلسة وفق دقيقة التشغيل الحالية
+        now = datetime.now()
+        cur_min = now.minute
+
+        if cur_min >= 40:
+            # النطاق الثالث: انتظار فوري للدورة القادمة حتى رأس الساعة
+            wait_seconds = (60 - cur_min) * 60 - now.second
+            wait_mins = max(1, wait_seconds // 60)
+            wait_msg = f"⏳ [بوت العفريت] الساعة الآن {now:%H:%M} — في حالة انتظار الدورة التالية لرأس الساعة (متبقي {wait_mins} دقيقة)..."
+            log.info(f"[{self.email}] {wait_msg}")
+            if self._log_callback:
+                self._log_callback(wait_msg)
+            self._update_bot_conn_state("waiting", f"بانتظار رأس الساعة ({wait_mins}د)")
+            if self._async_stop_event is not None:
+                try:
+                    await asyncio.wait_for(self._async_stop_event.wait(), timeout=max(5, wait_seconds))
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(max(5, wait_seconds))
+            return True
+
+        elif cur_min >= 35:
+            # النطاق الثاني: هجوم سريع لمدة 5 دقائق
+            attack_duration = 5.0
+            start_msg = f"🧝 [بوت العفريت] تشغيل هجوم سريع لمدة 5 دقائق (طاقة اللورد: {current_stamina})..."
+        else:
+            # النطاق الأول: هجوم مستمر حتى الدقيقة 40:
+            attack_duration = float(40 - cur_min)
+            start_msg = f"🧝 [بوت العفريت] تشغيل الهجوم حتى الدقيقة 40: (المدة: {attack_duration:.0f} دقيقة | طاقة: {current_stamina})..."
+
+        log.info(f"[{self.email}] {start_msg}")
+        if self._log_callback:
+            self._log_callback(start_msg)
+
+        self._update_bot_conn_state("connected", "🧝 تشغيل بوت العفريت...")
+        self.current_task = "elf_boss"
+        self.current_task_name = "🧝 بوت نخبة العفريت"
+        _safe_bind_task_logger(elf_task, self._log_callback, level=logging.INFO)
+
+        # تمرير المدة المحسوبة بدقة لمهمة العفريت
+        elf_task.config["duration"] = attack_duration
+
+        try:
+            elf_res = await elf_task.run()
+            log.info(f"[{self.email}] 🏁 انتهت جلسة هجوم العفريت: {elf_res.message}")
+        except Exception as ex:
+            log.error(f"💥 خطأ أثناء تشغيل بوت العفريت: {ex}", exc_info=True)
+
+        # بعد انتهاء الهجوم: الانتظار حتى رأس الساعة القادمة إذا بقي وقت
+        now_after = datetime.now()
+        if now_after.minute < 60 and not self._stop_event.is_set():
+            remaining_wait = (60 - now_after.minute) * 60 - now_after.second
+            if remaining_wait > 30:
+                rem_mins = max(1, remaining_wait // 60)
+                pause_msg = f"⏳ [بوت العفريت] اكتمال الهجمات — انتظار {rem_mins} دقيقة حتى بداية رأس الساعة القادمة..."
+                log.info(f"[{self.email}] {pause_msg}")
+                if self._log_callback:
+                    self._log_callback(pause_msg)
+                self._update_bot_conn_state("waiting", f"بانتظار رأس الساعة ({rem_mins}د)")
+                if self._async_stop_event is not None:
+                    try:
+                        await asyncio.wait_for(self._async_stop_event.wait(), timeout=remaining_wait)
+                    except asyncio.TimeoutError:
+                        pass
+                else:
+                    await asyncio.sleep(remaining_wait)
+
+        return True
 
     # ─────────────────────────────────────────────────────────────────
     #  دورة التشغيل الواحدة (Single Run Lifecycle)
@@ -3594,11 +4000,19 @@ class BotManager:
             except Exception as e:
                 log.warning(f"⚠️ تنبيه أثناء تحديث موارد القلعة في بداية الدورة: {e}")
 
-            # 3. تنفيذ سلسلة المهام
+            # 🧝 2.8 فحص وتشغيل وضع بوت العفريت المستقل وفق الشروط الثلاثة والجدولة الذكية
+            is_elf_handled = False
+            if not self._stop_event.is_set():
+                is_elf_handled = await self.run_elf_boss_mode()
+
+            # 3. تنفيذ سلسلة المهام العادية (تُنفذ فقط إذا لم يكن العفريت مفعلاً أو تم تعطيله)
             if self._stop_event.is_set():
                 return {"success": False, "error": "تم طلب إيقاف البوت"}
 
-            pipeline_results = await self.execute_task_pipeline()
+            if not is_elf_handled:
+                pipeline_results = await self.execute_task_pipeline()
+            else:
+                pipeline_results = {"elf_boss": "تم تنفيذ وضع العفريت المستقل بنجاح وحظر المهام الأخرى"}
 
             # 4. تحديث الموارد في نهاية الدورة أيضاً (لحفظ نواتج الحصاد والجمع)
             try:
@@ -3641,7 +4055,7 @@ class BotManager:
     #  دورة التشغيل المستمر (Loop Mode)
     # ─────────────────────────────────────────────────────────────────
 
-    async def run_loop(self, loop_interval_minutes: int = 60) -> None:
+    async def run_loop(self, loop_interval_minutes: int = 40) -> None:
         """
         تشغيل مستمر لا ينتهي — ينفذ دورة كاملة ثم ينتظر مدة ثابتة (Delay) قبل الدورة التالية.
         هذا يعني أن العداد سيبدأ *بعد* انتهاء الدورة الحالية، وليس من بدايتها.
@@ -3661,12 +4075,11 @@ class BotManager:
         self._async_stop_event = asyncio.Event()
 
         iteration = 0
-        # تحويل مدة الانتظار الثابتة إلى ثوانٍ
-        delay_secs = 25 * 60
+        # تحديد المدة الأساسية بالدقائق مع فرض الحدود الآمنة (30 إلى 180 دقيقة)
+        base_mins = max(30, min(180, int(loop_interval_minutes or getattr(self, "loop_interval_minutes", 40) or 40)))
+        self.loop_interval_minutes = base_mins
 
-        log.info(f"🔁 وضع التشغيل المستمر نشط — انتظار ثابت لمدة {loop_interval_minutes} دقيقة بين الدورات")
-
-        self.loop_interval_minutes = int(loop_interval_minutes)
+        log.info(f"🔁 وضع التشغيل المستمر نشط — دورة أساسية كل {self.loop_interval_minutes} دقيقة (+ عشوائي حتى 10 دقائق لحماية الحساب)")
         while not self._stop_event.is_set():
             iteration += 1
             self.iteration = iteration
@@ -3731,8 +4144,15 @@ class BotManager:
             # حساب الوقت المستغرق في تنفيذ الدورة الحالية للطباعة فقط
             elapsed = (datetime.now() - start_time).total_seconds()
             
-            # في هذه الآلية الجديدة، مدة الانتظار (الـ Delay) ثابتة دائماً كما هي محددة في المتغير delay_secs
-            remaining = float(delay_secs)
+            # إذا تم تشغيل وضع العفريت المستقل، فقد تمت مزامنة والانتظار بالفعل حتى رأس الساعة التالية
+            if cycle_res and isinstance(cycle_res, dict) and "elf_boss" in cycle_res.get("results", {}):
+                remaining = 0.0
+            else:
+                # 🎲 حساب وقت انتظار عشوائي ذكي: الأساسي (30-180) + زيادة عشوائية من 0 إلى 10 دقائق لحماية الحساب
+                extra_rand_mins = random.randint(0, 10)
+                actual_wait_mins = self.loop_interval_minutes + extra_rand_mins
+                remaining = float(actual_wait_mins * 60)
+                log.info(f"🎲 توقيت الدورة القادمة: أساسي {self.loop_interval_minutes}د + عشوائي {extra_rand_mins}د = إجمالي {actual_wait_mins} دقيقة")
 
             from datetime import timezone
             next_run_dt = datetime.now(timezone.utc) + timedelta(seconds=remaining)
@@ -3740,7 +4160,7 @@ class BotManager:
             next_run_str = (datetime.now() + timedelta(seconds=remaining)).strftime("%H:%M:%S")
             rem_mins = max(1, round(remaining / 60))
 
-            log.info(f"✅ انتهت الدورة #{iteration} (استغرقت {elapsed:.0f}ث) — الدورة القادمة الساعة: {next_run_str} (بعد {rem_mins} دقيقة ثابتة)")
+            log.info(f"✅ انتهت الدورة #{iteration} (استغرقت {elapsed:.0f}ث) — الدورة القادمة الساعة: {next_run_str} (بعد {rem_mins} دقيقة)")
 
             if remaining > 0:
                 self._update_bot_conn_state(
@@ -3749,12 +4169,16 @@ class BotManager:
                     next_run_time=next_run_iso
                 )
                 log.info(f"💤 بدء انتظار ثابت لمدة {rem_mins} دقيقة...")
-                # نوم مجزأ ليفحص stop_event كل ثانية بدلاً من asyncio.sleep الكامل
-                sleep_step = 1.0
-                slept = 0.0
-                while slept < remaining and not self._stop_event.is_set():
-                    await asyncio.sleep(min(sleep_step, remaining - slept))
-                    slept += sleep_step
+                # انتظار عالي الكفاءة عبر asyncio.wait_for على _async_stop_event (0% CPU وبدون 1500 استيقاظ)
+                try:
+                    if self._stop_event.is_set() or (self._async_stop_event and self._async_stop_event.is_set()):
+                        break
+                    if self._async_stop_event is not None:
+                        await asyncio.wait_for(self._async_stop_event.wait(), timeout=remaining)
+                    else:
+                        await asyncio.sleep(remaining)
+                except asyncio.TimeoutError:
+                    pass
             else:
                 self._update_bot_conn_state("connected", f"بدء الدورة التالية فوراً (#{iteration + 1})")
 

@@ -28,6 +28,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,6 +58,15 @@ class AllianceTreasureTask(BaseTask):
 
     def __init__(self, conn: GameConnection, config: Optional[Dict[str, Any]] = None):
         super().__init__(conn, config or {})
+
+    def is_open_treasure_enabled(self) -> bool:
+        """فحص هل خيار استلام كنز التحالف الخاص مفعّل في الإعدادات."""
+        if "open_treasure" in self.config:
+            return bool(self.config.get("open_treasure"))
+        alliance_cfg = self.config.get("alliance", {})
+        if isinstance(alliance_cfg, dict) and "open_treasure" in alliance_cfg:
+            return bool(alliance_cfg.get("open_treasure"))
+        return False
 
     async def get_free_status(self, force_query: bool = True) -> Dict[str, Any]:
         """
@@ -286,29 +296,32 @@ class AllianceTreasureTask(BaseTask):
         # ── الخطوة 2أ: استلام أي صناديق حفر خاصة مكتملة (2015/6 - receiveType: 1) ──
         can_receive_list = st.get("can_receive_list", [])
         if can_receive_list:
-            for item in can_receive_list:
-                own_uid = item.get("ownUid") or self.uid or getattr(self.conn, "uid", 0)
-                idx = item.get("index")
-                if idx is not None:
-                    idx_int = int(idx)
-                    self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx_int} [UID: {own_uid}] (2015/6 Type 1)...")
-                    await asyncio.sleep(0.3)
-                    r_recv = await self.conn.query(
-                        self.CMD_ALLIANCE_TREASURE,
-                        self.REQ_RECEIVE,
-                        {"receiveType": 1, "ownUid": int(own_uid), "index": idx_int},
-                        timeout=8
-                    )
-                    if r_recv and str(r_recv.get("err", "-1")) == "0":
-                        total_received += 1
-                        received_indices.add(idx_int)
-                        self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx_int} بنجاح!")
-                    elif r_recv and str(r_recv.get("err")) == "620002":
-                        received_indices.add(idx_int)
-                        self.log.info(f"ℹ️ جائزة صندوق التحالف الخاص بي #{idx_int} مستلمة مسبقاً.")
-                    else:
-                        err = r_recv.get("err") if r_recv else "timeout"
-                        self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx_int}: {err}")
+            if not self.is_open_treasure_enabled():
+                self.log.info(f"⏸️ يوجد {len(can_receive_list)} كنز مكتمل في صفحة 'الكنوز الخاصة بي' تم تخطي استلامها (open_treasure معطل).")
+            else:
+                for item in can_receive_list:
+                    own_uid = item.get("ownUid") or self.uid or getattr(self.conn, "uid", 0)
+                    idx = item.get("index")
+                    if idx is not None:
+                        idx_int = int(idx)
+                        self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx_int} [UID: {own_uid}] (2015/6 Type 1)...")
+                        await asyncio.sleep(0.3)
+                        r_recv = await self.conn.query(
+                            self.CMD_ALLIANCE_TREASURE,
+                            self.REQ_RECEIVE,
+                            {"receiveType": 1, "ownUid": int(own_uid), "index": idx_int},
+                            timeout=8
+                        )
+                        if r_recv and str(r_recv.get("err", "-1")) == "0":
+                            total_received += 1
+                            received_indices.add(idx_int)
+                            self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx_int} بنجاح!")
+                        elif r_recv and str(r_recv.get("err")) == "620002":
+                            received_indices.add(idx_int)
+                            self.log.info(f"ℹ️ جائزة صندوق التحالف الخاص بي #{idx_int} مستلمة مسبقاً.")
+                        else:
+                            err = r_recv.get("err") if r_recv else "timeout"
+                            self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx_int}: {err}")
 
         # ── الخطوة 2ب: استلام جوائز مساعدة أعضاء التحالف (2015/6 - receiveType: 2) ──
         can_receive_help_rewards = st.get("can_receive_help_rewards", [])
@@ -319,7 +332,7 @@ class AllianceTreasureTask(BaseTask):
                 nick = item.get("nickName", f"uid:{own_uid}")
                 if idx is not None and own_uid is not None:
                     self.log.info(f"🎁 استلام جائزة مساعدة العضو {nick} [UID: {own_uid}, Index: {idx}] (2015/6 Type 2)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(0.9, 1.7), 2))
                     r_recv = await self.conn.query(
                         self.CMD_ALLIANCE_TREASURE,
                         self.REQ_RECEIVE,
@@ -354,7 +367,7 @@ class AllianceTreasureTask(BaseTask):
 
                 if h_uid is not None and h_idx is not None:
                     self.log.info(f"🤝 تقديم مساعدة صندوق التحالف للعضو {nick} [UID: {h_uid}, Index: {h_idx}] (2015/5)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(0.9, 1.8), 2))
                     try:
                         r_help = await self.conn.query(
                             self.CMD_ALLIANCE_TREASURE,
@@ -390,9 +403,11 @@ class AllianceTreasureTask(BaseTask):
 
             # 1. إذا كان الصندوق مكتملاً أو انتهى وقته وجاهزاً للاستلام (2015/6 - receiveType: 1)
             if can_recv or (endtime > 0 and endtime <= now_ts):
-                if d_idx_int not in received_indices:
+                if not self.is_open_treasure_enabled():
+                    self.log.debug(f"تخطي استلام الكنز الخاص #{d_idx_int} (open_treasure معطل).")
+                elif d_idx_int not in received_indices:
                     self.log.info(f"🎁 استلام جائزة صندوق التحالف المكتمل #{d_idx_int} [UID: {d_own_uid}] (2015/6 - receiveType: 1)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(1.0, 1.8), 2))
                     try:
                         r_recv = await self.conn.query(
                             self.CMD_ALLIANCE_TREASURE,
@@ -419,7 +434,7 @@ class AllianceTreasureTask(BaseTask):
                 can_call = d.get("canCallHelp", True) not in (False, 0, "0", "false")
                 if can_call:
                     self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(round(random.uniform(0.8, 1.5), 2))
                     try:
                         r_ch = await self.conn.query(
                             self.CMD_ALLIANCE_TREASURE,

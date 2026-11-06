@@ -46,7 +46,6 @@ export function BottomNav() {
 
   return (
     <nav
-      dir="rtl"
       aria-label="Mobile Navigation"
       className="bottom-nav-glass md:hidden fixed bottom-0 left-0 right-0 w-full z-50 m-0 p-0 border-b-0 transition-all duration-200"
       style={{
@@ -75,7 +74,13 @@ export function BottomNav() {
             >
               {/* Active glow top bar indicator */}
               {active && (
-                <span className="bottom-nav-active-pill absolute -top-2 inset-x-3 h-[3px] rounded-full bg-primary-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]" />
+                <span
+                  className="bottom-nav-active-pill absolute -top-2 inset-x-3 h-[3px] rounded-full bg-primary-500"
+                  style={{
+                    backgroundColor: 'var(--theme-primary)',
+                    boxShadow: '0 0 10px rgba(var(--theme-primary-rgb), 0.8)',
+                  }}
+                />
               )}
 
               <div className="relative">

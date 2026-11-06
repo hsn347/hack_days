@@ -30,11 +30,15 @@ export function Toggle({ value, onChange, disabled, size = 'md' }: ToggleProps) 
         width: `${width}px`,
         height: `${height}px`,
         minWidth: `${width}px`,
+        ...(value ? {
+          background: 'linear-gradient(90deg, var(--theme-primary), var(--theme-primary-light))',
+          boxShadow: '0 0 12px rgba(var(--theme-primary-rgb), 0.5)',
+        } : {}),
       }}
       className={clsx(
         'relative inline-flex items-center rounded-full transition-all duration-200 cursor-pointer flex-shrink-0 focus:outline-none select-none p-0.5 active:scale-95',
         value
-          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+          ? 'shadow-sm'
           : 'bg-gray-700 hover:bg-gray-600 border border-white/10 shadow-inner',
         disabled && 'opacity-40 cursor-not-allowed active:scale-100'
       )}

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import {
   ChevronDown, ChevronUp, Play, Square, Trash2, Edit2, Clock,
   Zap, Globe, MapPin, Crown, Activity, Lock, ShieldAlert, AlertTriangle,
-  Copy, Sparkles, Loader2
+  Sparkles, Loader2
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
@@ -61,11 +61,6 @@ export function CastleCard({
       })
     }
   }
-  const [liveCastle, setLiveCastle] = useState<Castle>(castle)
-  const [liveState, setLiveState] = useState<string>(castle.bot_status.state)
-  const [connState, setConnState] = useState<string>(castle.bot_status?.conn_state ?? '')
-  const [isStopping, setIsStopping] = useState(false)
-  const [isStarting, setIsStarting] = useState(false)
   const [showStopModal, setShowStopModal] = useState(false)
   const [showPresetModal, setShowPresetModal] = useState(false)
   const [isApplyingPreset, setIsApplyingPreset] = useState(false)
@@ -80,58 +75,48 @@ export function CastleCard({
     (user?.subscription?.expires_at ? new Date(user.subscription.expires_at).getTime() < Date.now() : false)
   )
 
-  // Sync prop changes (دون سحق حالة الإيقاف أو التشغيل الجارية)
-  useEffect(() => {
-    setLiveCastle(castle)
-    if (!isStopping && !isStarting) {
-      setLiveState(castle.bot_status.state)
-      setConnState(castle.bot_status?.conn_state ?? '')
-    }
-  }, [castle, isStopping, isStarting])
+  // Single Source of Truth: derive mutation and active status directly without local state forks
+  const isMutationPending = botControl.isPending && botControl.variables?.castle?.id === castle.id
+  const isStarting = isMutationPending && botControl.variables?.state === 'running'
+  const isStopping = isMutationPending && botControl.variables?.state === 'idle'
 
-  // WebSocket Real-time listener — مراقبة الحالة الحقيقية مع منع الارتداد أثناء الإيقاف والتشغيل
-  const { status: realStatus } = useRealBotStatus(castle.id)
+  // WebSocket Real-time listener (Multiplexed single socket per user)
+  const { status: realStatus } = useRealBotStatus(castle.id, true, userId)
 
-  useEffect(() => {
-    if (isStopping) {
-      if (realStatus === 'idle' || realStatus === 'error') {
-        setIsStopping(false)
-        setLiveState(realStatus === 'error' ? 'error' : 'idle')
-        setConnState(realStatus === 'error' ? 'error' : 'idle')
-      }
-      return
-    }
-    if (isStarting) {
-      if (realStatus && realStatus !== 'idle' && realStatus !== 'offline') {
-        setIsStarting(false)
-        const bs = realStatus === 'starting' ? 'starting' : (realStatus === 'error' ? 'error' : 'running')
-        setLiveState(bs)
-        setConnState(realStatus)
-      }
-      return
-    }
-    if (realStatus && realStatus !== 'offline') {
-      const bs = realStatus === 'starting' ? 'starting' : (realStatus === 'idle' ? 'idle' : (realStatus === 'error' ? 'error' : 'running'))
-      setLiveState(bs)
-      setConnState(realStatus)
-    }
-  }, [realStatus, isStopping, isStarting])
+  // Authoritative active status: User mutation > WebSocket live status > Stored cache status
+  const effectiveStatus = useMemo(() => {
+    if (isStarting) return 'starting'
+    if (isStopping) return 'stopping'
+    if (realStatus && realStatus !== 'offline') return realStatus
+    return castle.bot_status?.conn_state || castle.bot_status?.state || 'idle'
+  }, [isStarting, isStopping, realStatus, castle.bot_status?.conn_state, castle.bot_status?.state])
 
-  const info      = liveCastle.castle_info || castle.castle_info
-  const bot       = liveCastle.bot_status  || castle.bot_status
-  const resources = liveCastle.resources   || castle.resources
+  const info      = castle.castle_info || {} as any
+  const bot       = castle.bot_status  || {} as any
+  const resources = castle.resources   || {} as any
 
-  const emailPrefix = (castle.email || '').split('@')[0] || 'قلعة'
+  const emailPrefix = (castle.email || '').split('@')[0] || t('common.castle', 'قلعة')
   const isGenericName = !info?.lord_name || ['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(info.lord_name)
   const displayLordName = isGenericName ? emailPrefix : info.lord_name
 
-  const isDeploying    = connState === 'deploying' || liveState === 'deploying' || realStatus === 'deploying'
-  const isError        = !isDeploying && (liveState === 'error' || connState === 'error' || bot?.conn_state === 'error' || bot?.state === 'error' || realStatus === 'error')
-  const isDisconnected = !isDeploying && !isError && (connState === 'disconnected' || liveState === 'disconnected')
-  const isReconnecting = !isDeploying && !isError && (connState === 'reconnecting' || liveState === 'reconnecting')
-  const isWaitingCycle = !isDeploying && !isError && (connState === 'waiting' || liveState === 'waiting') && !isDisconnected && !isReconnecting
-  const isRunningNow   = !isDeploying && !isError && (connState === 'connected' || liveState === 'running') && !isDisconnected && !isReconnecting && !isWaitingCycle
-  const isBotActive    = !isError && (isRunningNow || isWaitingCycle || isDisconnected || isReconnecting || (!isDeploying && liveState === 'running'))
+  const avatarPath = String(info?.avatar || '')
+  const isCustomAvatar = Boolean(avatarPath && (avatarPath.startsWith('/') || avatarPath.includes('customAvatar') || avatarPath.startsWith('http')))
+  const avatarUrl = isCustomAvatar ? (avatarPath.startsWith('http') ? avatarPath : `/api/castles/${castle.id}/avatar`) : ''
+  const [imgError, setImgError] = useState(false)
+
+  const isDeploying      = effectiveStatus === 'deploying'
+  const isStoppingActive = isStopping || effectiveStatus === 'stopping'
+  const isStartingActive = isStarting || effectiveStatus === 'starting'
+  const isError          = !isDeploying && !isStoppingActive && !isStartingActive && (
+    effectiveStatus === 'error' ||
+    bot?.conn_state === 'error' ||
+    bot?.state === 'error'
+  )
+  const isDisconnected   = !isDeploying && !isStoppingActive && !isStartingActive && !isError && effectiveStatus === 'disconnected'
+  const isReconnecting   = !isDeploying && !isStoppingActive && !isStartingActive && !isError && effectiveStatus === 'reconnecting'
+  const isWaitingCycle   = !isDeploying && !isStoppingActive && !isStartingActive && !isError && effectiveStatus === 'waiting'
+  const isRunningNow     = !isDeploying && !isStoppingActive && !isStartingActive && !isError && (effectiveStatus === 'connected' || effectiveStatus === 'running')
+  const isBotActive      = !isError && !isStoppingActive && (isRunningNow || isWaitingCycle || isDisconnected || isReconnecting)
 
   // مؤقت لتحديث العد التنازلي للدورة تلقائياً كل 30 ثانية
   const [nowTick, setNowTick] = useState(Date.now())
@@ -188,7 +173,7 @@ export function CastleCard({
   const handleToggleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isDeploying) {
-      toast.error('جاري رفع التغييرات إلى السيرفر... يرجى الانتظار حتى اكتمال التحديث واستئناف البوت تلقائياً')
+      toast.error(t('accounts.deployingToast', 'جاري رفع التغييرات إلى السيرفر... يرجى الانتظار حتى اكتمال التحديث واستئناف البوت تلقائياً'))
       return
     }
     if (isBanned) {
@@ -202,35 +187,22 @@ export function CastleCard({
     if (isBotActive) {
       setShowStopModal(true)
     } else {
-      setIsStarting(true)
-      setLiveState('starting')
-      setConnState('starting')
       botControl.mutate({ castle, state: 'running' }, {
-        onSuccess: () => {
-          setTimeout(() => setIsStarting(false), 2500)
-        },
-        onError: () => {
-          setIsStarting(false)
-          setLiveState('idle')
-          setConnState('idle')
+        onError: (err: any) => {
+          toast.error(err instanceof Error ? err.message : t('accounts.botStartError', 'فشل تشغيل البوت'))
         }
       })
     }
   }
 
   const handleConfirmStop = () => {
-    setIsStopping(true)
-    setLiveState('idle')
-    setConnState('idle')
     setShowStopModal(false)
     botControl.mutate({ castle, state: 'idle' }, {
       onSuccess: () => {
         toast.success(t('accounts.botStoppedSuccess'))
-        setTimeout(() => setIsStopping(false), 2000)
       },
-      onError: () => {
-        toast.error(t('accounts.botStopError'))
-        setIsStopping(false)
+      onError: (err: any) => {
+        toast.error(err instanceof Error ? err.message : t('accounts.botStopError'))
       }
     })
   }
@@ -250,32 +222,32 @@ export function CastleCard({
 
   return (
     <div
+      onClick={handleToggleExpand}
       className={clsx(
-        'relative rounded-2xl overflow-hidden transition-colors duration-150 castle-card border',
+        'relative border rounded-2xl overflow-hidden transition-colors duration-150 cursor-pointer select-none castle-card',
         (isBanned || isExpired) && !isRunningNow
-          ? 'castle-card-locked bg-gray-900 border-rose-500/40'
+          ? 'castle-card-locked dark:bg-gray-900 border-rose-500/40'
           : isDeploying
-          ? 'castle-card-deploying bg-gray-900 border-amber-500/50 ring-1 ring-amber-500/20'
+          ? 'castle-card-deploying dark:bg-gray-900 border-amber-500/50 ring-1 ring-amber-500/20'
           : isError
-          ? 'castle-card-error bg-gray-900 border-rose-500/50 ring-1 ring-rose-500/20'
+          ? 'castle-card-error dark:bg-gray-900 border-rose-500/50 ring-1 ring-rose-500/20'
           : isRunningNow
-          ? 'castle-card-running bg-gray-900 border-emerald-500/50 ring-1 ring-emerald-500/20'
+          ? 'castle-card-running dark:bg-gray-900 border-emerald-500/50 ring-1 ring-emerald-500/20'
           : isWaitingCycle
-          ? 'castle-card-waiting bg-gray-900 border-sky-500/40 ring-1 ring-sky-500/20'
+          ? 'castle-card-waiting dark:bg-gray-900 border-sky-500/40 ring-1 ring-sky-500/20'
           : isDisconnected
-          ? 'castle-card-disconnected bg-gray-900 border-amber-500/40'
+          ? 'castle-card-disconnected dark:bg-gray-900 border-amber-500/40'
           : isReconnecting
-          ? 'castle-card-reconnecting bg-gray-900 border-orange-500/40'
-          : isPending || liveState === 'pending'
-          ? 'castle-card-pending bg-gray-900 border-amber-500/30'
-          : 'castle-card-idle bg-gray-900/90 border-gray-800 hover:border-gray-700'
+          ? 'castle-card-reconnecting dark:bg-gray-900 border-orange-500/40'
+          : isPending || effectiveStatus === 'pending'
+          ? 'castle-card-pending dark:bg-gray-900 border-amber-500/30'
+          : 'castle-card-idle dark:bg-gray-900/90 border-gray-800 hover:border-gray-700'
       )}
     >
 
       {/* ── Header Row ─────────────────────────────────────── */}
       <div
-        onClick={handleToggleExpand}
-        className="flex sm:flex-row flex-col justify-between sm:items-center gap-3.5 p-3.5 sm:p-5 cursor-pointer select-none castle-card-header"
+        className="flex sm:flex-row flex-col justify-between sm:items-center gap-3.5 p-3.5 sm:p-5 select-none castle-card-header"
       >
         {/* Left / Castle Info */}
         <div className="flex items-start sm:items-center gap-3 min-w-0">
@@ -290,9 +262,9 @@ export function CastleCard({
           <div className="relative flex-shrink-0">
             <div
               className={clsx(
-                'flex justify-center items-center rounded-2xl w-11 sm:w-12 h-11 sm:h-12 font-black text-base transition-all duration-300 castle-avatar',
+                'flex justify-center items-center rounded-2xl w-11 sm:w-12 h-11 sm:h-12 overflow-hidden font-black text-base transition-all duration-300 castle-avatar',
                 isDeploying
-                  ? 'avatar-deploying bg-gradient-to-br from-amber-500/25 via-amber-600/35 to-orange-500/25 border-2 border-amber-400/60 text-amber-300'
+                  ? 'avatar-deploying bg-gradient-to-br from-amber-500/25 via-amber-600/35 to-orange-500/25 border-2 border-amber-400/60 text-amber-800 dark:text-amber-300'
                   : isError
                   ? 'avatar-error bg-gradient-to-br from-rose-500/25 via-rose-600/35 to-red-500/25 border-2 border-rose-400/60 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.3)]'
                   : isRunningNow
@@ -304,36 +276,18 @@ export function CastleCard({
                   : 'avatar-idle bg-white/[0.05] border border-white/15 text-white/80'
               )}
             >
-              {displayLordName[0]?.toUpperCase() || '🏰'}
+              {isCustomAvatar && !imgError ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayLordName}
+                  className="rounded-2xl w-full h-full object-cover select-none"
+                  onError={() => setImgError(true)}
+                  loading="lazy"
+                />
+              ) : (
+                displayLordName[0]?.toUpperCase() || '🏰'
+              )}
             </div>
-
-            {/* Pulsing Beacon Ring on Avatar */}
-            {isDeploying ? (
-              <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
-                <span className="inline-flex absolute bg-amber-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="inline-flex relative bg-amber-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
-              </span>
-            ) : isError ? (
-              <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
-                <span className="inline-flex absolute bg-rose-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="inline-flex relative bg-rose-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
-              </span>
-            ) : isRunningNow ? (
-              <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
-                <span className="inline-flex absolute bg-emerald-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="inline-flex relative bg-emerald-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
-              </span>
-            ) : isWaitingCycle ? (
-              <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
-                <span className="inline-flex absolute bg-sky-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="inline-flex relative bg-sky-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
-              </span>
-            ) : isDisconnected ? (
-              <span className="-top-1 absolute flex w-3.5 h-3.5 -end-1">
-                <span className="inline-flex absolute bg-amber-400 opacity-80 rounded-full w-full h-full animate-ping"></span>
-                <span className="inline-flex relative bg-amber-500 border-2 border-gray-950 rounded-full w-3.5 h-3.5 castle-beacon-dot"></span>
-              </span>
-            ) : null}
           </div>
 
           {/* Main Titles and Meta Badges */}
@@ -359,9 +313,9 @@ export function CastleCard({
 
               {/* Status Badge */}
               {isDeploying ? (
-                <span className="flex items-center gap-1.5 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.3)] px-2.5 py-0.5 border border-amber-500/50 rounded-full font-bold text-[10px] text-amber-300 sm:text-xs animate-pulse castle-status-badge status-badge-deploying">
-                  <Loader2 size={12} className="animate-spin text-amber-400" />
-                  <span>جاري رفع التحديثات...</span>
+                <span className="flex items-center gap-1.5 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.3)] px-2.5 py-0.5 border border-amber-500/50 rounded-full font-bold text-[10px] text-amber-800 dark:text-amber-300 sm:text-xs animate-pulse castle-status-badge status-badge-deploying">
+                  <Loader2 size={12} className="text-amber-600 dark:text-amber-400 animate-spin" />
+                  <span>{t('accounts.deployingBadge', 'جاري رفع التحديثات...')}</span>
                 </span>
               ) : isBanned ? (
                 <span className="flex items-center gap-1.5 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.3)] px-2.5 py-0.5 border border-rose-500/50 rounded-full font-bold text-[10px] text-rose-300 sm:text-xs castle-status-badge status-badge-banned">
@@ -376,9 +330,9 @@ export function CastleCard({
               ) : isError ? (
                 <span className="flex items-center gap-1.5 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.3)] px-2.5 py-0.5 border border-rose-500/50 rounded-full font-bold text-[10px] text-rose-300 sm:text-xs animate-pulse castle-status-badge status-badge-error">
                   <span className="bg-rose-400 rounded-full w-1.5 h-1.5" />
-                  <span>{bot?.conn_message ? 'خطأ في المصادقة' : 'خطأ'}</span>
+                  <span>{bot?.conn_message ? t('status.authError', 'خطأ في المصادقة') : t('status.error', 'خطأ')}</span>
                 </span>
-              ) : isPending || liveState === 'pending' ? (
+              ) : isPending || effectiveStatus === 'pending' ? (
                 <span className="flex items-center gap-1 bg-amber-500/15 px-2 py-0.5 border border-amber-500/30 rounded-full font-semibold text-[10px] text-amber-400 sm:text-xs castle-status-badge status-badge-pending">
                   <Clock size={11} />
                   <span>{t('status.pending')}</span>
@@ -439,8 +393,8 @@ export function CastleCard({
             {isError && (
               <div className="flex items-center gap-1.5 bg-rose-500/15 mt-1.5 px-2.5 py-1 border border-rose-500/35 rounded-lg font-semibold text-[11px] text-rose-200 animate-pulse">
                 <AlertTriangle size={13} className="text-rose-400 shrink-0" />
-                <span className="truncate" title={bot?.conn_message || bot?.last_error || 'خطأ في البريد أو كلمة المرور — اضغط ✏️ للتعديل'}>
-                  {bot?.conn_message || bot?.last_error || 'خطأ في البريد أو كلمة المرور — اضغط ✏️ للتعديل'}
+                <span className="truncate" title={bot?.conn_message || bot?.last_error || t('accounts.authFixPrompt', 'خطأ في البريد أو كلمة المرور — اضغط ✏️ للتعديل')}>
+                  {bot?.conn_message || bot?.last_error || t('accounts.authFixPrompt', 'خطأ في البريد أو كلمة المرور — اضغط ✏️ للتعديل')}
                 </span>
               </div>
             )}
@@ -476,10 +430,10 @@ export function CastleCard({
               type="button"
               disabled
               onClick={e => e.stopPropagation()}
-              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-amber-500/10 px-3.5 py-2 sm:py-1.5 border border-amber-500/30 rounded-xl sm:rounded-lg font-bold text-amber-300/90 text-xs cursor-not-allowed select-none"
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2 sm:py-1.5 border border-amber-300 dark:border-amber-500/30 rounded-xl sm:rounded-lg font-bold text-amber-800 dark:text-amber-300 text-xs cursor-not-allowed select-none btn-deploying"
             >
-              <Loader2 size={13} className="animate-spin text-amber-400" />
-              <span>جاري التحديث...</span>
+              <Loader2 size={13} className="text-amber-600 dark:text-amber-400 animate-spin" />
+              <span>{t('accounts.updating', 'جاري التحديث...')}</span>
             </button>
           ) : isBanned ? (
             <button
@@ -501,10 +455,10 @@ export function CastleCard({
               <Lock size={13} className="text-rose-400" />
               <span>{t('accounts.lockedExpired')}</span>
             </button>
-          ) : isPending || liveState === 'pending' ? (
+          ) : isPending || effectiveStatus === 'pending' ? (
             <span
               onClick={e => e.stopPropagation()}
-              className="flex sm:flex-initial flex-1 justify-center items-center gap-1 bg-yellow-500/10 px-3 py-2 sm:py-1.5 border border-yellow-500/30 rounded-xl sm:rounded-lg font-semibold text-yellow-400 text-xs cursor-not-allowed"
+              className="flex sm:flex-initial flex-1 justify-center items-center gap-1 bg-amber-50 dark:bg-yellow-500/10 px-3 py-2 sm:py-1.5 border border-amber-300 dark:border-yellow-500/30 rounded-xl sm:rounded-lg font-semibold text-amber-800 dark:text-yellow-400 text-xs cursor-not-allowed"
             >
               <Clock size={13} />
               {t('status.pending')}
@@ -512,25 +466,28 @@ export function CastleCard({
           ) : (
             <button
               onClick={handleToggleClick}
-              disabled={isStopping || isStarting}
+              disabled={isStoppingActive || isStartingActive}
+              style={!isBotActive && !isStoppingActive && !isStartingActive ? { backgroundColor: 'var(--theme-primary)', color: '#ffffff' } : {}}
               className={clsx(
                 'flex sm:flex-initial flex-1 justify-center items-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl sm:rounded-lg font-bold text-xs transition-colors cursor-pointer select-none castle-btn-toggle',
-                isStopping || isStarting
-                  ? 'bg-gray-800 border border-gray-700 text-gray-400 cursor-not-allowed'
+                isStoppingActive
+                  ? 'btn-stopping bg-slate-100 dark:bg-gray-800 border border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-400 cursor-not-allowed'
+                  : isStartingActive
+                  ? 'btn-starting bg-emerald-50 dark:bg-gray-800 border border-emerald-300 dark:border-gray-700 text-emerald-800 dark:text-gray-300 cursor-not-allowed'
                   : isBotActive
                   ? 'btn-stop-bot bg-rose-600 hover:bg-rose-700 text-white'
-                  : 'btn-start-bot bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'btn-start-bot text-white hover:opacity-90'
               )}
             >
-              {isStopping ? (
+              {isStoppingActive ? (
                 <>
-                  <Loader2 size={13} className="animate-spin text-gray-300" />
-                  <span>{t('status.stopping') || 'جاري الإيقاف...'}</span>
+                  <Loader2 size={13} className="text-slate-500 dark:text-gray-300 animate-spin stopping-spinner" />
+                  <span className="stopping-text">{t('status.stopping', 'جاري الإيقاف...')}</span>
                 </>
-              ) : isStarting ? (
+              ) : isStartingActive ? (
                 <>
-                  <Loader2 size={13} className="animate-spin text-emerald-400" />
-                  <span>{t('status.starting') || 'جاري التشغيل...'}</span>
+                  <Loader2 size={13} className="text-emerald-600 dark:text-emerald-400 animate-spin starting-spinner" />
+                  <span className="starting-text">{t('status.starting', 'جاري التشغيل...')}</span>
                 </>
               ) : isBotActive ? (
                 <>
@@ -546,34 +503,21 @@ export function CastleCard({
             </button>
           )}
 
-          {/* Preset Settings Button */}
-          {!isPending && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setShowPresetModal(true) }}
-              disabled={isApplyingPreset}
-              title={t('accounts.fixedPresetTooltip')}
-              className="flex sm:flex-initial flex-1 justify-center items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 px-3 py-2 sm:py-1.5 border border-amber-500/40 rounded-xl sm:rounded-lg font-bold text-amber-900 dark:text-amber-300 text-xs active:scale-95 transition-all duration-200 cursor-pointer select-none castle-btn-preset"
-            >
-              <Sparkles size={13} className={isApplyingPreset ? 'animate-spin text-amber-700 dark:text-amber-400' : 'text-amber-700 dark:text-amber-400'} />
-              <span>{isApplyingPreset ? t('accounts.applyingPreset') : t('accounts.fixedPreset')}</span>
-            </button>
-          )}
-
           {/* Icon Controls Group */}
           <div
             onClick={e => e.stopPropagation()}
             className="castle-icon-group flex items-center gap-0.5 bg-white/[0.04] p-1 sm:p-0.5 border border-white/8 rounded-xl sm:rounded-lg shrink-0"
           >
-            {/* Set as batch template */}
-            {onSetBatchTemplate && !isPending && (
+            {/* Fixed Preset Settings */}
+            {!isPending && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onSetBatchTemplate(castle.id) }}
-                className="hover:bg-primary-500/20 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-gray-400 hover:text-primary-300 transition-colors cursor-pointer castle-action-btn castle-action-btn-template"
-                title={t('accounts.useAsBatchTemplate')}
+                onClick={(e) => { e.stopPropagation(); setShowPresetModal(true) }}
+                disabled={isApplyingPreset}
+                title={t('accounts.fixedPresetTooltip')}
+                className="hover:bg-amber-500/15 disabled:opacity-50 p-2 sm:p-1.5 rounded-lg sm:rounded-md text-amber-500 hover:text-amber-400 transition-colors cursor-pointer castle-action-btn castle-action-btn-preset"
               >
-                <Copy size={15} />
+                <Sparkles size={15} className={isApplyingPreset ? 'animate-spin text-amber-400' : 'text-amber-500'} />
               </button>
             )}
 
@@ -619,8 +563,7 @@ export function CastleCard({
 
       {/* ── Resources Row ─────────────────────────────────── */}
       <div
-        onClick={handleToggleExpand}
-        className="bg-white/[0.01] px-4 sm:px-5 pt-3 pb-3.5 border-white/8 border-t cursor-pointer select-none castle-resources-row"
+        className="bg-white/[0.01] px-4 sm:px-5 pt-3 pb-3.5 border-white/8 border-t select-none castle-resources-row"
       >
         <ResourceBar resources={resources} />
         {bot.last_error && (

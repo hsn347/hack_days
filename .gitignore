@@ -12,14 +12,13 @@ split_install.apk
 base_temp.apk
 split_arm64.apk
 dumps/
-lua_src/
+# Logs
 *.log
 *.log.*
-logs/
+sniffer_log.txt
 
 # Sensitive keys and credentials
 firebase_service_account*.json
-firebase_service_account.json.json
 session_cache.json
 .env
 .env.*
@@ -28,40 +27,12 @@ session_cache.json
 .bot_cfg_*.json
 .bot_config_*.json
 .sched_*.json
-data/
 _frida_session.js
 
 # SQLite local databases and runtime data
-castles.db*
-*.db
-*.db*
-database/*.db*
 *.sqlite3
 exclude_history.json
 shared_gather_history.json
 
-# Development / experimental tools
-auto_elf_boss.py
-bot_shell.py
-live_sniffer.py
-simple_cmd.js
-sniffer_log.txt
-الحيوان.txt
-tasks/show_quests.py
-
-# Reference docs (not needed in production)
-TASKS_INDEX.md
-firebase_schema.json
-castle_prereqs.json
-
-# Reference images (development only)
-الصور اللعبة/
-صور لوحة التحكم التي نريد مثلها/
-
-# AI / Antigravity local config
-.agents/
-GEMINI.md
-scratch/
-*.bak
-*_dump.txt
-comprehensive_query_example.txt
+# Dependencies
+node_modules/

@@ -114,12 +114,15 @@ RESOURCE_NAMES = {
 # ════════════════════════════════════════════════════════════════════
 
 _TECH_NAMES_CACHE: Dict[str, Dict[str, Any]] = {}
+_TECH_PREREQS_CACHE: Dict[str, Dict[str, Any]] = {}
 
 def load_tech_names() -> Dict[str, Dict[str, Any]]:
     global _TECH_NAMES_CACHE
     if _TECH_NAMES_CACHE:
         return _TECH_NAMES_CACHE
-    json_path = os.path.join(_ROOT_DIR, "tech_names.json")
+    json_path = os.path.join(_ROOT_DIR, "database", "tech_names.json")
+    if not os.path.exists(json_path):
+        json_path = os.path.join(_ROOT_DIR, "tech_names.json")
     if os.path.exists(json_path):
         try:
             with open(json_path, "r", encoding="utf-8") as f:
@@ -127,6 +130,23 @@ def load_tech_names() -> Dict[str, Dict[str, Any]]:
         except Exception as e:
             logging.getLogger("tasks").warning(f"⚠️ فشل قراءة tech_names.json: {e}")
     return _TECH_NAMES_CACHE
+
+
+def load_tech_prereqs() -> Dict[str, Dict[str, Any]]:
+    """تحميل متطلبات الأبحاث وشروط المباني والموارد من core/tech_prereqs.json بنمط Zero-Request."""
+    global _TECH_PREREQS_CACHE
+    if _TECH_PREREQS_CACHE:
+        return _TECH_PREREQS_CACHE
+    json_path = os.path.join(_ROOT_DIR, "core", "tech_prereqs.json")
+    if not os.path.exists(json_path):
+        json_path = os.path.join(_ROOT_DIR, "database", "tech_prereqs.json")
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                _TECH_PREREQS_CACHE = json.load(f)
+        except Exception as e:
+            logging.getLogger("tasks").warning(f"⚠️ فشل قراءة tech_prereqs.json: {e}")
+    return _TECH_PREREQS_CACHE
 
 
 def format_duration(seconds: float) -> str:
@@ -157,6 +177,175 @@ class ResearchTask(BaseTask):
     def __init__(self, conn: GameConnection, config: Optional[Dict[str, Any]] = None):
         super().__init__(conn, config)
         self.tech_names = load_tech_names()
+        self.tech_prereqs = load_tech_prereqs()
+
+    def get_building_levels_from_memory(self) -> Dict[str, int]:
+        """
+        استخراج مستويات مباني المدينة من الذاكرة الحية (init_data["cityCtrl"]["blist"])
+        بنمط Zero-Request خالص بدون إرسال أي طلب للسيرفر.
+        """
+        levels: Dict[str, int] = {}
+        if not self.conn or not hasattr(self.conn, "init_data") or not isinstance(self.conn.init_data, dict):
+            return levels
+
+        city_ctrl = self.conn.init_data.get("cityCtrl", {})
+        if not isinstance(city_ctrl, dict):
+            return levels
+
+        blist = city_ctrl.get("blist", [])
+        if not isinstance(blist, list):
+            return levels
+
+        for item in blist:
+            if isinstance(item, dict):
+                binfo = item.get("binfo", {})
+                if isinstance(binfo, dict):
+                    # فحص حالة المبنى: حالة 8 تعني مقفل LOCK وغير مشيّد إطلاقاً في المدينة
+                    state = str(binfo.get("state", "0"))
+                    if state == "8":
+                        continue
+                    bid = str(binfo.get("bid", ""))
+                    try:
+                        lv = int(binfo.get("lv", 0))
+                    except (ValueError, TypeError):
+                        lv = 0
+                    if bid and lv > levels.get(bid, 0):
+                        levels[bid] = lv
+        return levels
+
+    def get_resources_from_memory(self) -> Dict[str, float]:
+        """
+        استخراج الموارد المتاحة من الذاكرة الحية (reslist + saferes)
+        بنمط Zero-Request خالص بدون إرسال أي طلب شبكي.
+        """
+        res: Dict[str, float] = {"1002": 0.0, "1003": 0.0, "1004": 0.0, "1005": 0.0}
+        if not self.conn or not hasattr(self.conn, "init_data") or not isinstance(self.conn.init_data, dict):
+            return res
+
+        city_ctrl = self.conn.init_data.get("cityCtrl", {})
+        if not isinstance(city_ctrl, dict):
+            return res
+
+        reslist = city_ctrl.get("reslist", {})
+        saferes = city_ctrl.get("saferes", {})
+
+        for r_k in res:
+            v_reg = 0.0
+            v_safe = 0.0
+            if isinstance(reslist, dict) and r_k in reslist:
+                try:
+                    v_reg = float(reslist[r_k])
+                except (ValueError, TypeError):
+                    v_reg = 0.0
+            if isinstance(saferes, dict) and r_k in saferes:
+                try:
+                    v_safe = float(saferes[r_k])
+                except (ValueError, TypeError):
+                    v_safe = 0.0
+            res[r_k] = v_reg + v_safe
+        return res
+
+    def get_backpack_items_from_memory(self) -> Dict[str, int]:
+        """
+        استخراج كميات الأدوات في الحقيبة من الذاكرة الحية (init_data["backpackCtrl"])
+        بنمط Zero-Request خالص بدون إرسال أي طلب شبكي.
+        """
+        bag: Dict[str, int] = {}
+        if not self.conn or not hasattr(self.conn, "init_data") or not isinstance(self.conn.init_data, dict):
+            return bag
+
+        bp = self.conn.init_data.get("backpackCtrl", {})
+        if isinstance(bp, dict):
+            for k, v in bp.items():
+                if isinstance(v, dict):
+                    try:
+                        bag[str(k)] = int(v.get("count", 0))
+                    except (ValueError, TypeError):
+                        bag[str(k)] = 0
+                elif isinstance(v, (int, str)):
+                    try:
+                        bag[str(k)] = int(v)
+                    except (ValueError, TypeError):
+                        bag[str(k)] = 0
+        return bag
+
+    def check_tech_feasibility(
+        self,
+        tech_id: str,
+        target_level: int,
+        learned_techs: Dict[str, int],
+        building_levels: Dict[str, int],
+        current_res: Dict[str, float],
+        bag_items: Optional[Dict[str, int]] = None
+    ) -> Tuple[bool, str]:
+        """
+        التحقق من إمكانية وصلاحية إجراء البحث بالاعتماد الكلي على الذاكرة الحية:
+          1. فحص هل تجاوز البحث الحد الأقصى للمستوى.
+          2. فحص مستوى مبنى الأكاديمية (College 113) وأي مبنى مشترط آخر مع فحص حالة القفل (LOCK=8).
+          3. فحص الأبحاث السابقة المطلوبة (pre-requisite science).
+          4. فحص الموارد المتاحة (طعام، خشب، حديد، فضة).
+          5. فحص أدوات وأوسمة الحرب المطلوبة (technologyWEs مثل وسام الحرب 301101).
+        """
+        s_id = str(tech_id)
+        s_lv = str(target_level)
+
+        t_data = self.tech_prereqs.get(s_id, {})
+        if not t_data:
+            # إذا لم تكن البيانات مسجلة بالقاعدة، نسمح به فقط للمستوى 1 مع تنبيه
+            return True, "بيانات المتطلبات غير مسجلة في القاعدة"
+
+        lv_info = t_data.get(s_lv)
+        if not lv_info:
+            return False, f"تجاوز أقصى مستوى مسجل للبحث ({len(t_data)})"
+
+        # 1. فحص مبنى الأكاديمية والمباني المشترطة
+        build_reqs = lv_info.get("build_reqs", {})
+        for req_bid, req_blv in build_reqs.items():
+            curr_blv = building_levels.get(str(req_bid), 0)
+            if curr_blv < int(req_blv):
+                if str(req_bid) == "113":
+                    b_name = "الأكاديمية"
+                elif str(req_bid) == "301":
+                    b_name = "المعجزة / قاعة المجد"
+                elif str(req_bid) == "101":
+                    b_name = "القلعة"
+                else:
+                    b_name = f"المبنى {req_bid}"
+                curr_status = f"الحالي: {curr_blv}" if curr_blv > 0 else "المبنى مقفل أو غير مشيّد"
+                return False, f"يتطلب {b_name} مستوى {req_blv} ({curr_status})"
+
+        # 2. فحص الأبحاث المسبقة (pre_techs)
+        pre_techs = lv_info.get("pre_techs", [])
+        for pre in pre_techs:
+            p_id = str(pre.get("tech_id"))
+            p_req_lv = int(pre.get("level", 1))
+            p_curr_lv = learned_techs.get(p_id, 0)
+            if p_curr_lv < p_req_lv:
+                p_title = self.get_tech_title(p_id)
+                return False, f"يتطلب بحث {p_title} بمستوى {p_req_lv} (الحالي: {p_curr_lv})"
+
+        # 3. فحص الموارد المتاحة من الذاكرة الحية
+        cost_res = lv_info.get("cost_res", {})
+        for r_id, r_cost in cost_res.items():
+            cost_val = float(r_cost)
+            if cost_val > 0:
+                avail_val = current_res.get(str(r_id), 0.0)
+                if avail_val < cost_val:
+                    r_name = RESOURCE_NAMES.get(str(r_id), f"مورد #{r_id}")
+                    return False, f"نقص في {r_name} (المطلوب: {int(cost_val):,} | المتوفر: {int(avail_val):,})"
+
+        # 4. فحص متطلبات الأدوات وأوسمة الحرب (technologyWEs مثل وسام الحرب 301101)
+        cost_wes = lv_info.get("cost_wes", {})
+        if cost_wes and bag_items is not None:
+            for w_id, w_cost in cost_wes.items():
+                w_cost_int = int(w_cost)
+                if w_cost_int > 0:
+                    avail_cnt = bag_items.get(str(w_id), 0)
+                    if avail_cnt < w_cost_int:
+                        item_name = "وسام الحرب (301101)" if str(w_id) == "301101" else f"الأداة #{w_id}"
+                        return False, f"نقص في {item_name} (المطلوب: {w_cost_int} | المتوفر: {avail_cnt})"
+
+        return True, "جاهز ومستوفٍ لكافة الشروط"
 
     def get_tech_title(self, tech_id: Any) -> str:
         """إرجاع الاسم العربي والرمز للبحث."""
@@ -168,12 +357,83 @@ class ResearchTask(BaseTask):
             name_ar = name_en or f"بحث #{s_id}"
         return f"[{s_id}] {name_ar}"
 
-    async def get_queue_status(self) -> Dict[str, Any]:
+    async def get_queue_status(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
-        الاستعلام عن حالة طابور الأبحاث الحالي عبر 1017/3.
-        يعيد dict يحتوي: is_busy, remain_time, tech_id, current_level, resources.
+        الاستعلام عن حالة طابور الأبحاث الحالي بنمط Zero-Request.
+        يفحص أولاً طابور أبحاث الأكاديمية (Queue 1212) في queueCtrl والذاكرة المؤقتة،
+        ولا يرسل طلب 1017/3 إلى السيرفر إلا إذا كانت الذاكرة فارغة أو طُلب التحديث إجبارياً.
         """
-        resp = await self.conn.query("1017", "3", {})
+        # 1. فحص طابور الأبحاث (1212) في queueCtrl داخل init_data مباشرة بدون أي طلب شبكي
+        if not force_refresh and self.conn and hasattr(self.conn, "init_data"):
+            init_data = self.conn.init_data
+            if isinstance(init_data, dict) and "queueCtrl" in init_data:
+                queue_ctrl = init_data.get("queueCtrl", {})
+                if isinstance(queue_ctrl, dict):
+                    q1212 = queue_ctrl.get("1212") or queue_ctrl.get(1212)
+                    if isinstance(q1212, dict):
+                        start_time = float(q1212.get("starttime", 0))
+                        total_time = float(q1212.get("totaltime", q1212.get("ottime", 0)))
+                        remain_time = max(0.0, (start_time + total_time) - time.time())
+                        extra_data = q1212.get("data", {})
+
+                        if remain_time > 0 and isinstance(extra_data, dict):
+                            tech_keys = [k for k in extra_data.keys() if str(k).isdigit()]
+                            if tech_keys:
+                                cur_tid = tech_keys[0]
+                                item_info = extra_data.get(cur_tid)
+                                if isinstance(item_info, list):
+                                    target_level = item_info[1] if len(item_info) > 1 else 1
+                                    cost_info = item_info[2] if len(item_info) > 2 and isinstance(item_info[2], dict) else {}
+                                elif isinstance(item_info, (int, str)):
+                                    try:
+                                        target_level = int(item_info)
+                                    except (ValueError, TypeError):
+                                        target_level = 1
+                                    cost_info = {}
+                                else:
+                                    target_level = 1
+                                    cost_info = {}
+
+                                return {
+                                    "is_busy": True,
+                                    "remain_time": remain_time,
+                                    "tech_id": str(cur_tid),
+                                    "target_level": target_level,
+                                    "cost_info": cost_info,
+                                    "raw": q1212
+                                }
+                    else:
+                        # طابور الأبحاث 1212 غير موجود في queueCtrl، مما يعني أن الطابور فارغ ومتاح
+                        return {"is_busy": False, "remain_time": 0, "raw": {}}
+
+        # 2. فحص الحزم المخزنة مسبقاً (cached_packets) لـ 1017/3
+        if not force_refresh and self.conn:
+            cached = getattr(self.conn, "cached_packets", {})
+            resp_cached = cached.get(("1017", "3")) or cached.get((1017, 3))
+            if isinstance(resp_cached, dict) and resp_cached.get("err") == "0":
+                data = resp_cached.get("data", {})
+                remain_time = float(data.get("remainTime", 0))
+                extra_data = data.get("extraData", {})
+                if remain_time > 0 and extra_data:
+                    tech_keys = [k for k in extra_data.keys() if str(k).isdigit()]
+                    if tech_keys:
+                        cur_tid = tech_keys[0]
+                        item_info = extra_data.get(cur_tid)
+                        target_level = item_info[1] if isinstance(item_info, list) and len(item_info) > 1 else 1
+                        cost_info = item_info[2] if isinstance(item_info, list) and len(item_info) > 2 and isinstance(item_info[2], dict) else {}
+                        return {
+                            "is_busy": True,
+                            "remain_time": remain_time,
+                            "tech_id": str(cur_tid),
+                            "target_level": target_level,
+                            "cost_info": cost_info,
+                            "raw": data
+                        }
+                return {"is_busy": False, "remain_time": 0, "raw": data}
+
+        # 3. الاستعلام الشبكي كخيار أخير عند الحاجة أو عند التحديث الإجباري
+        self.log.warning("🛑🛑🛑🛑🛑🛑")
+        resp = await self.conn.query("1017", "3", {}, timeout=6)
         if resp.get("err") != "0":
             return {"is_busy": False, "remain_time": 0}
 
@@ -210,17 +470,42 @@ class ResearchTask(BaseTask):
 
         return {"is_busy": False, "remain_time": 0, "raw": data}
 
-    async def get_learned_technologies(self) -> Dict[str, int]:
+    async def get_learned_technologies(self, force_refresh: bool = False) -> Dict[str, int]:
         """
-        الاستعلام عن كافة الأبحاث المكتسبة ومستوياتها الحالية عبر 1017/1.
-        يعيد dict: {tech_id: level}
+        الاستعلام عن كافة الأبحاث المكتسبة ومستوياتها الحالية بنمط Zero-Request.
+        يفحص أولاً technologyCtrl في الذاكرة الحية (init_data)، ولا يرسل 1017/1 إلا إذا كانت الذاكرة فارغة أو طُلب التحديث.
         """
-        resp = await self.conn.query("1017", "1", {})
-        if resp.get("err") != "0":
-            return {}
+        data: Dict[str, Any] = {}
 
-        data = resp.get("data", {})
-        learned = {}
+        # 1. القراءة المباشرة من technologyCtrl المخزن بالذاكرة الحية
+        if not force_refresh and self.conn and hasattr(self.conn, "init_data"):
+            init_data = self.conn.init_data
+            if isinstance(init_data, dict):
+                tech_ctrl = init_data.get("technologyCtrl")
+                if isinstance(tech_ctrl, dict) and tech_ctrl:
+                    data = tech_ctrl
+
+        # 2. فحص الحزم المخزنة مسبقاً (cached_packets) لـ 1017/1
+        if not data and not force_refresh and self.conn:
+            cached = getattr(self.conn, "cached_packets", {})
+            resp_cached = cached.get(("1017", "1")) or cached.get((1017, 1))
+            if isinstance(resp_cached, dict) and resp_cached.get("err") == "0":
+                data = resp_cached.get("data", {})
+
+        # 3. الاستعلام الشبكي كخيار أخير فقط عند الحاجة أو التحديث الإجباري
+        if not data:
+            self.log.warning("🛑🛑🛑🛑🛑🛑")
+            resp = await self.conn.query("1017", "1", {}, timeout=6)
+            if resp.get("err") == "0":
+                data = resp.get("data", {})
+                # تحديث الذاكرة الحية بالبيانات الجديدة
+                if self.conn and hasattr(self.conn, "init_data") and isinstance(self.conn.init_data, dict):
+                    self.conn.init_data["technologyCtrl"] = data
+            else:
+                return {}
+
+        # تحليل وتنسيق الأبحاث المستخرجة
+        learned: Dict[str, int] = {}
         for tid, val in data.items():
             if isinstance(val, list) and len(val) > 1:
                 try:
@@ -228,62 +513,111 @@ class ResearchTask(BaseTask):
                 except (ValueError, TypeError):
                     learned[str(tid)] = 1
             elif isinstance(val, (int, str)):
-                learned[str(tid)] = int(val)
+                try:
+                    learned[str(tid)] = int(val)
+                except (ValueError, TypeError):
+                    learned[str(tid)] = 1
         return learned
 
     def determine_recommended_tech(
         self,
         learned_techs: Dict[str, int],
-        tree_pref: str = "military",
-        explicit_tech_id: Optional[str] = None
+        tree_pref: str = "balanced",
+        explicit_tech_id: Optional[str] = None,
+        building_levels: Optional[Dict[str, int]] = None,
+        current_res: Optional[Dict[str, float]] = None,
+        bag_items: Optional[Dict[str, int]] = None
     ) -> Optional[Tuple[str, int, str]]:
         """
-        تحديد البحث الموصى به.
-        يعيد tuple: (tech_id, target_level, tree_name)
+        تحديد البحث الموصى به بذكاء وموازنة متساوية بين جميع الأشجار:
+          1. إذا حدد المستخدم بحثاً معيناً (--tech-id):
+             - يتم فحص شروطه؛ إن تحققت اعتُمد، وإن تعذر وُضّح السبب في السجل وسقط إلى الاختيار المتوازن.
+          2. النمط المتوازن (balanced / all / auto):
+             - حساب إجمالي المستويات المكتسبة في كل شجرة أبحاث.
+             - ترتيب الأشجار تصاعدياً (الشجرة الأقل تطوراً تحصل على الأولوية القصوى).
+             - فحص أبحاث الشجرة الأقل (الأبحاث بمستوى 0 أولاً، ثم الأقل تصاعدياً).
+             - فحص الصلاحية والمتطلبات (الأكاديمية + الأبحاث المسبقة + الموارد) عبر الذاكرة الحية.
+             - إذا كانت الشجرة الأقل متعذرة بسبب شروط لم تكتمل، ينتقل تلقائياً للشجرة التالية الأقل (Cascading Fallback).
+          3. إذا حدد المستخدم شجرة مخصصة (مثل: defense أو military):
+             - تُفحص تلك الشجرة أولاً مع التحقق الصارم من المتطلبات.
+             - إن تعذرت جميع أبحاث الشجرة المحددة، ينتقل تلقائياً للأشجار الأقل الأخرى لمنع توقف البوت.
         """
-        # 1. إذا حدد المستخدم ID صريحاً
+        if building_levels is None:
+            building_levels = self.get_building_levels_from_memory()
+        if current_res is None:
+            current_res = self.get_resources_from_memory()
+        if bag_items is None:
+            bag_items = self.get_backpack_items_from_memory()
+
+        # 1. إذا حدد المستخدم معرّف بحث صريحاً
         if explicit_tech_id:
             s_tid = str(explicit_tech_id).strip()
             cur_lv = learned_techs.get(s_tid, 0)
-            return (s_tid, cur_lv + 1, "محدد يدوياً")
+            target_lv = cur_lv + 1
+            feasible, reason = self.check_tech_feasibility(s_tid, target_lv, learned_techs, building_levels, current_res, bag_items)
+            if feasible:
+                return (s_tid, target_lv, "محدد يدوياً")
+            else:
+                t_title = self.get_tech_title(s_tid)
+                self.log.warning(f"⚠️ البحث المحدد يدوياً {t_title} غير ممكن حالياً ({reason})! سيتم الانتقال للبحث المتوازن...")
 
-        # 2. فحص مهام التحالف / الفصل (Chapter / Quest recommendation)
-        # إذا وجدنا في بيانات الحساب مهمة تطلب بحثاً معيناً
-        # فحص الشجرة المطلوبة
-        tree_keys = []
-        if tree_pref == "all":
-            tree_keys = ["defense", "resources", "city", "military", "advanced", "war"]
-        elif tree_pref in TECH_TREES:
-            tree_keys = [tree_pref]
+        # 2. تحديد قائمة الأشجار وترتيبها وفق مبدأ الموازنة المتساوية
+        all_tree_keys = ["resources", "city", "defense", "military", "hero", "advanced", "special", "war"]
+        is_balanced = (tree_pref in ("balanced", "all", "auto", "", "none") or tree_pref not in TECH_TREES)
+
+        # حساب مجموع ومتوسط المستويات لكل شجرة في اللعبة
+        tree_scores = []
+        for t_k in all_tree_keys:
+            if t_k in TECH_TREES:
+                t_ids = [str(x) for x in TECH_TREES[t_k].get("tech_ids", [])]
+                tot_lv = sum(learned_techs.get(tid, 0) for tid in t_ids)
+                avg_lv = tot_lv / max(1, len(t_ids))
+                tree_scores.append((t_k, tot_lv, avg_lv))
+
+        # ترتيب تصاعدي: الأقل تطوراً في إجمالي المستويات أولاً
+        tree_scores.sort(key=lambda x: (x[1], x[2]))
+
+        if not is_balanced:
+            # إذا اختار المستخدم شجرة معينة، تُفحص أولاً ثم باقي الأشجار كاحتياطي
+            ordered_keys = [tree_pref] + [x[0] for x in tree_scores if x[0] != tree_pref]
         else:
-            tree_keys = ["military", "defense", "resources", "city"]
+            ordered_keys = [x[0] for x in tree_scores]
 
-        # البحث في الأشجار المحددة عن أول بحث غير مكتمل أو تالي
-        for t_key in tree_keys:
-            tree_data = TECH_TREES.get(t_key, {})
-            tech_ids = tree_data.get("tech_ids", [])
-            tree_title = tree_data.get("name_ar", t_key)
+        # 3. البحث في الأشجار بالترتيب واختيار أول بحث مستوفٍ للشروط
+        try:
+            for t_key in ordered_keys:
+                tree_data = TECH_TREES.get(t_key, {})
+                if not isinstance(tree_data, dict):
+                    continue
 
-            # أ) أولاً: أي بحث في الشجرة لم يُكتسب مطلقاً (المستوى 0)
-            for tid in tech_ids:
-                s_id = str(tid)
-                if s_id not in learned_techs:
-                    return (s_id, 1, tree_title)
+                tech_ids = tree_data.get("tech_ids", [])
+                tree_title = tree_data.get("name_ar", t_key)
 
-            # ب) ثانياً: البحث ذو المستوى الأقل في الشجرة لترقيته
-            lowest_tid = None
-            lowest_lvl = 999
-            for tid in tech_ids:
-                s_id = str(tid)
-                lv = learned_techs.get(s_id, 0)
-                if lv < lowest_lvl:
-                    lowest_lvl = lv
-                    lowest_tid = s_id
+                # استخراج مرشحي الشجرة مع أقصى مستوى متاح
+                candidates = []
+                for tid in tech_ids:
+                    s_id = str(tid)
+                    cur_l = learned_techs.get(s_id, 0)
+                    t_cfg = self.tech_prereqs.get(s_id, {})
+                    max_l = len(t_cfg) or 10
+                    if cur_l < max_l:
+                        candidates.append((cur_l, int(tid), s_id))
 
-            if lowest_tid is not None:
-                return (lowest_tid, lowest_lvl + 1, tree_title)
+                # فرز المرشحين: الأقل مستوى حالياً أولاً (المستوى 0 لفتح الجديد، ثم المستويات الأقل)
+                candidates.sort(key=lambda c: (c[0], c[1]))
+
+                for cur_l, _, s_id in candidates:
+                    tgt_l = cur_l + 1
+                    feasible, reason = self.check_tech_feasibility(s_id, tgt_l, learned_techs, building_levels, current_res, bag_items)
+                    if feasible:
+                        return (s_id, tgt_l, tree_title)
+
+        except Exception as e:
+            self.log.warning(f"⚠️ خطأ أثناء فحص شجرة الأبحاث: {e}")
+            return None
 
         return None
+
 
     async def execute_research(self, tech_id: str) -> Dict[str, Any]:
         """
@@ -316,16 +650,16 @@ class ResearchTask(BaseTask):
 
     async def run(self) -> TaskResult:
         cfg = self.config
-        tree_pref = str(cfg.get("tree", "defense")).lower().strip()
+        tree_pref = str(cfg.get("tree", "balanced")).lower().strip()
         explicit_id = cfg.get("tech_id")
         check_only = bool(cfg.get("check_only", False))
 
-        self.log.info(f"🔬 بدء مهمة أبحاث الأكاديمية (الشجرة: {tree_pref} | بحث مخصص: {explicit_id or 'تلقائي'})")
+        self.log.info(f"🔬 بدء مهمة أبحاث الأكاديمية (الشجرة: {tree_pref} | بحث مخصص: {explicit_id or 'متوازن تلقائي'})")
 
-        # 1. الاستعلام عن طابور البحث
+        # 1. الاستعلام عن طابور البحث من الذاكرة الحية
         queue_info = await self.get_queue_status()
 
-        # 2. الاستعلام عن الأبحاث الحالية
+        # 2. الاستعلام عن الأبحاث الحالية من الذاكرة الحية
         learned_techs = await self.get_learned_technologies()
         self.log.info(f"📚 تم استرجاع {len(learned_techs)} بحث مكتمل/قيد التطوير للحساب.")
 
@@ -354,10 +688,24 @@ class ResearchTask(BaseTask):
                 retry_after=max(60, int(rem_sec))
             )
 
-        # 3. تحديد البحث الموصى به
-        rec = self.determine_recommended_tech(learned_techs, tree_pref, explicit_id)
+        # 3. قراءة مستويات المباني والموارد ومحتويات الحقيبة من الذاكرة الحية (بدون أي طلب شبكي)
+        building_levels = self.get_building_levels_from_memory()
+        current_res = self.get_resources_from_memory()
+        bag_items = self.get_backpack_items_from_memory()
+        college_lv = building_levels.get("113", 0)
+        self.log.info(f"🏛️ مستوى الأكاديمية الحالي بالذاكرة: {college_lv}")
+
+        # 4. تحديد البحث الموصى به وفق الموازنة المتساوية مع فحص المتطلبات المسبقة
+        rec = self.determine_recommended_tech(
+            learned_techs=learned_techs,
+            tree_pref=tree_pref,
+            explicit_tech_id=explicit_id,
+            building_levels=building_levels,
+            current_res=current_res,
+            bag_items=bag_items
+        )
         if not rec:
-            msg = "⚠️ لم يتم العثور على بحث موصى به مناسب في الشجرة المحددة!"
+            msg = "⚠️ لم يتم العثور على أي بحث مستوفٍ للمتطلبات وشروط الأكاديمية والموارد حالياً!"
             self.log.warning(msg)
             return TaskResult.fail(msg)
 
@@ -367,7 +715,7 @@ class ResearchTask(BaseTask):
 
         self.log.info(f"💡 البحث الموصى به: {rec_title} | الشجرة: {tree_name} | المستوى: {cur_lv} -> {target_lv}")
 
-        # 4. إذا كان الخيار فحص وعرض فقط
+        # 5. إذا كان الخيار فحص وعرض فقط
         if check_only:
             msg = f"🔍 [فحص فقط] البحث الموصى به: {rec_title} (مستوى {cur_lv} ➔ {target_lv}) في {tree_name}"
             return TaskResult.ok(
@@ -380,7 +728,7 @@ class ResearchTask(BaseTask):
                 action="checked"
             )
 
-        # 5. تنفيذ البحث فوراً بالسيرفر
+        # 6. تنفيذ البحث فوراً بالسيرفر
         self.log.info(f"🚀 جارٍ إرسال أمر إجراء البحث للسيرفر: {rec_title}...")
         resp = await self.execute_research(rec_tid)
         err = str(resp.get("err", "-1"))
@@ -404,9 +752,13 @@ class ResearchTask(BaseTask):
                 cost_info=new_queue.get("cost_info", {})
             )
         else:
-            # معالجة الخطأ
+            # معالجة الخطأ وتفسيره بدقة
             err_msg = f"❌ فشل بدء البحث {rec_title}! رمز الخطأ: {err}"
-            if err == "101701" or "resource" in str(resp).lower():
+            if err == "10006":
+                err_msg += " (لم يتم بلوغ مستوى المبنى المشترط للبحث - Err_PRECOND_BUILD_NOT_REACH)"
+            elif err == "10007":
+                err_msg += " (الأبحاث السابقة المشترطة غير مكتملة - Err_PRE_SCIENCE_NOT_REACH)"
+            elif err == "101701" or "resource" in str(resp).lower():
                 err_msg += " (الموارد غير كافية أو متطلبات المبنى غير مكتملة)"
             elif err == "101702":
                 err_msg += " (متطلبات الأكاديمية أو الأبحاث السابقة غير محققة)"
@@ -426,9 +778,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--email", "-e", help="البريد الإلكتروني للحساب")
     parser.add_argument(
-        "--tree", "-t", default="defense",
-        choices=["defense", "resources", "city", "military", "advanced", "war", "special", "hero", "all"],
-        help="مسار شجرة الأبحاث المستهدفة [افتراضي: defense]"
+        "--tree", "-t", default="balanced",
+        choices=["balanced", "all", "defense", "resources", "city", "military", "advanced", "war", "special", "hero"],
+        help="مسار شجرة الأبحاث المستهدفة أو موازنة متساوية [افتراضي: balanced]"
     )
     parser.add_argument("--tech-id", "-id", help="تحديد معرّف بحث معين بالرقم لإجرائه مباشرة (مثل: 23016)")
     parser.add_argument("--check-only", "-c", action="store_true", help="فحص وعرض البحث الموصى به دون بدئه")

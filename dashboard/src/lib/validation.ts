@@ -173,6 +173,16 @@ export function mapFirebaseAuthError(
   const code = (err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : '') ||
                (err instanceof Error ? err.message : '')
 
+  if (
+    code.includes('tenant-mismatch') ||
+    code.includes('tenant_mismatch') ||
+    (err instanceof Error && ((err as any).code === 'auth/tenant-mismatch' || err.message.includes('غير مسجل في هذا النظام')))
+  ) {
+    return {
+      message: t ? t('login.tenantMismatch', 'هذا الحساب غير مسجل في هذا النظام') : 'هذا الحساب غير مسجل في هذا النظام',
+    }
+  }
+
   if (code.includes('user-not-found') || code.includes('wrong-password') || code.includes('invalid-credential')) {
     return {
       message: t ? t('login.invalidCreds', 'البريد الإلكتروني أو كلمة المرور غير صحيحة') : 'البريد الإلكتروني أو كلمة المرور غير صحيحة',

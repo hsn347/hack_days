@@ -34,6 +34,9 @@ from .troy_treasure import TroyTreasureTask
 from .mail import MailTask
 from .torch_chest import TorchChestTask
 from .warrior_exchange import WarriorExchangeTask
+from .week_start_benefits import WeekStartBenefitsTask
+from .gather_boost import GatherBoostTask
+from .abra import AbraTask
 
 __all__ = [
     'BaseTask', 'TaskResult', 'TaskScheduler',
@@ -44,6 +47,7 @@ __all__ = [
     'TerritoryExpansionTask', 'GoldGatherTask', 'ResearchTask', 'BuildingTask',
     'CityHarvestTask', 'PrestigeTask', 'PrestigeBoxTask', 'HeroConsignTask', 'TreasurePavilionTask', 'BlacksmithForgeTask',
     'ImperialMausoleumTask', 'AllianceTreasureTask', 'DailyLuxuryGiftTask', 'VipGiftTask', 'TroyTreasureTask',
-    'MailTask', 'TorchChestTask', 'WarriorExchangeTask'
+    'MailTask', 'TorchChestTask', 'WarriorExchangeTask', 'WeekStartBenefitsTask',
+    'GatherBoostTask', 'AbraTask'
 ]
 

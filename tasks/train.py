@@ -42,6 +42,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -357,7 +358,7 @@ class TrainTask(BaseTask):
         """
         curr_count = initial_count
         attempts = 0
-        max_attempts = 20
+        max_attempts = 3  # حد أقصى 3 محاولات فقط لمنع رصد البوت وتجنب تكرار كود 4004
         last_err = ""
 
         while curr_count >= 1 and attempts < max_attempts:
@@ -370,14 +371,7 @@ class TrainTask(BaseTask):
                 "isget": False
             }
 
-            # إعادة محاولة تلقائية في حال انقطاع أو تأخر الرد (timeout)
-            resp = None
-            for _retry in range(2):
-                resp = await self.conn.query("1005", "2", payload, timeout=6)
-                if resp:
-                    break
-                await asyncio.sleep(0.3)
-
+            resp = await self.conn.query("1005", "2", payload, timeout=6)
             err = str(resp.get("err", "0")) if resp else "timeout"
             last_err = err
 
@@ -391,27 +385,18 @@ class TrainTask(BaseTask):
                 return False, 0, "رتبة الجندي غير مفتوحة أو مستوى الثكنة غير كافٍ"
 
             elif err in ("4004", "4003"):
-                # أول 4 محاولات: نزول دقيق بالوحدات لعدم التفريط في أي جندي
-                if attempts == 1:
-                    curr_count = max(1, curr_count - 1)
-                elif attempts == 2:
-                    curr_count = max(1, curr_count - 2)
-                elif attempts == 3:
-                    curr_count = max(1, curr_count - 3)
-                elif attempts == 4:
-                    curr_count = max(1, curr_count - 5)
-                else:
-                    # بعد ذلك: نزول نسبي سريع بنسبة 10% للوصول للحد الفاصل فوراً
-                    step = max(1, int(curr_count * 0.1))
-                    curr_count = max(1, curr_count - step)
+                # تراجع ذكي مباشر بنسبة 15% بدلاً من التدرج الصغير العشوائي لتجنب تكرار الخطأ
+                step = max(5, int(curr_count * 0.15))
+                curr_count = max(1, curr_count - step)
 
             elif err == "timeout":
-                self.log.warning(f"⚠️ بطء مؤقت في استجابة السيرفر (timeout)، محاولة تخفيض العدد...")
-                curr_count = max(1, curr_count - 5)
+                self.log.warning("⚠️ بطء مؤقت في استجابة السيرفر (timeout)، محاولة تخفيض العدد...")
+                curr_count = max(1, curr_count - 10)
             else:
                 return False, 0, f"كود سيرفر: {err}"
 
-            await asyncio.sleep(0.4)
+            # تأخير بشري عشوائي لمنع إرسال طلبات متتالية سريعة
+            await asyncio.sleep(round(random.uniform(1.2, 2.0), 2))
 
         return False, 0, f"تجاوز السعة القصوى المتاحة (كود: {last_err})"
 
@@ -482,7 +467,8 @@ class TrainTask(BaseTask):
                 else:
                     self.log.warning(f"⚠️ فشل استلام القوات من {b_name} (كود: {err})")
 
-                await asyncio.sleep(0.5)
+                # تأخير بشري عشوائي بين استلام مبنى وآخر
+                await asyncio.sleep(round(random.uniform(1.0, 1.8), 2))
 
         return harvested
 
@@ -606,7 +592,8 @@ class TrainTask(BaseTask):
             else:
                 self.log.warning(f"⚠️ تعذر بدء تدريب {b_name} (السبب: {err_reason})")
 
-            await asyncio.sleep(1.0)
+            # تأخير بشري عشوائي بين تدريب ثكنة وأخرى
+            await asyncio.sleep(round(random.uniform(1.4, 2.4), 2))
 
         # حساب وقت المراجعة القادمة
         retry_after = 3600

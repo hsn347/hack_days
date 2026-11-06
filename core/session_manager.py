@@ -25,13 +25,19 @@ if sys.platform == "win32":
         pass
 
 from game_client import AccountSession
-import onemt_auth
+try:
+    from core import onemt_auth
+except ImportError:
+    import onemt_auth
 
 log = logging.getLogger("session_manager")
 
 _ROOT       = os.path.dirname(os.path.dirname(__file__))
-CACHE_FILE  = os.path.join(_ROOT, "session_cache.json")
+_DB_DIR     = os.path.join(_ROOT, "database")
+CACHE_FILE  = os.path.join(_DB_DIR, "session_cache.json")
+_LEGACY_CACHE_FILE = os.path.join(_ROOT, "session_cache.json")
 _SESSION_LOCK = threading.Lock()
+SESSION_MAX_AGE_SECONDS = 14 * 24 * 3600  # الحد الأقصى لصلاحية الجلسة قبل التجديد الاستباقي (14 يوماً)
 
 
 class SessionManager:
@@ -68,6 +74,17 @@ class SessionManager:
     def load(self) -> Dict[str, AccountSession]:
         """يقرأ ملف الجلسات بأمان ويعيد قاموساً {email: AccountSession}."""
         with _SESSION_LOCK:
+            if not os.path.exists(self.cache_path) and os.path.exists(_LEGACY_CACHE_FILE):
+                try:
+                    os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+                    import shutil
+                    shutil.move(_LEGACY_CACHE_FILE, self.cache_path)
+                    legacy_bak = _LEGACY_CACHE_FILE + ".bak"
+                    if os.path.exists(legacy_bak):
+                        shutil.move(legacy_bak, self.backup_path)
+                except Exception:
+                    pass
+
             data = self._read_raw(self.cache_path)
             if data is None and os.path.exists(self.backup_path):
                 log.warning(f"⚠️ محاولة استعادة الجلسات من النسخة الاحتياطية {self.backup_path}...")
@@ -84,8 +101,9 @@ class SessionManager:
             result = {}
             for email, info in self._cache.get('accounts', {}).items():
                 if isinstance(info, dict):
-                    result[email] = AccountSession(
-                        email      = email,
+                    clean_k = email.strip().lower()
+                    result[clean_k] = AccountSession(
+                        email      = clean_k,
                         user_id    = str(info.get('userId', '')),
                         session_id = str(info.get('sessionId', ''))
                     )
@@ -112,13 +130,15 @@ class SessionManager:
                 elif not self._cache.get("accounts"):
                     self._cache = {"accounts": {}}
 
-            self._cache.setdefault('accounts', {})[email] = {
+            clean_k = email.strip().lower()
+            self._cache.setdefault('accounts', {})[clean_k] = {
                 "userId":    str(user_id),
                 "sessionId": str(session_id),
                 "timestamp": time.time(),
                 "source":    source
             }
 
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
             tmp_path = self.cache_path + f".tmp.{os.getpid()}.{threading.get_ident()}"
             try:
                 with open(tmp_path, 'w', encoding='utf-8') as f:
@@ -162,6 +182,7 @@ class SessionManager:
                 accounts.pop(k, None)
             existing["accounts"] = accounts
 
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
             tmp_path = self.cache_path + f".tmp.{os.getpid()}.{threading.get_ident()}"
             try:
                 with open(tmp_path, 'w', encoding='utf-8') as f:
@@ -189,7 +210,13 @@ class SessionManager:
     def login_and_save(self, email: str, password: str) -> Optional[AccountSession]:
         """تسجيل دخول ببريد وكلمة مرور وحفظ الجلسة مع تصنيف دقيق للأخطاء."""
         clean_email = email.strip().lower()
-        res = onemt_auth.sdk_login(email, password)
+        proxy_url = None
+        try:
+            from proxy import get_proxy_for_account
+            proxy_url = get_proxy_for_account(clean_email)
+        except Exception:
+            pass
+        res = onemt_auth.sdk_login(email, password, proxy_url=proxy_url)
         if not res.get('success'):
             err_code = str(res.get('error_code', ''))
             raw_err  = str(res.get('error_msg', ''))
@@ -237,32 +264,61 @@ class SessionManager:
         email: str,
         password: Optional[str] = None,
         user_id: Optional[str] = None,
-        castle_id: Optional[str] = None
+        castle_id: Optional[str] = None,
+        max_age_seconds: int = SESSION_MAX_AGE_SECONDS
     ) -> Optional[AccountSession]:
         """
-        1. البحث في session_cache.json أولاً.
-        2. إذا لم تكن موجودة، يتم جلب كلمة المرور (سواء الممررة أو من SQLite).
-        3. تسجيل الدخول وحفظ الجلسة في session_cache.json تلقائياً ثم إعادتها.
+        1. البحث في session_cache.json أولاً (مع توحيد حالة الأحرف).
+        2. فحص عمر الجلسة (TTL): إذا تجاوزت 14 يوماً وكانت كلمة المرور متوفرة، يتم تجديدها استباقياً.
+        3. إذا لم تكن موجودة أو منتهية، يتم جلب كلمة المرور وتجديدها وحفظها ذرياً.
         """
         clean_email = email.strip().lower()
-        # 1. البحث في الكاش أولاً
+        
+        # 1. البحث في الكاش (مع فحص الحروف الكبيرة والصغيرة)
         sessions = self.load()
-        if email in sessions:
-            return sessions[email]
+        cached_info = None
+        for k, v in self._cache.get('accounts', {}).items():
+            if k.strip().lower() == clean_email:
+                cached_info = v
+                break
 
-        # 2. غير موجودة في الكاش — جلب كلمة المرور من SQLite
+        # 2. فحص صلاحية وعمر الجلسة
+        if cached_info and clean_email in sessions:
+            sess_time = float(cached_info.get('timestamp') or 0)
+            age_seconds = time.time() - sess_time
+            
+            # إذا كانت الجلسة حديثة وصالحة زمنياً (< 14 يوماً)
+            if age_seconds < max_age_seconds and sess_time > 0:
+                return sessions[clean_email]
+            
+            log.info(f"⏳ [{clean_email}] الجلسة المحفوظة قديمة (عمرها {int(age_seconds / 86400)} يوماً) — محاولة تجديدها استباقياً...")
+
+        # 3. جلب كلمة المرور من المدخلات أو من SQLite
         pwd = password
         if not pwd:
-            pwd = self._fetch_password_from_db(castle_id=castle_id, email=email)
+            pwd = self._fetch_password_from_db(castle_id=castle_id, email=clean_email)
 
-        # 3. تسجيل الدخول وحفظ الجلسة في الكاش
+        # 4. محاولة تسجيل الدخول وحفظ الجلسة الجديدة
         if pwd:
-            log.info(f"🔑 [{email}] لم يتم العثور على الجلسة في الكاش — جاري تسجيل الدخول وحفظها في session_cache.json تلقائياً...")
-            return self.login_and_save(email, pwd)
+            log.info(f"🔑 [{clean_email}] جاري تجديد/تسجيل الدخول بكلمة المرور وحفظها في session_cache.json...")
+            new_session = self.login_and_save(clean_email, pwd)
+            if new_session:
+                return new_session
+            
+            # في حال تعذر التجديد لخطأ شبكة طارئ، وكانت لدينا جلسة قديمة مسجلة
+            if clean_email in sessions:
+                log.warning(f"⚠️ [{clean_email}] تعذر التجديد بكلمة المرور مؤقتاً، سيتم استخدام الجلسة السابقة كفرصة بديلة.")
+                return sessions[clean_email]
+            return None
+
+        # 5. إذا كانت كلمة المرور غير متوفرة ولكن لدينا جلسة قديمة
+        if clean_email in sessions:
+            log.warning(f"⚠️ [{clean_email}] الجلسة قديمة ولا توجد كلمة مرور مسجلة للتجديد، سيتم محاولة استخدامها كبديل.")
+            return sessions[clean_email]
 
         msg = "❌ لا توجد كلمة مرور مسجلة للقلعة لتسجيل الدخول"
         self._LAST_AUTH_ERRORS[clean_email] = msg
-        log.warning(f"⚠️ [{email}] {msg}")
+        log.warning(f"⚠️ [{clean_email}] {msg}")
         return None
 
     def refresh_session(

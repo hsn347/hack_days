@@ -11,8 +11,8 @@ tasks/pet_patrol.py — مهمة دورية الحيوان الأليف واست
      إلى وجهة الدورية (3081/4).
 
 الاستخدام كملف مستقل:
-    python tasks/pet_patrol.py --email "johan2003@yopmail.com"
-    python tasks/pet_patrol.py --email "sumo-1234@hotmil.com" --pet 1263 --dest 1389
+    python tasks/pet_patrol.py --email "3r228@g.com"
+    python tasks/pet_patrol.py --email "3r228@g.com" --pet 1261 --dest 1389
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional ,Tuple
 
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
@@ -137,6 +137,59 @@ class PetPatrolTask(BaseTask):
     def __init__(self, conn: GameConnection, config: dict = None):
         super().__init__(conn, config)
 
+    async def _unlock_pet_feature_and_gazelle(self) -> Tuple[bool, str]:
+        """
+        تنفيذ التسلسل الرسمي لمحرك اللعبة لفتح مبنى وخاصية الحيوان الأليف وتفعيل الغزال:
+        1. إرسال حزمة الدليل التوجيهي (3078/1 guideId: 200400, state: 1) لفك قفل موديول الحيوانات.
+        2. انتظار وجيز (1.0 ثانية).
+        3. إرسال حزمة فتح وتفعيل الغزال المجانية (3081/1 petid: 1261, type: 1).
+        4. تحديث كاش petCtrl.pets محلياً لتمكين إرسال الدوريات فوراً.
+        """
+        # الخطوة 1: إنهاء خطوة الدليل التوجيهي للحيوان (guideId = 200400)
+        self.log.info("🐾 [الخطوة 1/2] إرسال حزمة إنهاء الدليل التوجيهي لخاصية الحيوان (3078/1: guideId 200400)...")
+        r_guide = await self.conn.query('3078', '1', {"guideId": 200400, "state": 1}, timeout=8)
+        g_err = str(r_guide.get('err', '-1')) if r_guide else 'timeout'
+        if g_err == '0':
+            self.log.info("✅ تم إنهاء خطوة الدليل التوجيهي للحيوان الأليف بنجاح (3078/1: guide 200400)!")
+        else:
+            self.log.debug(f"نتيجة حزمة الدليل 3078/1: {r_guide}")
+
+        await asyncio.sleep(1.0)
+
+        # الخطوة 2: إرسال أمر فتح وتفعيل الغزال #1261 (3081/1)
+        self.log.info("🐾 [الخطوة 2/2] إرسال أمر فتح وتفعيل الغزال #1261 (3081/1)...")
+        r_unlock = await self.conn.query('3081', '1', {"petid": 1261, "type": 1}, timeout=10)
+        u_err = str(r_unlock.get('err', '-1')) if r_unlock else 'timeout'
+
+        pet_ctrl = self.conn.init_data.get('petCtrl', {})
+        if u_err == '0':
+            self.log.info("🎉 تم فتح وتفعيل مبنى الحيوان الأليف واستلام الغزال #1261 بنجاح! 🦌")
+            if isinstance(pet_ctrl, dict):
+                if "pets" not in pet_ctrl:
+                    pet_ctrl["pets"] = {}
+                pet_ctrl["pets"]["1261"] = {"id": 1261, "lv": 1}
+            await asyncio.sleep(1.5)
+            return True, "success"
+        elif u_err == '800009':
+            self.log.info("ℹ️ الغزال #1261 مفتوح مسبقاً على السيرفر.")
+            if isinstance(pet_ctrl, dict):
+                if "pets" not in pet_ctrl:
+                    pet_ctrl["pets"] = {}
+                pet_ctrl["pets"]["1261"] = {"id": 1261, "lv": 1}
+            return True, "already_unlocked"
+        elif u_err == '800002':
+            msg = "ℹ️ مستوى القلعة غير كافٍ لفتح الحيوان الأليف (يتطلب مستوى 13)."
+            self.log.info(msg)
+            return False, "castle_level_low"
+        elif u_err == '14':
+            msg = "ℹ️ لم تكتمل أدوات فتح الغزال بعد على السيرفر (كود 14) — في انتظار التحديث."
+            self.log.info(msg)
+            return False, "items_not_reach"
+        else:
+            msg = f"تعذر فتح الحيوان الأليف (كود {u_err})"
+            self.log.warning(f"⚠️ {msg} — تخطي محاولة الدورية.")
+            return False, u_err
+
     async def run(self) -> TaskResult:
         cfg = self.config or {}
         now_ts = int(time.time())
@@ -154,7 +207,53 @@ class PetPatrolTask(BaseTask):
         self.log.info(f"🐾 بدء مهمة دورية الحيوان الأليف [الغزال #1261] إلى الحيوان المستهدف [{dest_name}] (#{target_dest})")
         self.log.debug(f"🐾 [DEBUG] dest_val={dest_val} → target_dest={target_dest}")
 
-        # 3. محاولة استلام مكافآت أي دورية منتهية سابقة (3081/5)
+        # 3. التحقق من مستوى القلعة (الحد الأدنى لفتح مبنى وخاصية الحيوان هو قلعة 13)
+        city_ctrl = self.conn.init_data.get('cityCtrl', {}) if isinstance(self.conn.init_data, dict) else {}
+        blist = city_ctrl.get('blist', []) if isinstance(city_ctrl, dict) else []
+        castle_lv = 1
+        for b in blist:
+            if isinstance(b, dict):
+                binfo = b.get('binfo', b)
+                if isinstance(binfo, dict) and str(binfo.get('bid', '')) == '101':
+                    try:
+                        castle_lv = max(castle_lv, int(binfo.get('lv', 1)))
+                    except Exception:
+                        pass
+
+        if castle_lv < 13:
+            self.log.info(f"ℹ️ مستوى القلعة الحالي ({castle_lv}) أقل من 13 — مبنى الحيوان الأليف يفتح عند قلعة لفل 13. تخطي المهمة بأمان.")
+            return TaskResult.ok(
+                f"الحيوان الأليف غير متاح (يتطلب قلعة لفل 13، المستوى الحالي {castle_lv})",
+                status="castle_level_low",
+                castle_level=castle_lv,
+                retry_after=7200
+            )
+
+        # 4. فحص هل الحيوان الأليف (الغزال #1261) مفتوح أم يحتاج إلى فتح وتفعيل
+        pet_ctrl = self.conn.init_data.get('petCtrl', {})
+        pets_data = pet_ctrl.get('pets', {}) if isinstance(pet_ctrl, dict) else {}
+        is_unlocked = bool(pets_data and (1261 in pets_data or "1261" in pets_data))
+
+        if not is_unlocked:
+            self.log.info("🐾 فحص حالة الحيوان: الغزال #1261 غير مفتوح — جاري تفعيل خاصية الحيوان...")
+            unlocked_ok, status_code = await self._unlock_pet_feature_and_gazelle()
+            if not unlocked_ok:
+                if status_code in ("castle_level_low", "items_not_reach"):
+                    return TaskResult.ok(
+                        f"الحيوان الأليف في مرحلة التجهيز ({status_code}) — سيُعاد الفحص في الدورة القادمة",
+                        status=status_code,
+                        retry_after=3600
+                    )
+                else:
+                    return TaskResult.ok(
+                        f"تعذر فتح الحيوان الأليف مؤقتاً ({status_code})",
+                        status="pet_unlock_pending",
+                        retry_after=1800
+                    )
+        else:
+            self.log.info("🐾 فحص حالة الحيوان: الغزال #1261 مفتوح مسبقاً — المتابعة لإرسال الدورية مباشرة.")
+
+        # 4. محاولة استلام مكافآت أي دورية منتهية سابقة (3081/5)
         self.log.debug("🐾 [DEBUG] إرسال طلب استلام مكافآت (3081/5)...")
         r_rwd = await self.conn.query('3081', '5', {}, timeout=8)
         self.log.debug(f"🐾 [DEBUG] نتيجة استلام المكافآت (3081/5): {r_rwd}")
@@ -164,7 +263,7 @@ class PetPatrolTask(BaseTask):
             err = r_rwd.get('err', 'N/A') if r_rwd else 'timeout/None'
             self.log.debug(f"🐾 [DEBUG] لم يتم استلام مكافآت (err={err}) - قد لا توجد دورية منتهية")
 
-        # 4. فحص حالة الدورية الحالية من init_data
+        # 5. فحص حالة الدورية الحالية من init_data
         pet_ctrl = self.conn.init_data.get('petCtrl', {})
         self.log.debug(f"🐾 [DEBUG] petCtrl من init_data: {pet_ctrl}")
 
@@ -198,7 +297,7 @@ class PetPatrolTask(BaseTask):
         else:
             self.log.debug(f"🐾 [DEBUG] petCtrl ليس dict: type={type(pet_ctrl)}, value={pet_ctrl}")
 
-        # 5. إرسال أمر بدء الدورية (3081/4) بـ petid: 1261 دائماً
+        # 6. إرسال أمر بدء الدورية (3081/4) بـ petid: 1261 دائماً
         payload = {
             "petid": 1261,
             "destination": target_dest

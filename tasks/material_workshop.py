@@ -39,6 +39,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from collections import Counter
 from typing import Any, Dict, List, Optional, Union
@@ -210,8 +211,8 @@ class MaterialWorkshopTask(BaseTask):
                 self.log.warning(f"⚠️ تعذر وضع {m_info['name_ar']} (خطأ: {err_code})")
                 break
 
-            # فاصل زمني بسيط بين الطلبات
-            await asyncio.sleep(1.5)
+            # فاصل زمني طبيعي بين الطلبات
+            await asyncio.sleep(random.uniform(1.3, 2.5))
 
         # 4. حساب وقت المراجعة القادمة
         total_now = occupied_count + len(queued_actions)

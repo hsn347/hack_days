@@ -31,14 +31,18 @@ export function CastleDetailPage() {
 
   const info = castle.castle_info
   const bot  = castle.bot_status
+  const [imgError, setImgError] = React.useState(false)
+  const avatarStr = String(info?.avatar || '')
+  const hasCustomAvatar = Boolean(avatarStr && (avatarStr.startsWith('/') || avatarStr.includes('customAvatar') || avatarStr.startsWith('http')))
+  const displayLordName = info?.lord_name || castle.email?.split('@')[0] || '🏰'
 
   return (
-    <Layout title={info.lord_name}>
+    <Layout title={info?.lord_name || 'Castle'}>
       <div className="space-y-5 w-full">
         {/* Back button */}
         <button
           onClick={() => navigate('/accounts')}
-          className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm transition-colors cursor-pointer"
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400 text-sm transition-colors cursor-pointer"
         >
           {isRTL ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
           {t('common.back')}
@@ -48,8 +52,18 @@ export function CastleDetailPage() {
         <div className="p-5 glass-card">
           <div className="flex flex-wrap justify-between items-start gap-4">
             <div className="flex items-start gap-4">
-              <div className="flex flex-shrink-0 justify-center items-center bg-primary-900/60 dark:bg-primary-900/60 border border-primary-700/40 rounded-2xl w-14 h-14 font-bold text-primary-400 text-xl">
-                {info.castle_level}
+              <div className="flex flex-shrink-0 justify-center items-center bg-primary-900/60 dark:bg-primary-900/60 border border-primary-700/40 rounded-2xl w-14 h-14 overflow-hidden font-bold text-primary-400 text-xl">
+                {hasCustomAvatar && !imgError ? (
+                  <img
+                    src={avatarStr.startsWith('http') ? avatarStr : `/api/castles/${castle.id}/avatar`}
+                    alt={info?.lord_name || 'Castle'}
+                    className="rounded-2xl w-full h-full object-cover select-none"
+                    onError={() => setImgError(true)}
+                    loading="lazy"
+                  />
+                ) : (
+                  info?.castle_level || '🏰'
+                )}
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-3">

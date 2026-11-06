@@ -13,6 +13,7 @@ import { ConfirmDeleteCastleModal } from '../components/accounts/ConfirmDeleteCa
 import { ConfirmPresetModal } from '../components/accounts/ConfirmPresetModal'
 import { useAuth } from '../hooks/useAuth'
 import { useCastles, useUpdateBotState, useBotControl, useStopUserBots, useDeleteCastle, useBatchUpdateCastleConfigs } from '../hooks/useCastles'
+import { useDebounce } from '../hooks/useDebounce'
 import { Castle, CastleConfig, FIXED_PRESET_CONFIG } from '../types'
 import toast from 'react-hot-toast'
 
@@ -22,6 +23,7 @@ export function AccountsPage() {
   const uid = user?.uid ?? ''
 
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editingCastle, setEditingCastle] = useState<Castle | null>(null)
   const [deletingTarget, setDeletingTarget] = useState<{ id: string; wasActive?: boolean } | null>(null)
@@ -30,7 +32,6 @@ export function AccountsPage() {
   const [showTargetAndTemplate, setShowTargetAndTemplate] = useState(false)
   const [showStopAllModal, setShowStopAllModal] = useState(false)
   const [showBatchPresetModal, setShowBatchPresetModal] = useState(false)
-  const [isStartingAll, setIsStartingAll] = useState(false)
   const [expandedCastleId, setExpandedCastleId] = useState<string | null>(null)
 
   const { data, isLoading } = useCastles(uid)
@@ -46,9 +47,9 @@ export function AccountsPage() {
 
   const allCastles = data?.pages.flatMap(p => p.items) ?? []
 
-  // Filter castles by search query
+  // Filter castles by search query (debounced 300ms)
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = debouncedSearch.trim().toLowerCase()
     if (!q) return allCastles
     return allCastles.filter(c => {
       const emailPrefix = (c.email || '').split('@')[0].toLowerCase()
@@ -60,7 +61,7 @@ export function AccountsPage() {
         c.castle_id.toLowerCase().includes(q)
       )
     })
-  }, [allCastles, search])
+  }, [allCastles, debouncedSearch])
 
   // Partition into pending vs active
   const pendingCastles = useMemo(() =>
@@ -96,42 +97,7 @@ export function AccountsPage() {
     user?.subscription?.status === 'expired' ||
     (user?.subscription?.expires_at ? new Date(user.subscription.expires_at).getTime() < Date.now() : false)
   )
-  const isRunBlocked = isBanned || isExpired || isPendingApproval
 
-  const handleRunAll = () => {
-    if (isPendingApproval) {
-      toast.error(t('accounts.pendingApprovalRunToast'))
-      return
-    }
-    if (isBanned) {
-      toast.error(t('accounts.bannedToast'))
-      return
-    }
-    if (isExpired) {
-      toast.error(t('accounts.expiredToast'))
-      return
-    }
-    if (idleCastles.length === 0) {
-      toast(t('accounts.allAlreadyRunning'), { icon: 'ℹ️' })
-      return
-    }
-    setIsStartingAll(true)
-    let completed = 0
-    const total = idleCastles.length
-    // تشغيل الحسابات المتوقفة فقط دون المساس بالحسابات التي تعمل بالفعل
-    idleCastles.forEach(c =>
-      botControl.mutate({ castle: c, state: 'running' }, {
-        onSettled: () => {
-          completed++
-          if (completed >= total) {
-            setTimeout(() => setIsStartingAll(false), 2000)
-          }
-        }
-      })
-    )
-    setTimeout(() => setIsStartingAll(false), 4000)
-    toast.success(t('accounts.commandSentRun', { count: idleCastles.length }))
-  }
 
   const handleStopAll = () => {
     setShowStopAllModal(true)
@@ -187,7 +153,7 @@ export function AccountsPage() {
 
   const templateCastleName = useMemo(() => {
     if (!templateCastle) return ''
-    const prefix = (templateCastle.email || '').split('@')[0] || 'قلعة'
+    const prefix = (templateCastle.email || '').split('@')[0] || t('common.castle', 'قلعة')
     return (templateCastle.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(templateCastle.castle_info.lord_name))
       ? templateCastle.castle_info.lord_name
       : prefix
@@ -210,7 +176,7 @@ export function AccountsPage() {
     const target = activeCastles.find(c => c.id === castleId)
     const name = (target?.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(target.castle_info.lord_name))
       ? target.castle_info.lord_name
-      : (target?.email || '').split('@')[0] || 'القلعة'
+      : (target?.email || '').split('@')[0] || t('common.castle', 'قلعة')
     toast.success(t('accounts.templateLoadedToast', { name }))
   }
 
@@ -279,83 +245,40 @@ export function AccountsPage() {
     <Layout title={t('accounts.title')}>
       <div className="space-y-4">
         {/* Page header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center justify-between">
+        <div className="flex sm:flex-row flex-col sm:justify-between sm:items-center gap-3">
+          <div className="flex justify-between items-center">
             <h1 className="font-bold text-white text-xl sm:text-2xl">{t('accounts.title')}</h1>
             {/* Quick status pill on mobile */}
-            <div className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs">
-              <span className={clsx('w-2 h-2 rounded-full', runningCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500')} />
-              <span className="text-gray-300 font-medium">{activeCastles.length} {t('accounts.accountUnit')}</span>
+            <div className="sm:hidden flex items-center gap-1.5 bg-white/5 px-2.5 py-1 border border-white/10 rounded-full text-xs">
+              <span className={clsx('rounded-full w-2 h-2', runningCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500')} />
+              <span className="font-medium text-gray-300">{activeCastles.length} {t('accounts.accountUnit')}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                if (isPendingApproval) {
-                  toast.error(t('accounts.pendingApprovalToast'))
-                  return
-                }
-                setAddModalOpen(true)
-              }}
-              className="col-span-2 sm:col-span-1 order-first sm:order-last flex items-center justify-center gap-2 py-2.5 sm:py-2 px-4 shadow-glow text-sm font-bold btn-primary rounded-xl active:scale-[0.98] transition-all"
+              onClick={() => setAddModalOpen(true)}
+              className="flex justify-center items-center gap-2 shadow-glow px-4 py-2.5 sm:py-2 rounded-xl font-bold text-sm active:scale-[0.98] transition-all btn-primary"
               id="add-account-btn"
             >
               <Plus size={16} />
               <span>{t('accounts.addAccount')}</span>
             </button>
-            <button
-              onClick={handleRunAll}
-              disabled={isStartingAll || activeCastles.length === 0 || (!isRunBlocked && idleCastles.length === 0)}
-              className={clsx(
-                'flex items-center justify-center gap-1.5 py-2 px-3 text-xs sm:text-sm font-semibold rounded-xl active:scale-[0.98] transition-all',
-                isStartingAll
-                  ? 'bg-gray-800 border border-gray-700 text-gray-300 cursor-not-allowed'
-                  : isRunBlocked
-                  ? 'btn-run-all-locked bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 cursor-pointer'
-                  : 'btn-primary disabled:opacity-50'
-              )}
-              title={
-                isBanned
-                  ? t('accounts.bannedTooltip')
-                  : isExpired
-                  ? t('accounts.expiredTooltip')
-                  : idleCastles.length === 0
-                  ? t('accounts.allAlreadyRunning')
-                  : undefined
-              }
-            >
-              {isStartingAll ? (
-                <>
-                  <Loader2 size={13} className="animate-spin text-emerald-400" />
-                  <span>{t('status.starting') || 'جاري التشغيل...'}</span>
-                </>
-              ) : isRunBlocked ? (
-                <>
-                  <Lock size={13} className="text-rose-400 btn-lock-icon" />
-                  <span>{t('accounts.runAll')} ({isBanned ? t('accounts.lockedBanned') : isPendingApproval ? t('accounts.lockedPending') : t('accounts.lockedExpired')})</span>
-                </>
-              ) : (
-                <>
-                  <Play size={13} />
-                  <span>{t('accounts.runAll')}</span>
-                </>
-              )}
-            </button>
+
             <button
               onClick={handleStopAll}
               disabled={stopAllBots.isPending || runningCount === 0}
               className={clsx(
-                'flex items-center justify-center gap-1.5 py-2 px-3 text-xs sm:text-sm font-semibold rounded-xl active:scale-[0.98] transition-all',
+                'flex justify-center items-center gap-1.5 px-3 py-2 rounded-xl font-semibold text-xs sm:text-sm active:scale-[0.98] transition-all',
                 stopAllBots.isPending
-                  ? 'bg-gray-800 border border-gray-700 text-gray-400 cursor-not-allowed'
+                  ? 'btn-stopping-all bg-slate-100 dark:bg-gray-800 border border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-400 cursor-not-allowed'
                   : 'btn-secondary disabled:opacity-50'
               )}
             >
               {stopAllBots.isPending ? (
                 <>
-                  <Loader2 size={13} className="animate-spin text-gray-300" />
-                  <span>{t('status.stopping') || 'جاري الإيقاف...'}</span>
+                  <Loader2 size={13} className="text-slate-500 dark:text-gray-300 animate-spin" />
+                  <span>{t('status.stopping', 'جاري الإيقاف...')}</span>
                 </>
               ) : (
                 <>
@@ -369,8 +292,8 @@ export function AccountsPage() {
 
         {/* ── Pending Approval Notice ── */}
         {isPendingApproval && (
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-300 text-xs">
-            <Clock size={20} className="text-amber-400 shrink-0 animate-pulse" />
+          <div className="flex items-center gap-3 bg-amber-500/10 p-4 border border-amber-500/30 rounded-2xl text-amber-600 dark:text-amber-300 text-xs">
+            <Clock size={20} className="dark:text-amber-400 animate-pulse shrink-0" />
             <span>{t('accounts.pendingApprovalNotice')}</span>
           </div>
         )}
@@ -380,17 +303,17 @@ export function AccountsPage() {
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="account-banner-banned flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-950 dark:text-rose-100 shadow-xs"
+            className="flex items-center gap-3.5 bg-rose-500/15 shadow-xs p-3.5 sm:p-4 border border-rose-500/40 rounded-2xl text-rose-950 dark:text-rose-100 account-banner-banned"
           >
-            <div className="banner-icon-box w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-400">
+            <div className="flex justify-center items-center bg-rose-500/20 border border-rose-500/40 rounded-xl w-9 h-9 text-rose-400 banner-icon-box shrink-0">
               <ShieldAlert size={20} />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="banner-title font-bold text-sm text-rose-950 dark:text-rose-100">{t('dashboard.bannedTitle')}</span>
-                <span className="badge badge-red text-[10px] py-0.5">{t('dashboard.bannedBadge')}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-rose-950 dark:text-rose-100 text-sm banner-title">{t('dashboard.bannedTitle')}</span>
+                <span className="py-0.5 text-[10px] badge badge-red">{t('dashboard.bannedBadge')}</span>
               </div>
-              <p className="banner-desc text-xs text-rose-800 dark:text-rose-300/90 mt-0.5">{t('accounts.bannedBanner')}</p>
+              <p className="mt-0.5 text-rose-800 dark:text-rose-300/90 text-xs banner-desc">{t('accounts.bannedBanner')}</p>
             </div>
           </motion.div>
         )}
@@ -398,24 +321,24 @@ export function AccountsPage() {
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="account-banner-expired flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-rose-500/15 border border-rose-500/35 text-rose-950 dark:text-rose-100 shadow-xs"
+            className="flex items-center gap-3.5 bg-rose-500/15 shadow-xs p-3.5 sm:p-4 border border-rose-500/35 rounded-2xl text-rose-950 dark:text-rose-100 account-banner-expired"
           >
-            <div className="banner-icon-box w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-400">
+            <div className="flex justify-center items-center bg-rose-500/20 border border-rose-500/40 rounded-xl w-9 h-9 text-rose-400 banner-icon-box shrink-0">
               <AlertTriangle size={20} />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="banner-title font-bold text-sm text-rose-950 dark:text-rose-100">{t('dashboard.expiredTitle')}</span>
-                <span className="badge badge-red text-[10px] py-0.5">{t('status.expired')}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-rose-950 dark:text-rose-100 text-sm banner-title">{t('dashboard.expiredTitle')}</span>
+                <span className="py-0.5 text-[10px] badge badge-red">{t('status.expired')}</span>
               </div>
-              <p className="banner-desc text-xs text-rose-800 dark:text-rose-300/90 mt-0.5">{t('accounts.expiredBanner')}</p>
+              <p className="mt-0.5 text-rose-800 dark:text-rose-300/90 text-xs banner-desc">{t('accounts.expiredBanner')}</p>
             </div>
           </motion.div>
         )}
 
         {/* Batch Settings Accordion Header */}
         {activeCastles.length > 0 && (
-          <div className="batch-settings-card bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden glass-card">
+          <div className="bg-primary-950/20 shadow-lg border border-primary-500/25 rounded-2xl w-full overflow-hidden batch-settings-card glass-card">
             {/* Clickable Header Bar: clicking anywhere on this header bar toggles the batch settings open/closed */}
             <div
               onClick={handleToggleBatchSettings}
@@ -423,22 +346,22 @@ export function AccountsPage() {
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleToggleBatchSettings() } }}
               className={clsx(
-                'batch-settings-header flex justify-between items-center py-2 px-3.5 sm:py-2.5 sm:px-5 w-full cursor-pointer select-none',
+                'flex justify-between items-center px-3.5 sm:px-5 py-2 sm:py-2.5 w-full cursor-pointer select-none batch-settings-header',
                 showBatchSettings
                   ? 'bg-primary-900/30 border-b border-white/10'
                   : 'hover:bg-primary-900/25 active:bg-primary-900/40'
               )}
             >
               <div className="flex items-center gap-2.5 sm:gap-3">
-                <div className="batch-icon-pod flex justify-center items-center bg-primary-500/20 shadow-sm border border-primary-500/30 rounded-lg w-7 h-7 sm:w-8 sm:h-8 text-primary-400 shrink-0">
+                <div className="flex justify-center items-center bg-primary-500/20 shadow-sm border border-primary-500/30 rounded-lg w-7 sm:w-8 h-7 sm:h-8 text-primary-400 batch-icon-pod shrink-0">
                   <SlidersHorizontal size={15} />
                 </div>
                 <div className="text-start">
-                  <span className="batch-title font-bold text-white text-xs sm:text-sm">{t('accounts.batchSettings')}</span>
+                  <span className="font-bold text-white text-xs sm:text-sm batch-title">{t('accounts.batchSettings')}</span>
                 </div>
               </div>
 
-              <div className="batch-toggle-pill flex items-center gap-1.5 sm:gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-2.5 py-1 sm:px-3 sm:py-1.5 border border-primary-500/30 rounded-lg font-semibold text-primary-400 text-xs shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-primary-500/15 hover:bg-primary-500/25 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-primary-500/30 rounded-lg font-semibold text-primary-400 text-xs batch-toggle-pill shrink-0">
                 <span className="hidden sm:inline">{showBatchSettings ? t('accounts.closeSettings') : t('accounts.openTaskList')}</span>
                 <span className="font-bold text-xs">{showBatchSettings ? '▲' : '▼'}</span>
               </div>
@@ -447,14 +370,14 @@ export function AccountsPage() {
             {hasOpenedBatch && (
               <div
                 className={clsx(
-                  'batch-settings-body space-y-4 bg-slate-50/70 dark:bg-black/20 p-3.5 sm:p-5 w-full',
+                  'space-y-4 bg-slate-50/70 dark:bg-black/20 p-3.5 sm:p-5 w-full batch-settings-body',
                   showBatchSettings ? 'block' : 'hidden'
                 )}
               >
                 {/* Collapsible Dropdown: Target Accounts & Template Copy (مكون منسدل يغلق ويكون مغلق افتراضياً) */}
                 <div
                   className={clsx(
-                    'batch-control-box rounded-xl border transition-colors overflow-hidden',
+                    'border rounded-xl overflow-hidden transition-colors batch-control-box',
                     showTargetAndTemplate
                       ? 'bg-white dark:bg-white/[0.04] border-primary-500/40 shadow-sm'
                       : 'bg-white/80 dark:bg-white/[0.02] border-gray-200 dark:border-white/8 hover:border-gray-300 dark:hover:border-white/15'
@@ -469,7 +392,7 @@ export function AccountsPage() {
                       <div className="flex justify-center items-center bg-primary-500/20 border border-primary-500/30 rounded-lg w-7 h-7 text-primary-400 shrink-0">
                         <Users size={15} />
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
                         <span className="font-semibold text-slate-800 dark:text-white text-xs sm:text-sm">
                           {t('accounts.targetAccountsAndTemplate', 'الحسابات المستهدفة وقالب الإعدادات')}
                         </span>
@@ -477,7 +400,7 @@ export function AccountsPage() {
                           {selectedBatchIds.length} {t('common.of', 'من')} {activeCastles.length} {t('accounts.accountUnit')}
                         </span>
                         {templateCastle && (
-                          <span className="bg-amber-500/15 px-2 py-0.5 border border-amber-500/30 rounded-full font-medium text-[11px] text-amber-700 dark:text-amber-300 truncate max-w-[150px] sm:max-w-xs">
+                          <span className="bg-amber-500/15 px-2 py-0.5 border border-amber-500/30 rounded-full max-w-[150px] sm:max-w-xs font-medium text-[11px] text-amber-700 dark:text-amber-300 truncate">
                             {t('accounts.template', 'قالب')}: {templateCastleName}
                           </span>
                         )}
@@ -486,7 +409,7 @@ export function AccountsPage() {
 
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={clsx(
-                        'w-6 h-6 rounded-md flex items-center justify-center text-xs transition-transform duration-150',
+                        'flex justify-center items-center rounded-md w-6 h-6 text-xs transition-transform duration-150',
                         showTargetAndTemplate ? 'bg-primary-500/20 text-primary-600 dark:text-primary-300 rotate-180' : 'text-gray-400'
                       )}>
                         ▼
@@ -496,7 +419,7 @@ export function AccountsPage() {
 
                   {/* Collapsible Body */}
                   {showTargetAndTemplate && (
-                    <div className="space-y-4 border-gray-200 dark:border-white/8 p-3.5 sm:p-4 pt-3 border-t">
+                    <div className="space-y-4 p-3.5 sm:p-4 pt-3 border-gray-200 dark:border-white/8 border-t">
                       {/* 1. الحسابات المستهدفة */}
                       <div className="space-y-2.5">
                         <div className="flex justify-between items-center">
@@ -509,7 +432,7 @@ export function AccountsPage() {
                               e.stopPropagation()
                               handleSelectAllBatch()
                             }}
-                            className="batch-select-all font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-xs underline transition-colors cursor-pointer"
+                            className="font-medium text-primary-600 hover:text-primary-700 dark:hover:text-primary-300 dark:text-primary-400 text-xs underline transition-colors cursor-pointer batch-select-all"
                           >
                             {selectedBatchIds.length === activeCastles.length ? t('accounts.deselectAll') : t('accounts.selectAll')}
                           </button>
@@ -519,7 +442,7 @@ export function AccountsPage() {
                         <div className="flex flex-wrap gap-2 pt-1 max-h-48 overflow-y-auto">
                           {activeCastles.map(c => {
                             const isSelected = selectedBatchIds.includes(c.id)
-                            const prefix = (c.email || '').split('@')[0] || 'قلعة'
+                            const prefix = (c.email || '').split('@')[0] || t('common.castle', 'قلعة')
                             const name = (c.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(c.castle_info.lord_name))
                               ? c.castle_info.lord_name
                               : prefix
@@ -529,7 +452,7 @@ export function AccountsPage() {
                                 type="button"
                                 onClick={() => handleToggleBatchCastle(c.id)}
                                 className={clsx(
-                                  'batch-castle-chip flex items-center gap-1.5 px-2.5 py-1 border rounded-lg font-medium text-[11px] transition-all duration-150 cursor-pointer',
+                                  'flex items-center gap-1.5 px-2.5 py-1 border rounded-lg font-medium text-[11px] transition-all duration-150 cursor-pointer batch-castle-chip',
                                   isSelected
                                     ? 'chip-selected bg-primary-600/25 border-primary-500/60 text-slate-900 dark:text-white shadow-sm'
                                     : 'chip-unselected bg-white dark:bg-white/[0.02] border-gray-200 dark:border-white/10 text-slate-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-white/20 hover:text-slate-900 dark:hover:text-gray-300'
@@ -537,7 +460,7 @@ export function AccountsPage() {
                               >
                                 <span
                                   className={clsx(
-                                    'chip-checkbox flex justify-center items-center border rounded w-3.5 h-3.5 font-bold text-[10px] transition-colors',
+                                    'flex justify-center items-center border rounded w-3.5 h-3.5 font-bold text-[10px] transition-colors chip-checkbox',
                                     isSelected
                                       ? 'bg-primary-500 border-primary-400 text-white'
                                       : 'border-gray-400 dark:border-gray-600 bg-transparent text-transparent'
@@ -545,7 +468,7 @@ export function AccountsPage() {
                                 >
                                   ✓
                                 </span>
-                                <span className="chip-name font-semibold text-slate-800 dark:text-white">
+                                <span className="font-semibold text-slate-800 dark:text-white chip-name">
                                   {name}
                                 </span>
                               </button>
@@ -555,22 +478,22 @@ export function AccountsPage() {
                       </div>
 
                       {/* Divider */}
-                      <div className="bg-gray-200 dark:bg-white/8 h-px w-full" />
+                      <div className="bg-gray-200 dark:bg-white/8 w-full h-px" />
 
                       {/* 2. قالب النسخ والأزرار السريعة */}
                       <div className="space-y-3">
                         <div className="flex sm:flex-row flex-col sm:justify-between sm:items-center gap-3">
-                          <div className="flex items-center gap-2 flex-1">
-                            <label className="text-xs text-slate-600 dark:text-gray-400 shrink-0">
+                          <div className="flex flex-1 items-center gap-2">
+                            <label className="text-slate-600 dark:text-gray-400 text-xs shrink-0">
                               {t('accounts.copyFromCastle')}:
                             </label>
                             <select
                               value={templateCastle?.id || ''}
                               onChange={(e) => setBatchTemplateCastleId(e.target.value)}
-                              className="input-field !py-1.5 !px-3 text-xs sm:text-sm rounded-lg flex-1 cursor-pointer"
+                              className="flex-1 !px-3 !py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer input-field"
                             >
                               {activeCastles.map(c => {
-                                const prefix = (c.email || '').split('@')[0] || 'قلعة'
+                                const prefix = (c.email || '').split('@')[0] || t('common.castle', 'قلعة')
                                 const name = (c.castle_info?.lord_name && !['لورد الإمبراطورية', 'القلعة الملكية', 'قلعة جديدة', 'غير معروف', 'قلعة'].includes(c.castle_info.lord_name))
                                   ? c.castle_info.lord_name
                                   : prefix
@@ -583,12 +506,12 @@ export function AccountsPage() {
                             </select>
                           </div>
 
-                          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                          <div className="flex items-center self-end sm:self-auto gap-2 shrink-0">
                             <button
                               type="button"
                               onClick={() => setShowBatchPresetModal(true)}
                               disabled={batchUpdate.isPending || selectedBatchIds.length === 0}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-900 dark:text-amber-300 disabled:opacity-50 active:scale-95 transition-all cursor-pointer shadow-sm"
+                              className="flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 shadow-sm px-3 py-1.5 border border-amber-500/40 rounded-lg font-bold text-amber-900 dark:text-amber-300 text-xs whitespace-nowrap active:scale-95 transition-all cursor-pointer"
                               title={t('accounts.fixedPresetTooltip')}
                             >
                               <Sparkles size={14} className="text-amber-700 dark:text-amber-400" />
@@ -600,7 +523,7 @@ export function AccountsPage() {
                                 type="button"
                                 onClick={handleApplyAllTemplateSettings}
                                 disabled={batchUpdate.isPending || selectedBatchIds.length === 0}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-600 hover:bg-primary-500 active:scale-95 text-white disabled:opacity-50 transition-all cursor-pointer shadow-sm"
+                                className="flex items-center gap-1.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 shadow-sm px-3 py-1.5 rounded-lg font-bold text-white text-xs active:scale-95 transition-all cursor-pointer"
                                 title={t('accounts.applyAllFromTemplate')}
                               >
                                 <CheckCheck size={14} />
@@ -634,20 +557,20 @@ export function AccountsPage() {
         {/* Search input (matching reference UI Image 4 & 5) */}
         <div className="p-2.5 sm:p-3 glass-card">
           <div className="relative flex items-center">
-            <Search size={16} className="pointer-events-none top-1/2 absolute text-gray-400 -translate-y-1/2 start-3.5 z-10" />
+            <Search size={16} className="top-1/2 z-10 absolute text-gray-400 -translate-y-1/2 pointer-events-none start-3.5" />
             <input
               id="castle-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={t('accounts.searchPlaceholder')}
-              className="w-full input-field !ps-10 text-sm sm:text-base"
+              className="!ps-10 w-full text-sm sm:text-base input-field"
               style={{ paddingInlineStart: '2.6rem' }}
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/15 transition-colors cursor-pointer"
+                className="top-1/2 absolute bg-white/10 hover:bg-white/15 px-2 py-1 rounded-md text-gray-400 hover:text-white text-xs transition-colors -translate-y-1/2 cursor-pointer end-3"
                 title={t('accounts.clearSearch')}
               >
                 ✕

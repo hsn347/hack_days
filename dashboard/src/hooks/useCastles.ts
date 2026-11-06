@@ -3,29 +3,54 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchCastles, fetchCastle, createCastle, updateCastle,
   updateCastleCredentials, toggleCastleActive, deleteCastle,
-  startBot, stopBot, stopUserBots, getWsBaseUrl
+  startBot, stopBot, stopUserBots, getWsBaseUrl, getAdminLiveProcesses
 } from '../lib/botApi'
+import {
+  useUserBotStatuses,
+  useMultiplexedBotStatus,
+  purgeAllUserStatusSockets,
+  type RealStatus
+} from './useUserBotStatuses'
 import type { Castle, BotState, CastleConfig } from '../types'
 import { DEFAULT_CASTLE_CONFIG } from '../types'
+
+export { useUserBotStatuses, useMultiplexedBotStatus, purgeAllUserStatusSockets }
+export type { RealStatus }
+
 
 // ─── Deep merge castle config with defaults ────────────────
 export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConfig {
   const def = DEFAULT_CASTLE_CONFIG
   const fc = fcConfig || {}
 
-  const mergeMM = (fmm: Record<string, unknown>) => ({
-    ...def.march_manager,
-    ...(fmm || {}),
-    transport:   { ...def.march_manager.transport,   ...((fmm?.transport   as Record<string, unknown>) || {}) },
-    ruins:       { ...def.march_manager.ruins,       ...((fmm?.ruins       as Record<string, unknown>) || {}) },
-    combat:      { ...def.march_manager.combat,      ...((fmm?.combat      as Record<string, unknown>) || {}) },
-    elf:         { ...def.march_manager.elf,         ...((fmm?.elf         as Record<string, unknown>) || {}) },
-    invaders:    { ...def.march_manager.invaders,    ...((fmm?.invaders    as Record<string, unknown>) || {}) },
-    rebels:      { ...def.march_manager.rebels,      ...((fmm?.rebels      as Record<string, unknown>) || {}) },
-    stronghold:  { ...def.march_manager.stronghold,  ...((fmm?.stronghold  as Record<string, unknown>) || {}) },
-    gold_gather: { ...def.march_manager.gold_gather, ...((fmm?.gold_gather as Record<string, unknown>) || {}) },
-    gather:      { ...def.march_manager.gather,      ...((fmm?.gather      as Record<string, unknown>) || {}) },
-  })
+  const mergeMM = (fmm: Record<string, unknown>) => {
+    const rawRuins = ((fmm?.ruins as Record<string, unknown>) || {})
+    const VALID_EXPLORE_TIMES = [900, 3600, 14400, 28800]
+    const rawTime = Number(rawRuins.explore_time)
+    let cleanTime = def.march_manager.ruins.explore_time
+    if (VALID_EXPLORE_TIMES.includes(rawTime)) {
+      cleanTime = rawTime
+    } else if (!isNaN(rawTime) && rawTime > 0) {
+      cleanTime = VALID_EXPLORE_TIMES.reduce((prev, curr) =>
+        Math.abs(curr - rawTime) < Math.abs(prev - rawTime) ? curr : prev
+      )
+    }
+
+    const cleanFmm = { ...(fmm || {}) }
+    delete (cleanFmm as any).elf
+    return {
+      ...def.march_manager,
+      ...cleanFmm,
+      transport:   { ...def.march_manager.transport,   ...((fmm?.transport   as Record<string, unknown>) || {}) },
+      ruins:       { ...def.march_manager.ruins,       ...rawRuins, explore_time: cleanTime },
+      combat:      { ...def.march_manager.combat,      ...((fmm?.combat      as Record<string, unknown>) || {}) },
+      invaders:    { ...def.march_manager.invaders,    ...((fmm?.invaders    as Record<string, unknown>) || {}) },
+      rebels:      { ...def.march_manager.rebels,      ...((fmm?.rebels      as Record<string, unknown>) || {}) },
+      stronghold:  { ...def.march_manager.stronghold,  ...((fmm?.stronghold  as Record<string, unknown>) || {}) },
+      gold_gather: { ...def.march_manager.gold_gather, ...((fmm?.gold_gather as Record<string, unknown>) || {}) },
+      gather:      { ...def.march_manager.gather,      ...((fmm?.gather      as Record<string, unknown>) || {}) },
+    }
+}
 
   const mergeTrain = (ft: Record<string, unknown>) => ({
     ...def.train,
@@ -48,6 +73,8 @@ export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConf
   }
 
   return {
+    ...def,
+    ...(fc as Partial<CastleConfig>),
     city_harvest:       { ...def.city_harvest,       ...((fc.city_harvest       as Record<string, unknown>) || {}) },
     research:           { ...def.research,           ...((fc.research           as Record<string, unknown>) || {}) },
     alliance:           { ...def.alliance,           ...((fc.alliance           as Record<string, unknown>) || {}) },
@@ -57,6 +84,7 @@ export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConf
     territory_expansion:{ ...def.territory_expansion,...((fc.territory_expansion as Record<string, unknown>) || {}) },
     torch_chest:        { ...(def.torch_chest || { enabled: false }), ...((fc.torch_chest as Record<string, unknown>) || {}) },
     open_torch_chest:   { ...(def.open_torch_chest || { enabled: false }), ...((fc.open_torch_chest as Record<string, unknown>) || {}) },
+    hero_consign:       { ...(def.hero_consign || { enabled: false }), ...((fc.hero_consign as Record<string, unknown>) || {}) },
     shield:             { ...def.shield,             ...((fc.shield             as Record<string, unknown>) || {}) },
     stamina:            { ...def.stamina,            ...((fc.stamina            as Record<string, unknown>) || {}) },
     skills:             { ...def.skills,             ...((fc.skills             as Record<string, unknown>) || {}), target_skills: (fc.skills as Record<string, unknown>)?.target_skills as string[] || def.skills.target_skills },
@@ -73,22 +101,31 @@ export function mergeCastleConfig(fcConfig: Record<string, unknown>): CastleConf
     material_workshop:  { ...def.material_workshop,  ...((fc.material_workshop  as Record<string, unknown>) || {}), materials: (fc.material_workshop as Record<string, unknown>)?.materials as string[] || def.material_workshop.materials },
     caravan:            { ...def.caravan,            ...((fc.caravan            as Record<string, unknown>) || {}) },
     port_delegate:      { ...def.port_delegate,      ...((fc.port_delegate      as Record<string, unknown>) || {}) },
-    savings_bank:       { ...def.savings_bank,       ...((fc.savings_bank       as Record<string, unknown>) || {}), days: [1, 7, 15, 30].includes((fc.savings_bank as { days?: number })?.days as number) ? ((fc.savings_bank as { days?: number }).days as number) : 7 },
+    savings_bank:       { ...def.savings_bank,       ...((fc.savings_bank       as Record<string, unknown>) || {}), days: [1, 7, 15, 30].includes((fc.savings_bank as { days?: number })?.days as number) ? ((fc.savings_bank as { days?: number }).days as number) : 7, deposit: Math.min(6000, Math.max(100, Number((fc.savings_bank as { deposit?: number })?.deposit) || 2000)) },
     warrior_exchange:   { ...(def.warrior_exchange || { enabled: false, count: 15 }), ...((fc.warrior_exchange as Record<string, unknown>) || {}), count: Math.min(15, Math.max(1, Number((fc.warrior_exchange as { count?: number })?.count) || 15)) },
+    gather_boost:       { ...(def.gather_boost || { enabled: false }), ...((fc.gather_boost as Record<string, unknown>) || {}) },
+    elf:                { ...(def.elf || { enabled: false, formation_id: 1 }), ...((fc.elf as Record<string, unknown>) || {}) },
     building:           { ...def.building,           ...((fc.building           as Record<string, unknown>) || {}) },
     prestige:           mergePrestige((fc.prestige    as Record<string, unknown>) || {}),
+    troy_treasure:      { ...(def.troy_treasure || { enabled: false }), ...((fc.troy_treasure as Record<string, unknown>) || {}) },
     march_manager:      mergeMM((fc.march_manager     as Record<string, unknown>) || {}),
 
   } as CastleConfig
 }
 
 // ─── Persistent Local Storage Cache for Castles (Instant 0ms App Launch) ──
-const CASTLES_CACHE_PREFIX = 'ibra_castles_cache_'
+export const CASTLES_CACHE_PREFIX = 'empire_castles_cache_'
+export const LEGACY_CASTLES_CACHE_PREFIX = 'ibra_castles_cache_'
+export const ACTIVE_CASTLE_PREFIX = 'empire_active_castle_'
+export const LEGACY_ACTIVE_CASTLE_PREFIX = 'ibra_active_castle_'
 
 export function getCachedCastles(userId: string) {
   if (typeof window === 'undefined' || !userId) return undefined
   try {
-    const raw = localStorage.getItem(`${CASTLES_CACHE_PREFIX}${userId}`)
+    let raw = localStorage.getItem(`${CASTLES_CACHE_PREFIX}${userId}`)
+    if (!raw) {
+      raw = localStorage.getItem(`${LEGACY_CASTLES_CACHE_PREFIX}${userId}`)
+    }
     if (!raw) return undefined
     const parsed = JSON.parse(raw)
     if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
@@ -106,7 +143,10 @@ export function getCachedCastles(userId: string) {
 export function getCachedCastlesTimestamp(userId: string): number | undefined {
   if (typeof window === 'undefined' || !userId) return undefined
   try {
-    const raw = localStorage.getItem(`${CASTLES_CACHE_PREFIX}${userId}`)
+    let raw = localStorage.getItem(`${CASTLES_CACHE_PREFIX}${userId}`)
+    if (!raw) {
+      raw = localStorage.getItem(`${LEGACY_CASTLES_CACHE_PREFIX}${userId}`)
+    }
     if (!raw) return undefined
     const parsed = JSON.parse(raw)
     return typeof parsed.timestamp === 'number' ? parsed.timestamp : undefined
@@ -118,10 +158,69 @@ export function getCachedCastlesTimestamp(userId: string): number | undefined {
 export function saveCachedCastles(userId: string, items: Castle[]) {
   if (typeof window === 'undefined' || !userId || !items) return
   try {
-    localStorage.setItem(
-      `${CASTLES_CACHE_PREFIX}${userId}`,
-      JSON.stringify({ items, timestamp: Date.now() })
-    )
+    const payload = JSON.stringify({ items, timestamp: Date.now() })
+    localStorage.setItem(`${CASTLES_CACHE_PREFIX}${userId}`, payload)
+    localStorage.setItem(`${LEGACY_CASTLES_CACHE_PREFIX}${userId}`, payload)
+  } catch {
+    // ignore
+  }
+}
+
+export function getActiveCastleId(userId: string): string | null {
+  if (typeof window === 'undefined' || !userId) return null
+  try {
+    return localStorage.getItem(`${ACTIVE_CASTLE_PREFIX}${userId}`) ||
+           localStorage.getItem(`${LEGACY_ACTIVE_CASTLE_PREFIX}${userId}`)
+  } catch {
+    return null
+  }
+}
+
+export function saveActiveCastleId(userId: string, castleId: string) {
+  if (typeof window === 'undefined' || !userId) return
+  try {
+    localStorage.setItem(`${ACTIVE_CASTLE_PREFIX}${userId}`, castleId)
+    localStorage.setItem(`${LEGACY_ACTIVE_CASTLE_PREFIX}${userId}`, castleId)
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveCastleId(userId: string) {
+  if (typeof window === 'undefined' || !userId) return
+  try {
+    localStorage.removeItem(`${ACTIVE_CASTLE_PREFIX}${userId}`)
+    localStorage.removeItem(`${LEGACY_ACTIVE_CASTLE_PREFIX}${userId}`)
+  } catch {
+    // ignore
+  }
+}
+
+export function purgeCastlesCache(userId?: string) {
+  if (typeof window === 'undefined') return
+  try {
+    purgeAllUserStatusSockets()
+    if (userId) {
+      localStorage.removeItem(`${CASTLES_CACHE_PREFIX}${userId}`)
+      localStorage.removeItem(`${LEGACY_CASTLES_CACHE_PREFIX}${userId}`)
+      localStorage.removeItem(`${ACTIVE_CASTLE_PREFIX}${userId}`)
+      localStorage.removeItem(`${LEGACY_ACTIVE_CASTLE_PREFIX}${userId}`)
+    }
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && (
+        key.startsWith(CASTLES_CACHE_PREFIX) ||
+        key.startsWith(LEGACY_CASTLES_CACHE_PREFIX) ||
+        key.startsWith(ACTIVE_CASTLE_PREFIX) ||
+        key.startsWith(LEGACY_ACTIVE_CASTLE_PREFIX)
+      )) {
+        keysToRemove.push(key)
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
+    }
   } catch {
     // ignore
   }
@@ -131,8 +230,8 @@ export function saveCachedCastles(userId: string, items: Castle[]) {
 export function useCastles(userId: string) {
   return useQuery({
     queryKey: ['castles', userId],
-    queryFn: async () => {
-      const items = await fetchCastles(userId)
+    queryFn: async ({ signal }) => {
+      const items = await fetchCastles(userId, { signal })
       const formatted = items.map(c => ({
         ...c,
         config: mergeCastleConfig((c.config as unknown as Record<string, unknown>) || {}),
@@ -146,7 +245,7 @@ export function useCastles(userId: string) {
     initialData: () => getCachedCastles(userId),
     initialDataUpdatedAt: () => getCachedCastlesTimestamp(userId),
     staleTime: 60_000,
-    gcTime: 1000 * 60 * 60 * 24,
+    gcTime: 600_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
     enabled: !!userId,
@@ -157,8 +256,8 @@ export function useCastles(userId: string) {
 export function useCastle(userId: string, castleId: string) {
   return useQuery({
     queryKey: ['castle', userId, castleId],
-    queryFn: async () => {
-      const c = await fetchCastle(castleId)
+    queryFn: async ({ signal }) => {
+      const c = await fetchCastle(castleId, { signal })
       return {
         ...c,
         config: mergeCastleConfig((c.config as unknown as Record<string, unknown>) || {}),
@@ -169,10 +268,25 @@ export function useCastle(userId: string, castleId: string) {
       const found = cached?.pages?.[0]?.items?.find((c: Castle) => c.id === castleId)
       return found ? found : undefined
     },
-    staleTime: 60_000,
-    gcTime: 1000 * 60 * 60 * 24,
+    staleTime: 30_000,
+    gcTime: 300_000,
     refetchOnWindowFocus: false,
     enabled: !!userId && !!castleId,
+  })
+}
+
+// ─── Live Bot Stats Query (TanStack Query) ──────────────────
+export function useLiveBotStats(enabled: boolean = true) {
+  return useQuery({
+    queryKey: ['live_bot_stats'],
+    queryFn: async ({ signal }) => {
+      return await getAdminLiveProcesses({ signal })
+    },
+    staleTime: 10_000,
+    gcTime: 60_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: false,
+    enabled,
   })
 }
 
@@ -187,112 +301,11 @@ export function useBotStatusLive(
   }
 }
 
-// ─── Real process status via WebSocket ────────────────────
-type RealStatus = 'running' | 'starting' | 'idle' | 'disconnected' | 'reconnecting' | 'waiting' | 'offline' | 'deploying' | 'error'
-
-export function useRealBotStatus(castleId: string, enabled: boolean = true): {
+// ─── Real process status via Multiplexed WebSocket ─────────
+export function useRealBotStatus(castleId: string, enabled: boolean = true, userId?: string): {
   status: RealStatus
 } {
-  const [status, setStatus] = useState<RealStatus>('offline')
-
-  useEffect(() => {
-    if (!enabled || !castleId) return
-
-    const WS_BASE = getWsBaseUrl()
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let destroyed = false
-
-    function connect() {
-      if (destroyed) return
-      try {
-        ws = new WebSocket(`${WS_BASE}/ws/status/${castleId}`)
-
-        ws.onmessage = (e) => {
-          const s = e.data?.trim() as RealStatus
-          if (s) setStatus(s)
-        }
-
-        ws.onclose = () => {
-          if (!destroyed) {
-            setStatus('offline')
-            reconnectTimer = setTimeout(connect, 3000)
-          }
-        }
-
-        ws.onerror = () => {
-          ws?.close()
-        }
-      } catch {
-        setStatus('offline')
-        if (!destroyed) reconnectTimer = setTimeout(connect, 3000)
-      }
-    }
-
-    connect()
-
-    return () => {
-      destroyed = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
-    }
-  }, [castleId, enabled])
-
-  return { status }
-}
-
-// ─── Real-time status for all user castles via a single WebSocket ──────────
-export function useUserBotStatuses(userId: string, enabled: boolean = true) {
-  const [statuses, setStatuses] = useState<Record<string, RealStatus>>({})
-
-  useEffect(() => {
-    if (!enabled || !userId) return
-
-    const WS_BASE = getWsBaseUrl()
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let destroyed = false
-
-    function connect() {
-      if (destroyed) return
-      try {
-        ws = new WebSocket(`${WS_BASE}/ws/user-status/${userId}`)
-
-        ws.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data)
-            if (data && typeof data === 'object') {
-              setStatuses(data)
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        ws.onclose = () => {
-          if (!destroyed) {
-            reconnectTimer = setTimeout(connect, 4000)
-          }
-        }
-
-        ws.onerror = () => {
-          ws?.close()
-        }
-      } catch {
-        if (!destroyed) reconnectTimer = setTimeout(connect, 4000)
-      }
-    }
-
-    connect()
-
-    return () => {
-      destroyed = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
-    }
-  }, [userId, enabled])
-
-  return { statuses }
+  return useMultiplexedBotStatus(castleId, userId, 'offline', enabled)
 }
 
 // ─── Update bot state ──────────────────────────────────────
@@ -335,7 +348,13 @@ export function useUpdateBotState(userId: string) {
         qc.setQueryData(['castles', userId], context.prevData)
       }
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['castles', userId] }),
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['castles', userId] })
+      if (vars?.castleId) {
+        qc.invalidateQueries({ queryKey: ['castle', userId, vars.castleId] })
+      }
+      qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
+    },
   })
 }
 
@@ -356,7 +375,7 @@ export function useBotControl(userId: string) {
           user_id:      userId,
           email:        castle.email,
           password:     (castle as Castle & { password?: string }).password,
-          loop_interval: 55,
+          loop_interval: castle.loop_interval || 40,
         })
       } else {
         await stopBot(castle.id)
@@ -394,12 +413,17 @@ export function useBotControl(userId: string) {
       }
     },
     onSettled: (_data, _err, vars) => {
-      if (vars?.state === 'idle') {
-        setTimeout(() => {
-          qc.invalidateQueries({ queryKey: ['castles', userId] })
-        }, 1500)
-      } else {
+      const invalidateAll = () => {
         qc.invalidateQueries({ queryKey: ['castles', userId] })
+        if (vars?.castle?.id) {
+          qc.invalidateQueries({ queryKey: ['castle', userId, vars.castle.id] })
+        }
+        qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
+      }
+      if (vars?.state === 'idle') {
+        setTimeout(invalidateAll, 1500)
+      } else {
+        invalidateAll()
       }
     },
   })
@@ -442,6 +466,8 @@ export function useStopUserBots(userId: string) {
     onSettled: () => {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ['castles', userId] })
+        qc.invalidateQueries({ queryKey: ['castle', userId] })
+        qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
       }, 1500)
     },
   })
@@ -451,15 +477,28 @@ export function useStopUserBots(userId: string) {
 export function useUpdateCastleConfig(userId: string, castleId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (config: Partial<CastleConfig>) => {
-      const res = await updateCastle(castleId, { config: config as Record<string, unknown> })
+    mutationFn: async (input: Partial<CastleConfig> | { config: Partial<CastleConfig>; version?: number }) => {
+      let cfg: Partial<CastleConfig>
+      let version: number | undefined
+      if (input && 'config' in input && typeof input.config === 'object') {
+        cfg = input.config
+        version = input.version
+      } else {
+        cfg = input as Partial<CastleConfig>
+      }
+
+      const res = await updateCastle(castleId, {
+        config: cfg as Record<string, unknown>,
+        version,
+      })
       return res.castle
     },
     onSuccess: (updatedCastle) => {
       if (updatedCastle) {
         qc.setQueryData(['castle', userId, castleId], (old: any) =>
-          old ? { ...old, config: mergeCastleConfig((updatedCastle.config as unknown as Record<string, unknown>) || {}) } : old
+          old ? { ...old, ...updatedCastle, config: mergeCastleConfig((updatedCastle.config as unknown as Record<string, unknown>) || {}) } : old
         )
+        qc.setQueryData(['castleConfig', castleId], updatedCastle.config)
         qc.setQueryData(['castles', userId], (old: any) => {
           if (!old) return old
           if (old.pages) {
@@ -467,7 +506,7 @@ export function useUpdateCastleConfig(userId: string, castleId: string) {
               ...page,
               items: (page.items || []).map((c: Castle) =>
                 c.id === castleId
-                  ? { ...c, config: mergeCastleConfig((updatedCastle.config as unknown as Record<string, unknown>) || {}) }
+                  ? { ...c, ...updatedCastle, config: mergeCastleConfig((updatedCastle.config as unknown as Record<string, unknown>) || {}) }
                   : c
               ),
             }))
@@ -481,6 +520,10 @@ export function useUpdateCastleConfig(userId: string, castleId: string) {
           return old
         })
       }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['castle', userId, castleId] })
+      qc.invalidateQueries({ queryKey: ['castles', userId] })
     },
   })
 }
@@ -498,6 +541,7 @@ export function useBatchUpdateCastleConfigs(userId: string) {
     onSuccess: (_, { castleIds }) => {
       castleIds.forEach(id => {
         qc.invalidateQueries({ queryKey: ['castle', userId, id] })
+        qc.invalidateQueries({ queryKey: ['castleConfig', id] })
       })
       qc.invalidateQueries({ queryKey: ['castles', userId] })
     },
@@ -512,14 +556,19 @@ export function useAddCastle(userId: string) {
       const res = await createCastle({
         email: email.trim(),
         password: password.trim(),
+        config: DEFAULT_CASTLE_CONFIG as unknown as Record<string, unknown>,
       })
       return { id: res.castle.id, isPending: !res.castle.is_active }
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
+      if (res?.id) {
+        qc.invalidateQueries({ queryKey: ['castle', userId, res.id] })
+      }
       qc.invalidateQueries({ queryKey: ['user', userId] })
       qc.invalidateQueries({ queryKey: ['admin_users'] })
       qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
     },
   })
 }
@@ -534,8 +583,9 @@ export function useUpdateCastleCredentials(userId: string) {
         password: password?.trim(),
       })
     },
-    onSuccess: () => {
+    onSuccess: (_, { castleId }) => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
+      qc.invalidateQueries({ queryKey: ['castle', userId, castleId] })
     },
   })
 }
@@ -547,8 +597,11 @@ export function useToggleCastleActive(userId: string) {
     mutationFn: async ({ castleId, isActive }: { castleId: string; isActive: boolean }) => {
       await toggleCastleActive(castleId, isActive)
     },
-    onSuccess: () => {
+    onSuccess: (_, { castleId }) => {
       qc.invalidateQueries({ queryKey: ['castles', userId] })
+      qc.invalidateQueries({ queryKey: ['castle', userId, castleId] })
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
     },
   })
 }
@@ -574,10 +627,44 @@ export function useDeleteCastle(userId: string) {
           pages: nextPages,
         }
       })
+      qc.removeQueries({ queryKey: ['castle', userId, castleId] })
+      qc.removeQueries({ queryKey: ['castleConfig', castleId] })
       qc.invalidateQueries({ queryKey: ['castles', userId] })
       qc.invalidateQueries({ queryKey: ['user', userId] })
       qc.invalidateQueries({ queryKey: ['admin_users'] })
       qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
+    },
+  })
+}
+
+// ─── Import / Batch Add Castles ────────────────────────────
+export function useImportCastles(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (castles: Array<{ email: string; password: string }>) => {
+      const results = []
+      for (const c of castles) {
+        const res = await createCastle({
+          email: c.email.trim(),
+          password: c.password.trim(),
+          config: DEFAULT_CASTLE_CONFIG as unknown as Record<string, unknown>,
+        })
+        results.push(res.castle)
+      }
+      return results
+    },
+    onSuccess: (results) => {
+      qc.invalidateQueries({ queryKey: ['castles', userId] })
+      if (Array.isArray(results)) {
+        results.forEach(c => {
+          if (c?.id) qc.invalidateQueries({ queryKey: ['castle', userId, c.id] })
+        })
+      }
+      qc.invalidateQueries({ queryKey: ['user', userId] })
+      qc.invalidateQueries({ queryKey: ['admin_users'] })
+      qc.invalidateQueries({ queryKey: ['admin_stats'] })
+      qc.invalidateQueries({ queryKey: ['live_bot_stats'] })
     },
   })
 }

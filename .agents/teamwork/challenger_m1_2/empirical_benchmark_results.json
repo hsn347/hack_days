@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-11-02T17:41:30Z",
+  "verdict": "REQUEST_CHANGES",
+  "query_benchmark_500_iterations": {
+    "iterations": 500,
+    "query_count_per_call": 1,
+    "user_count": 150,
+    "pure_sql_p50_ms": 3.177,
+    "pure_sql_p95_ms": 5.479,
+    "p50_ms": 10.879,
+    "p95_ms": 11.462,
+    "p99_ms": 12.025,
+    "mean_ms": 10.873,
+    "min_ms": 9.802,
+    "max_ms": 12.904,
+    "stdev_ms": 0.373,
+    "mem_before_kb": 0.0,
+    "mem_after_kb": 279.94,
+    "peak_mem_kb": 543.54,
+    "net_mem_growth_kb": 279.94
+  },
+  "async_stress_benchmark": {
+    "idle_baseline": {
+      "p50_ms": 1.457,
+      "p95_ms": 2.004
+    },
+    "sync_pre_m1": {
+      "mode": "sync",
+      "poll_interval_sec": 0.8,
+      "total_polls": 191,
+      "probe_samples": 117,
+      "p50_lag_ms": 1.996,
+      "p95_lag_ms": 63.755,
+      "p99_lag_ms": 120.626,
+      "max_lag_ms": 640.017,
+      "mean_lag_ms": 21.16
+    },
+    "m1_partial_current": {
+      "mode": "m1_partial",
+      "poll_interval_sec": 0.8,
+      "total_polls": 194,
+      "probe_samples": 192,
+      "p50_lag_ms": 1.906,
+      "p95_lag_ms": 38.254,
+      "p99_lag_ms": 219.03,
+      "max_lag_ms": 290.636,
+      "mean_lag_ms": 11.072
+    },
+    "full_offload_mitigation": {
+      "mode": "full_offload",
+      "poll_interval_sec": 0.8,
+      "total_polls": 185,
+      "probe_samples": 546,
+      "p50_lag_ms": 1.043,
+      "p95_lag_ms": 2.009,
+      "p99_lag_ms": 2.148,
+      "max_lag_ms": 15.923,
+      "mean_lag_ms": 1.016
+    }
+  },
+  "comparison_against_baseline": {
+    "baseline_query_count": 463,
+    "measured_query_count": 1,
+    "query_reduction_pct": 99.8,
+    "baseline_p50_ms": 20.47,
+    "target_p50_ms": 9.5,
+    "measured_pure_sql_p50_ms": 3.177,
+    "measured_full_func_p50_ms": 10.879,
+    "speedup_p50_x": 1.88,
+    "baseline_p95_ms": 23.48,
+    "target_p95_ms": 10.5,
+    "measured_full_func_p95_ms": 11.462,
+    "speedup_p95_x": 2.05,
+    "measured_p99_ms": 12.025
+  }
+}

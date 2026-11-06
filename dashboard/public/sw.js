@@ -44,6 +44,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
+  // 0. Completely bypass caching on localhost / local development to prevent stale UI traps
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return
+  }
+
   // 1. Never intercept or cache API, WebSockets, Firebase, or external dynamic services
   if (
     url.pathname.startsWith('/api') ||

@@ -1,14 +1,16 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Users, Settings, LogOut,
-  Moon, Sun, Bot, Menu, X, Shield,
+  Moon, Sun, Bot, Menu, X, Shield, ChevronsUpDown,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../store/appStore'
 import { useAuth } from '../../hooks/useAuth'
 import { localizeUsername } from '../../lib/localize'
+import { AccountSwitcherModal } from '../common/AccountSwitcherModal'
+import { useTenant } from '../../context/TenantContext'
 import toast from 'react-hot-toast'
 
 const LANGUAGES = ['AR', 'EN', 'TR'] as const
@@ -19,9 +21,11 @@ export interface SidebarProps {
 
 export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
   const { t, i18n } = useTranslation()
+  const { brandName, tagline, logoUrl } = useTenant()
   const navigate    = useNavigate()
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, savedAccounts } = useAuth()
   const { theme, language, sidebarOpen, setTheme, setLanguage, toggleSidebar } = useAppStore()
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false)
 
   const handleLangChange = (lang: string) => {
     const lc = lang.toLowerCase() as 'ar' | 'en' | 'tr'
@@ -69,38 +73,53 @@ export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
         {/* Logo */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200 dark:border-white/8">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-emerald-500/30 shrink-0 p-0.5 flex items-center justify-center shadow-xs overflow-hidden">
+            <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-primary-500/25 shrink-0 flex items-center justify-center shadow-xs overflow-hidden">
               <img
-                src="/logo.png?v=2"
-                alt="IBRA BOT"
-                className="w-full h-full object-contain"
+                src={logoUrl || '/logo.png?v=2'}
+                alt={brandName}
+                className="w-full h-full object-cover"
               />
             </div>
             <div className="min-w-0">
-              <span className="brand-title font-bold text-sm tracking-wide block leading-tight">IBRA BOT</span>
-              <span className="brand-tagline text-[11px] font-bold block leading-tight mt-0.5 truncate">
-                {t('tagline')}
-              </span>
+              <span className="brand-title font-bold text-sm tracking-wide block leading-tight">{brandName}</span>
+              {tagline ? (
+                <span className="brand-tagline text-[11px] font-bold block leading-tight mt-0.5 truncate">
+                  {tagline}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
 
-        {/* User info */}
+        {/* User info & Quick Account Switcher trigger */}
         {user && (
-          <div className="px-4 py-3 border-b border-white/6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                {user.username?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?'}
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-white truncate">
-                  {localizeUsername(user.username, t) || user.email}
+          <div className="p-2 border-b border-gray-200 dark:border-white/8">
+            <button
+              type="button"
+              onClick={() => setShowAccountSwitcher(true)}
+              className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/6 transition-colors text-left group cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-white/10"
+              title={t('accountSwitcher.title', 'تبديل الحساب')}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-primary-600 dark:bg-primary-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
+                  {user.username?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?'}
                 </div>
-                <div className="text-xs text-gray-500">
-                  {isAdmin ? t('roles.admin', 'Admin') : t('roles.user', 'User')}
+                <div className="min-w-0 text-left">
+                  <div className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                    {localizeUsername(user.username, t) || user.email}
+                  </div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <span>{isAdmin ? t('roles.admin', 'Admin') : t('roles.user', 'User')}</span>
+                    {savedAccounts.length > 1 && (
+                      <span className="text-[9px] bg-primary-500/15 text-primary-600 dark:text-primary-400 font-mono px-1 py-0.2 rounded font-bold">
+                        {savedAccounts.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+              <ChevronsUpDown size={14} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 shrink-0 transition-colors" />
+            </button>
           </div>
         )}
 
@@ -169,6 +188,12 @@ export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
           </button>
         </div>
       </aside>
+
+      {/* Account Switcher Modal */}
+      <AccountSwitcherModal
+        isOpen={showAccountSwitcher}
+        onClose={() => setShowAccountSwitcher(false)}
+      />
     </>
   )
 }

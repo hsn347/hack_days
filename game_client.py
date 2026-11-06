@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ── استيراد الكريبتو المثبتة من onemt_bot.py ─────────────────────
 try:
-    from onemt_bot import (
+    from core.onemt_bot import (
         dh_exchange, dh_secret, hmac64, skynet_des_encode,
         skynet_hashkey, random_key,
         xor_crypt, pack_request, pack_gate_handshake,
@@ -40,6 +40,7 @@ try:
         encode_token, LoginServer,
         LOGIN_SERVER, CMD_PREFIX,
     )
+
     _BOT_AVAILABLE = True
 except ImportError as _e:
     _BOT_AVAILABLE = False
@@ -77,16 +78,23 @@ class GateCredentials:
 #  Async Login (wrapper حول LoginServer من onemt_bot.py)
 # ════════════════════════════════════════════════════════════════════
 
-async def async_login(account: AccountSession) -> Optional[GateCredentials]:
+async def async_login(account: AccountSession, proxy_url: Optional[str] = None) -> Optional[GateCredentials]:
     """يتصل بـ Login Server ويستقبل Gate credentials (async via executor)"""
     loop = asyncio.get_event_loop()
 
     def _do_login():
         token = {"subtoken": account.session_id, "userid": account.user_id}
-        srv   = LoginServer(*LOGIN_SERVER)
+        # بصمة جهاز حقيقية فريدة لكل حساب (lazy import لعدم استهلاك الموارد)
+        dev_profile = None
+        try:
+            from core.device_profiles import get_device_profile
+            dev_profile = get_device_profile(account.email or account.user_id)
+        except Exception:
+            pass
+        srv   = LoginServer(*LOGIN_SERVER, proxy_url=proxy_url)
         srv.connect()
         try:
-            result = srv.do_handshake(token)
+            result = srv.do_handshake(token, device_profile=dev_profile)
         finally:
             srv.close()
         return result
@@ -143,8 +151,9 @@ class GateClient:
     RATE_LIMIT_MIN   = 0.85  # الحد الأدنى للفترة الفاصلة بين الطلبات
     RATE_LIMIT_MAX   = 1.45  # الحد الأقصى للفترة الفاصلة لمحاكاة النقر البشري العشوائي
 
-    def __init__(self, creds: GateCredentials):
+    def __init__(self, creds: GateCredentials, proxy_url: Optional[str] = None):
         self.creds    = creds
+        self.proxy_url: Optional[str] = proxy_url
         self._session = 1
         self._reader  = None
         self._writer  = None
@@ -176,12 +185,22 @@ class GateClient:
         if self._alive:
             return True
         try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.creds.gate_ip, self.creds.gate_port),
-                timeout=15
-            )
+            if self.proxy_url:
+                from python_socks.async_.asyncio import Proxy
+                proxy = Proxy.from_url(self.proxy_url)
+                sock = await asyncio.wait_for(
+                    proxy.connect(dest_host=self.creds.gate_ip, dest_port=self.creds.gate_port),
+                    timeout=15
+                )
+                self._reader, self._writer = await asyncio.open_connection(sock=sock)
+                log.info(f"[Gate] ✓ متصل بأمان عبر SOCKS5 باتجاه {self.creds.gate_ip}:{self.creds.gate_port}")
+            else:
+                self._reader, self._writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.creds.gate_ip, self.creds.gate_port),
+                    timeout=15
+                )
         except Exception as e:
-            log.error(f"[Gate] Connect failed: {e}")
+            log.error(f"[Gate] 🛑 فشل الاتصال عبر البروكسي وتم إيقاف المحاولة لمنع تسريب الـ IP: {e}")
             return False
 
         # Gate Handshake
@@ -203,24 +222,57 @@ class GateClient:
             log.error(f"[Gate] Handshake error: {e}")
             return False
 
+        self.active_connection_info: Dict[str, Any] = {}
         self._alive = True
         self._recv_task = asyncio.create_task(self._recv_loop())
         self._init_flow_task = asyncio.create_task(self._init_flow())
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+        # تسجيل بيانات المقبس والـ IP الفعلي اللحظي لمنع التسريب
+        try:
+            peer = self._writer.get_extra_info('peername')
+        except Exception:
+            peer = None
+
+        if self.proxy_url:
+            raw_ip = ""
+            try:
+                raw_ip = self.proxy_url.split("@")[-1].split(":")[0]
+            except Exception:
+                raw_ip = ""
+            self.active_connection_info = {
+                "type": "socks5",
+                "real_ip": raw_ip,
+                "peer": f"{peer[0]}:{peer[1]}" if peer else raw_ip,
+                "is_proxied": True,
+                "connected_at": time.time(),
+            }
+        else:
+            from proxy import get_server_public_ip
+            self.active_connection_info = {
+                "type": "direct",
+                "real_ip": get_server_public_ip(),
+                "peer": f"{peer[0]}:{peer[1]}" if peer else f"{self.creds.gate_ip}:{self.creds.gate_port}",
+                "is_proxied": False,
+                "connected_at": time.time(),
+            }
         return True
 
+
     async def _heartbeat_loop(self):
-        """إرسال ping دوري للسيرفر كل 25 ثانية للإبقاء على الاتصال حياً"""
-        # انتظار انتهاء _init_flow أولاً (في 5 خطوات من 3 ثوان)
-        for _ in range(15):
+        """إرسال نبضات القلب الدورية (Heartbeat 1037/1) المطابقة لبروتوكول اللعبة الرسمي كل 15 ثانية"""
+        # انتظار انتهاء _init_flow أولاً
+        for _ in range(10):
             if not self._alive:
                 return
             await asyncio.sleep(1)
         while self._alive:
             try:
-                self.send_nowait('1009', '36', {})
-                # نوم قصير متقطع بدلاً من sleep(30) واحدة حتى نستجيب لـ _alive=False فوراً
-                for _ in range(25):
+                # بروتوكول اللعبة الرسمي: CMD_HEARTBEAT_MODULE (1037) / REQ_HEARTBEAT (1)
+                now_ms = int(time.time() * 1000)
+                self.send_nowait('1037', '1', {'time': now_ms})
+                # فاصل زمني 15 ثانية مطابق لـ HEARTBEAT_INV في اللعبة مع نوم متقطع للاستجابة السريعة
+                for _ in range(15):
                     if not self._alive:
                         return
                     await asyncio.sleep(1)
@@ -303,24 +355,14 @@ class GateClient:
             # تخزين الحزمة في الذاكرة المؤقتة
             if isinstance(c, dict) and cmd:
                 self.cached_packets[cmd_key] = c
-                # حفظ بيانات التهيئة والأبطال فوراً
-                retdata = c.get('data', {}).get('retdata', {}) or c.get('retdata', {})
+                c_data = c.get('data')
+                retdata = c_data.get('retdata', {}) if isinstance(c_data, dict) else (c.get('retdata', {}) if isinstance(c.get('retdata'), dict) else {})
                 if isinstance(retdata, dict) and retdata:
                     self.init_data.update(retdata)
                     if 'heroCtrl' in retdata:
                         h_ctrl = retdata.get('heroCtrl', [])
                         if isinstance(h_ctrl, list) and h_ctrl:
                             self.heroes = list(h_ctrl)
-                    # حفظ نسخة JSON محلية فقط عند تفعيل وضع التطوير BOT_DEBUG_DUMP لمنع استهلاك القرص في الإنتاج
-                    if os.environ.get("BOT_DEBUG_DUMP") == "1" and len(retdata) > 5:
-                        try:
-                            os.makedirs('dumps', exist_ok=True)
-                            safe_name = str(getattr(self.creds, 'email', None) or getattr(self.creds, 'uid', 'acc')).replace('@', '_at_')
-                            dump_file = os.path.join('dumps', f"{safe_name}_login_init.json")
-                            with open(dump_file, 'w', encoding='utf-8') as df:
-                                json.dump(retdata, df, indent=2, ensure_ascii=False)
-                        except Exception:
-                            pass
 
                 data_obj = c.get('data', {})
                 if isinstance(data_obj, dict):
@@ -328,7 +370,78 @@ class GateClient:
                     notify_data = data_obj.get('notifyData', [])
                     if notify_id == 'NOTIFY_LOCAL_QUEUE_SYNC' and isinstance(notify_data, list):
                         self.local_queues = notify_data
-                    if notify_id == 'NOTIFY_PVE_BATTLE' and isinstance(notify_data, list):
+                    elif notify_id == 'NOTIFY_ARMY' and isinstance(notify_data, list):
+                        for item in notify_data:
+                            if isinstance(item, dict) and item.get('armyInfo'):
+                                self.init_data['armyCtrl'] = item['armyInfo']
+                    elif notify_id == 'NOTIFY_CITY' and isinstance(notify_data, list):
+                        city = self.init_data.setdefault('cityCtrl', {})
+                        for item in notify_data:
+                            if isinstance(item, dict):
+                                if 'reslist' in item and isinstance(item['reslist'], dict):
+                                    city['reslist'] = item['reslist']
+                                    city['resList'] = item['reslist']
+                                elif 'res' in item and isinstance(item['res'], dict):
+                                    cur_res = city.setdefault('reslist', {})
+                                    for rid, delta in item['res'].items():
+                                        try:
+                                            cur_res[str(rid)] = max(0, int(float(cur_res.get(str(rid), 0))) + int(float(delta)))
+                                        except Exception:
+                                            pass
+                                    city['resList'] = cur_res
+                                if 'saferes' in item:
+                                    city['saferes'] = item['saferes']
+                    elif notify_id == 'NOTIFY_HERO' and isinstance(notify_data, list):
+                        for d in notify_data:
+                            h_items = d.values() if isinstance(d, dict) else (d if isinstance(d, list) else [])
+                            for h in h_items:
+                                if isinstance(h, dict) and 'id' in h:
+                                    hid = h['id']
+                                    for idx, existing in enumerate(self.heroes):
+                                        if existing.get('id') == hid:
+                                            existing.update(h)
+                                            break
+                                    else:
+                                        self.heroes.append(h)
+                        self.init_data['heroCtrl'] = self.heroes
+                    elif notify_id == 'NOTIFY_LORD' and isinstance(notify_data, list):
+                        lord = self.init_data.setdefault('lordInfoCtrl', {})
+                        for item in notify_data:
+                            if isinstance(item, dict):
+                                key = item.get('key')
+                                if key and isinstance(key, str):
+                                    target = lord.setdefault(key, {})
+                                    if isinstance(target, dict):
+                                        for k, v in item.items():
+                                            if k != 'key':
+                                                target[k] = v
+                    elif notify_id == 'NOTIFY_BACKPACK' and isinstance(notify_data, list):
+                        bp = self.init_data.setdefault('backpackCtrl', {})
+                        for item in notify_data:
+                            if isinstance(item, dict):
+                                for act in ('add', 'use'):
+                                    sub_list = item.get(act)
+                                    if isinstance(sub_list, dict):
+                                        for iid, cnt in sub_list.items():
+                                            iid_s = str(iid)
+                                            delta = int(cnt) if act == 'add' else -int(cnt)
+                                            if iid_s in bp and isinstance(bp[iid_s], dict):
+                                                bp[iid_s]['count'] = max(0, int(bp[iid_s].get('count', 0)) + delta)
+                                            elif delta > 0:
+                                                bp[iid_s] = {'id': int(iid), 'count': delta}
+                    elif notify_id == 'NOTIFY_BUFF' and isinstance(notify_data, list):
+                        buff_list = self.init_data.setdefault('buffCtrl', [])
+                        if isinstance(buff_list, list):
+                            for item in notify_data:
+                                if isinstance(item, dict) and item.get('syncType') == 'openBuff':
+                                    b_items = item.get('list', [])
+                                    if isinstance(b_items, list):
+                                        for b in b_items:
+                                            if isinstance(b, dict) and 'id' in b:
+                                                buff_list = [x for x in buff_list if x.get('id') != b.get('id')]
+                                                buff_list.append(b)
+                                        self.init_data['buffCtrl'] = buff_list
+                    elif notify_id == 'NOTIFY_PVE_BATTLE' and isinstance(notify_data, list):
                         pve = self.init_data.setdefault('PveBattleCtrl', {})
                         for item in notify_data:
                             if isinstance(item, dict) and item.get('notifyType') == 'points':
@@ -510,9 +623,17 @@ class GameConnection:
     3. query() / send_nowait() / on_notify()
     """
 
-    def __init__(self, account: AccountSession, on_disconnect: Optional[Callable[[str], Any]] = None):
+    def __init__(self, account: AccountSession, on_disconnect: Optional[Callable[[str], Any]] = None, proxy_url: Optional[str] = None):
         self.account = account
         self.on_disconnect = on_disconnect
+        if proxy_url is None:
+            try:
+                from proxy import get_proxy_for_account
+                self.proxy_url = get_proxy_for_account(account.email or account.user_id)
+            except Exception:
+                self.proxy_url = None
+        else:
+            self.proxy_url = proxy_url
         self.creds:  Optional[GateCredentials] = None
         self._gate:  Optional[GateClient]      = None
         self._spy_mode: bool                   = False
@@ -541,11 +662,11 @@ class GameConnection:
             self._gate.spy_mode = bool(val)
 
     async def connect(self) -> bool:
-        self.creds = await async_login(self.account)
+        self.creds = await async_login(self.account, proxy_url=self.proxy_url)
         if not self.creds: return False
         if hasattr(self.creds, 'email') or not getattr(self.creds, 'email', None):
             self.creds.email = self.account.email
-        self._gate = GateClient(self.creds)
+        self._gate = GateClient(self.creds, proxy_url=self.proxy_url)
         self._gate.on_disconnect = self.on_disconnect
         self._gate.spy_mode = self._spy_mode
         self._gate._packet_listeners = list(self._packet_listeners)
@@ -601,6 +722,22 @@ class GameConnection:
     def server_name(self) -> str:
         return self.creds.server_name if self.creds else ""
 
+    @property
+    def active_connection_info(self) -> Dict[str, Any]:
+        """معلومات المقبس والـ IP الحقيقي الفعلي للاتصال اللحظي في الذاكرة."""
+        if self._gate and hasattr(self._gate, "active_connection_info") and self._gate.active_connection_info:
+            info = dict(self._gate.active_connection_info)
+            info["is_live"] = self.is_connected
+            return info
+        return {
+            "type": "socks5" if self.proxy_url else "direct",
+            "real_ip": self.proxy_url.split("@")[-1].split(":")[0] if self.proxy_url else "direct",
+            "peer": "",
+            "is_proxied": bool(self.proxy_url),
+            "is_live": self.is_connected
+        }
+
+
 
 # ════════════════════════════════════════════════════════════════════
 #  MultiAccountManager — 500+ حساب متزامن
@@ -621,7 +758,10 @@ class MultiAccountManager:
         self._accounts:    List[AccountSession]       = []
         self._connections: Dict[str, GameConnection]  = {}
 
-    def load_from_cache(self, cache_file: str = "session_cache.json"):
+    def load_from_cache(self, cache_file: Optional[str] = None):
+        if cache_file is None:
+            cand = os.path.join(os.path.dirname(__file__), "database", "session_cache.json")
+            cache_file = cand if os.path.exists(cand) else os.path.join(os.path.dirname(__file__), "session_cache.json")
         with open(cache_file, encoding='utf-8') as f:
             cache = json.load(f)
         for email, info in cache.get('accounts', {}).items():
@@ -685,7 +825,9 @@ async def _test():
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-    CACHE = os.path.join(os.path.dirname(__file__), 'session_cache.json')
+    CACHE = os.path.join(os.path.dirname(__file__), 'database', 'session_cache.json')
+    if not os.path.exists(CACHE):
+        CACHE = os.path.join(os.path.dirname(__file__), 'session_cache.json')
     with open(CACHE, encoding='utf-8') as f:
         cache = json.load(f)
 

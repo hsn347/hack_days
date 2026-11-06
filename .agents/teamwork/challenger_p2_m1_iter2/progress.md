@@ -1,0 +1,21 @@
+# Progress — Challenger P2 M1 Iter 2
+
+- Status: Completed / Approved
+- Last visited: 2026-11-02T22:43:00Z
+- Completed:
+  - Created BRIEFING.md, DISPATCH.md, and pre-execution report CHALLENGER_EXECUTION_PLAN.md
+  - Empirically verified `--duration 1` (Sampling 1.0s, Exit 0)
+  - Empirically verified `--workers 5` (5 workers, 1875 records, Exit 0)
+  - Empirically verified `--no-load` (Phase 3 skipped, Exit 0)
+  - Empirically verified `--skip-load` (Phase 3 skipped, Exit 0)
+  - Empirically verified `--tag prefix` (Default 10 workers, 2.5s duration, Exit 0, reports updated)
+  - Empirically verified edge case `--duration 0.1 --workers 1` (375 records in 0.113s, Exit 0)
+  - Empirically verified edge case `--duration 0.1 --no-load --workers 20` (Priority skip honored, Exit 0)
+  - Verified `database/castles.db` MD5 integrity: strictly `eae4db9d39350de5f1b886248d13a1fe` before and after all runs
+  - Verified forbidden files (`game_client.py`, `core/onemt_auth.py`, `core/onemt_bot.py`) untouched
+  - Ran `python tests/run_all_tests.py`: 30/30 tests pass (100% pass rate in 3.66s)
+  - Ran `python tools/test_monitor_stress.py`: 6/6 test suites pass (100% pass rate)
+  - Updated BRIEFING.md
+- Next Steps:
+  - Write handoff.md with 5-component report
+  - Notify parent agent via send_message

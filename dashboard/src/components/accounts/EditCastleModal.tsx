@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, RotateCw, Loader2, Mail, Lock, Edit3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useUpdateCastleCredentials } from '../../hooks/useCastles'
+import { localizeApiError } from '../../lib/localize'
 import type { Castle } from '../../types'
 import toast from 'react-hot-toast'
 
@@ -53,7 +54,7 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
       onClose()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('common.error')
-      toast.error(msg)
+      toast.error(localizeApiError(msg, t))
     }
   }
 
@@ -110,11 +111,11 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                 pointerEvents: 'all',
               }}
             >
-              {/* Green glow accent bar */}
+              {/* Glow accent bar */}
               <div
                 style={{
                   height: '2px',
-                  background: 'linear-gradient(90deg, transparent 0%, #10b981 40%, #22c55e 60%, transparent 100%)',
+                  background: 'linear-gradient(90deg, transparent 0%, var(--theme-primary) 40%, var(--theme-primary-light, var(--theme-primary)) 60%, transparent 100%)',
                   opacity: 0.9,
                 }}
               />
@@ -124,12 +125,12 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                 <div className="flex items-start justify-between mb-5">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600/25 to-teal-600/25 border border-emerald-500/40 flex items-center justify-center shrink-0 shadow-sm"
+                      className="w-10 h-10 rounded-xl bg-primary-500/15 border border-primary-500/30 flex items-center justify-center shrink-0 shadow-sm"
                     >
-                      <Edit3 size={18} className="text-emerald-400" />
+                      <Edit3 size={18} className="text-primary-500" />
                     </div>
                     <div>
-                      <h2 className="edit-modal-title m-0 text-base font-bold text-gray-900 dark:text-emerald-50">
+                      <h2 className="edit-modal-title m-0 text-base font-bold text-gray-900 dark:text-white">
                         {t('modals.editCastleTitle')}
                       </h2>
                       <p className="edit-modal-subtitle m-0 text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-[240px]">
@@ -150,22 +151,24 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} autoComplete="off">
                   {/* Email Field */}
                   <div className="mb-4">
                     <label className="edit-modal-label block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                      {t('settings.email')}
+                      {t('modals.email', t('settings.email', 'البريد الإلكتروني'))}
                     </label>
                     <div className="relative">
                       <Mail size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 pointer-events-none" />
                       <input
                         id="edit-castle-email"
+                        name="edit_castle_account_email"
                         type="email"
                         required
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         dir="ltr"
-                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-emerald-50 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                        autoComplete="off"
+                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                       />
                     </div>
                   </div>
@@ -173,19 +176,20 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                   {/* Password Field */}
                   <div className="mb-6">
                     <label className="edit-modal-label block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                      {t('settings.newPassword')}
+                      {t('settings.newPassword', 'كلمة المرور الجديدة')}
                     </label>
                     <div className="relative">
                       <Lock size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 pointer-events-none" />
                       <input
                         id="edit-castle-password"
+                        name="edit_castle_account_password"
                         type="password"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         placeholder={t('modals.leaveEmptyToKeep')}
                         dir="ltr"
                         autoComplete="new-password"
-                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-emerald-50 placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                        className="edit-modal-input w-full bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl py-2.5 pe-9 ps-3.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none transition-all focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                       />
                     </div>
                   </div>
@@ -208,7 +212,7 @@ export function EditCastleModal({ castle, isOpen, onClose, userId }: EditCastleM
                       type="submit"
                       id="submit-edit-castle"
                       disabled={updateMutation.isPending}
-                      className="edit-modal-btn-submit flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-98"
+                      className="edit-modal-btn-submit flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-primary-600 hover:bg-primary-500 shadow-[0_0_20px_rgba(var(--theme-primary-rgb),0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-98"
                     >
                       {updateMutation.isPending ? (
                         <>

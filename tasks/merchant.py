@@ -103,7 +103,8 @@ class MerchantTask(BaseTask):
         """استخراج رصيد الذهب الحالي للاعب."""
         try:
             lord_info = self.conn.init_data.get("lordInfoCtrl", {})
-            return int(lord_info.get("baseInfo", {}).get("gold", 0))
+            base = lord_info.get("base", {}) or lord_info.get("baseInfo", {})
+            return int(base.get("gold", 0))
         except Exception:
             return 0
 

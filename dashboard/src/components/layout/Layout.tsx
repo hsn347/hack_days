@@ -5,10 +5,12 @@ import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
 import { PwaInstallPrompt } from '../common/PwaInstallPrompt'
 import { ConfirmLogoutModal } from '../common/ConfirmLogoutModal'
-import { Sun, Moon, LogOut } from 'lucide-react'
+import { AccountSwitcherModal } from '../common/AccountSwitcherModal'
+import { Sun, Moon, LogOut, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../store/appStore'
 import { useAuth } from '../../hooks/useAuth'
+import { useTenant } from '../../context/TenantContext'
 
 const LANGUAGES = ['AR', 'EN', 'TR'] as const
 
@@ -19,10 +21,12 @@ interface LayoutProps {
 
 export function Layout({ children, title }: LayoutProps) {
   const { t, i18n } = useTranslation()
+  const { brandName, tagline, logoUrl } = useTenant()
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { logout, savedAccounts } = useAuth()
   const { theme, language, setTheme, setLanguage } = useAppStore()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [showAccountModal, setShowAccountModal] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const handleLangChange = (lang: string) => {
@@ -58,23 +62,47 @@ export function Layout({ children, title }: LayoutProps) {
         <header className="mobile-app-header md:hidden flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-white/8 sticky top-0 z-30 bg-white/95 dark:bg-gray-950/90 backdrop-blur-xl shadow-xs">
           {/* Brand Identity */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 dark:border-emerald-500/30 shrink-0 p-0.5 flex items-center justify-center shadow-xs overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-primary-500/25 shrink-0 flex items-center justify-center shadow-xs overflow-hidden">
               <img
-                src="/logo.png?v=2"
-                alt="IBRA BOT"
-                className="w-full h-full object-contain"
+                src={logoUrl || '/logo.png?v=2'}
+                alt={brandName}
+                className="w-full h-full object-cover"
               />
             </div>
             <div className="min-w-0">
-              <span className="brand-title font-bold tracking-wide text-sm leading-tight block truncate">IBRA BOT</span>
-              <span className="brand-tagline text-[10px] font-bold block leading-tight truncate">
-                {t('tagline')}
-              </span>
+              <span className="brand-title font-bold tracking-wide text-sm leading-tight block truncate">{brandName}</span>
+              {tagline ? (
+                <span className="brand-tagline text-[10px] font-bold block leading-tight truncate">
+                  {tagline}
+                </span>
+              ) : null}
             </div>
           </div>
 
-          {/* Quick Header Actions: Language + Theme + Logout */}
+          {/* Quick Header Actions: Switch Account + Language + Theme + Logout */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Quick Switch Account Button */}
+            <button
+              onClick={() => setShowAccountModal(true)}
+              style={{
+                color: 'var(--theme-primary)',
+                backgroundColor: 'rgba(var(--theme-primary-rgb), 0.1)',
+                borderColor: 'rgba(var(--theme-primary-rgb), 0.25)',
+              }}
+              className="flex items-center gap-1 p-1.5 rounded-lg border transition-colors cursor-pointer hover:opacity-90"
+              title={t('accountSwitcher.title', 'تبديل الحساب')}
+            >
+              <Users size={15} />
+              {savedAccounts.length > 1 && (
+                <span
+                  style={{ backgroundColor: 'rgba(var(--theme-primary-rgb), 0.2)' }}
+                  className="text-[10px] font-bold font-mono px-1 rounded-full leading-tight"
+                >
+                  {savedAccounts.length}
+                </span>
+              )}
+            </button>
+
             {/* Language Selector */}
             <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-lg p-0.5 border border-gray-200 dark:border-white/10">
               {LANGUAGES.map((lang) => {
@@ -83,10 +111,11 @@ export function Layout({ children, title }: LayoutProps) {
                   <button
                     key={lang}
                     onClick={() => handleLangChange(lang)}
+                    style={isActive ? { backgroundColor: 'var(--theme-primary)', color: '#ffffff' } : {}}
                     className={clsx(
                       'px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-all',
                       isActive
-                        ? 'bg-emerald-600 text-white shadow-xs'
+                        ? 'shadow-xs'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     )}
                   >
@@ -127,6 +156,12 @@ export function Layout({ children, title }: LayoutProps) {
 
       {/* PWA Install Prompt */}
       <PwaInstallPrompt />
+
+      {/* Account Switcher Modal */}
+      <AccountSwitcherModal
+        isOpen={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+      />
 
       {/* Confirm Logout Modal */}
       <ConfirmLogoutModal

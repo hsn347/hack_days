@@ -1,13 +1,20 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import LanguageDetector from 'i18next-browser-languagedetector'
 
 import ar from '../locales/ar.json'
 import en from '../locales/en.json'
 import tr from '../locales/tr.json'
+import { getInitialLanguage } from '../config/tenants'
+
+/**
+ * تهيئة i18next بناءً على لغة النطاق والخيارات اليدوية للمستخدم:
+ * - دومين نورجان (nurjanbot.online): اللغة الافتراضية التركية ('tr').
+ * - دومين إبراهيم الرئيسي (ibraabot.online): اللغة الافتراضية العربية ('ar').
+ * - تم إلغاء استخدام navigator detector لمنع لغة متصفح الزائر من تجاوز لغة النطاق الافتراضية.
+ */
+const initialLang = getInitialLanguage()
 
 i18n
-  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
@@ -15,13 +22,10 @@ i18n
       en: { translation: en },
       tr: { translation: tr },
     },
-    fallbackLng: 'ar',
+    lng: initialLang,
+    fallbackLng: initialLang,
     interpolation: { escapeValue: false },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'osmanli_lang',
-    },
   })
 
+export { getInitialLanguage }
 export default i18n

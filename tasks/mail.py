@@ -19,6 +19,7 @@ import sys
 import os
 import asyncio
 import logging
+import random
 from typing import Any, Dict, List, Optional
 
 if sys.platform == "win32":
@@ -83,7 +84,7 @@ class MailTask(BaseTask):
                 break
 
             loop_iteration = 0
-            max_loops = 50  # سقف أمان لمنع أي حلقة لا نهائية (يتسع لآلاف الرسائل)
+            max_loops = 6   # سقف أمان للدورة الواحدة (300 رسالة كحد أقصى) لتفادي سيل الطلبات المكثف
             seen_mids = set()
 
             while loop_iteration < max_loops:
@@ -163,9 +164,9 @@ class MailTask(BaseTask):
                     except Exception as e:
                         self.log.warning(f"⚠️ خطأ أثناء إرسال أمر جمع المكافآت 1015/18: {e}")
 
-                    # 3. مهلة الانتظار بين الجمع والحذف (3 ثوانٍ محاكاة للبشر)
+                    # 3. مهلة الانتظار بين الجمع والحذف (محاكاة طبيعية للبشر ضد الحظر)
                     if self.delete_after_collect:
-                        wait_time = max(1.0, self.wait_seconds)
+                        wait_time = round(random.uniform(2.2, 3.8), 2)
                         self.log.info(f"⏳ انتظار {wait_time} ثوانٍ قبل تنفيذ أمر حذف الرسائل المجمعة...")
                         await asyncio.sleep(wait_time)
 
@@ -186,8 +187,8 @@ class MailTask(BaseTask):
                         except Exception as e:
                             self.log.warning(f"⚠️ خطأ أثناء حذف الرسائل 1015/4: {e}")
 
-                # استراحة قصيرة جداً (1 ثانية) قبل تكرار الاستعلام للتحقق إن بقيت رسائل أخرى
-                await asyncio.sleep(1.0)
+                # استراحة طبيعية عشوائية قبل تكرار الاستعلام للتحقق إن بقيت رسائل أخرى
+                await asyncio.sleep(round(random.uniform(1.4, 2.6), 2))
 
         if not all_processed_mids:
             return TaskResult.ok("📭 صندوق البريد فارغ، لا توجد رسائل للمعالجة.")

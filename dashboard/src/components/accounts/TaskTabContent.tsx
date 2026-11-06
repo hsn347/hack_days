@@ -47,6 +47,7 @@ function Stepper({
   step = 1,
   onChange,
   formatLabel,
+  podClassName,
 }: {
   value: number
   min?: number
@@ -54,6 +55,7 @@ function Stepper({
   step?: number
   onChange: (v: number) => void
   formatLabel?: (v: number) => string | React.ReactNode
+  podClassName?: string
 }) {
   const [isFocused, setIsFocused] = useState(false)
   const [textValue, setTextValue] = useState(String(value))
@@ -121,7 +123,15 @@ function Stepper({
         onClick={() => inputRef.current?.focus()}
         className={clsx(
           'relative flex justify-center items-center px-0.5 h-6 transition-colors cursor-text task-stepper-pod shrink-0',
-          formatLabel ? 'w-auto min-w-[50px] px-1.5' : 'w-7 min-w-[28px] max-w-[28px]',
+          podClassName || (
+            formatLabel
+              ? 'w-auto min-w-[50px] px-1.5'
+              : max >= 1000
+                ? 'w-auto min-w-[64px] px-2'
+                : max >= 100
+                  ? 'w-9 min-w-[36px] max-w-[42px] px-1'
+                  : 'w-7 min-w-[28px] max-w-[28px]'
+          ),
           isFocused ? 'bg-black/90' : 'bg-black/30 hover:bg-black/50'
         )}
         title={`(${min} - ${max})`}
@@ -3245,6 +3255,31 @@ export function TaskTabContent({
           enabled={cfg.open_torch_chest?.enabled ?? false}
           onToggle={toggle('open_torch_chest')}
         />
+
+        {/* المزايدة على الحمام الزاجل */}
+        <TaskRow
+          id="auction"
+          emoji="🕊️"
+          label={t('tasks.auctionBid')}
+          enabled={cfg.auction?.enabled ?? false}
+          onToggle={toggle('auction')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ color: '#e5e7eb', fontSize: '12px', fontWeight: 500 }}>
+                {t('tasks.auctionBidMaxGold')}
+              </span>
+            </div>
+            <Stepper
+              value={cfg.auction?.max_gold ?? 2000}
+              min={100}
+              max={100000}
+              step={100}
+              podClassName="w-auto min-w-[64px] px-2"
+              onChange={v => update('auction', { max_gold: v })}
+            />
+          </div>
+        </TaskRow>
 
         {/* الرحلات البطولية (hero_consign) */}
         <TaskRow

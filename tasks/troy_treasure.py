@@ -202,7 +202,7 @@ class TroyTreasureTask(BaseTask):
                     self.log.warning(f"  ⚠️ تعذر استلام جائزة المهمة {qid}: {note}")
 
                 # فاصل زمني طبيعي بين الاستلامات
-                await asyncio.sleep(random.uniform(0.6, 1.2))
+                await asyncio.sleep(random.uniform(0.9, 1.8))
 
         final_msg = f"تم استلام {claimed_count} من جوائز مهام كنز طروادة بنجاح"
         if failed_count > 0:

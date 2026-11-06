@@ -145,13 +145,17 @@ class BaseTask(ABC):
         """التحقق هل اتصال السيرفر ما زال نشطاً وقائماً."""
         return self.conn is not None and getattr(self.conn, "is_connected", False)
 
-    async def get_active_marches_count(self) -> int:
-        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة مع استعلام فوري وتجنب التكرار."""
-        try:
-            await self.conn.query('1007', '1000', {}, timeout=2)
-            await asyncio.sleep(0.3)
-        except Exception:
-            pass
+    async def get_active_marches_count(self, force_sync: bool = False) -> int:
+        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة بالاعتماد على الذاكرة الحية (Zero-Request)."""
+        has_local = bool(getattr(self.conn, 'local_queues', None))
+        if force_sync or not has_local:
+            try:
+                self.log.warning("🛑🛑🛑🛑🛑🛑")
+                await self.conn.query('1007', '1000', {}, timeout=2)
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
 
         seen_ids = set()
         active = 0
@@ -171,7 +175,7 @@ class BaseTask(ABC):
         for item in all_queue_data:
             q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
             for q in q_list:
-                if isinstance(q, dict) and q.get('status') in (1, 2, 3, 4, 7):
+                if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
                     qid = q.get('id') or q.get('queueId')
                     if qid:
                         if qid not in seen_ids:

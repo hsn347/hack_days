@@ -9,9 +9,11 @@ import { motion } from 'framer-motion'
 import { Plus, Users, Shield, Zap, Bot, Crown, AlertTriangle, AlertCircle, ShieldAlert, Clock } from 'lucide-react'
 
 import { localizePlanName, localizeUsername } from '../lib/localize'
+import { useTenant } from '../context/TenantContext'
 
 export function DashboardPage() {
   const { t, i18n } = useTranslation()
+  const { brandName, tagline, logoUrl } = useTenant()
   const { user, isAdmin } = useAuth()
   const castlesQuery = useCastles(user?.uid ?? '')
   const allCastles = castlesQuery.data?.pages.flatMap(p => p.items) ?? []
@@ -39,7 +41,7 @@ export function DashboardPage() {
     { label: t('dashboard.idleCastles'),   value: idle,               icon: '⏸️', color: 'text-gray-400',   bg: 'bg-gray-600/10 border-gray-600/20' },
     {
       label: t('dashboard.subscription'),
-      value: isAdmin ? t('dashboard.superAdminUnlimited') : isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? 'بانتظار الموافقة' : (planDisplayName || '—'),
+      value: isAdmin ? t('dashboard.superAdminUnlimited') : isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? t('admin.pendingApproval') : (planDisplayName || '—'),
       icon: isAdmin ? '👑' : isBanned ? '🚫' : isPendingApproval ? '⏳' : isExpired ? '⚠️' : isExpiringSoon ? '⏳' : '⭐',
       color: isAdmin
         ? 'text-amber-400'
@@ -55,7 +57,7 @@ export function DashboardPage() {
         : isPendingApproval || isExpiringSoon
         ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30'
         : 'bg-yellow-600/10 border-yellow-600/20',
-      badge: isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? 'قيد المراجعة' : isExpired ? t('dashboard.expiredBadge') : isExpiringSoon ? t('dashboard.daysRemainingShort', { count: daysRemaining }) : undefined,
+      badge: isBanned ? t('dashboard.bannedBadge') : isPendingApproval ? t('dashboard.underReview', 'قيد المراجعة') : isExpired ? t('dashboard.expiredBadge') : isExpiringSoon ? t('dashboard.daysRemainingShort', { count: daysRemaining }) : undefined,
     },
   ]
 
@@ -67,10 +69,17 @@ export function DashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="font-bold text-2xl brand-title">{t('dashboard.title')}</h1>
-              <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-0.5 border border-emerald-500/20 rounded-full font-bold text-xs brand-tagline">
-                <span className="bg-emerald-500 rounded-full w-1.5 h-1.5" />
-                IBRA BOT — {t('tagline')}
-              </span>
+              {tagline ? (
+                <span className="inline-flex items-center gap-1.5 bg-primary-500/15 px-2.5 py-0.5 border border-primary-500/30 rounded-full font-bold text-xs brand-tagline brand-tagline-badge">
+                  <span className="bg-primary-500 rounded-full w-1.5 h-1.5" />
+                  {brandName} — {tagline}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 bg-primary-500/15 px-2.5 py-0.5 border border-primary-500/30 rounded-full font-bold text-xs brand-tagline brand-tagline-badge">
+                  <span className="bg-primary-500 rounded-full w-1.5 h-1.5" />
+                  {brandName}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -186,23 +195,25 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6 p-8 text-center glass-card"
           >
-            <div className="flex justify-center items-center bg-white shadow-md mx-auto p-1.5 border border-gray-200 dark:border-emerald-500/30 rounded-2xl w-20 h-20 overflow-hidden">
-              <img src="/logo.png?v=2" alt="IBRA BOT" className="w-full h-full object-contain" />
+            <div className="flex justify-center items-center bg-gray-100 dark:bg-white/5 shadow-md mx-auto border border-gray-200 dark:border-primary-500/30 rounded-2xl w-20 h-20 overflow-hidden">
+              <img src={logoUrl || "/logo.png?v=2"} alt={brandName} className="w-full h-full object-cover" />
             </div>
             <div>
-              <div className="inline-block bg-emerald-500/10 mb-2 px-2.5 py-0.5 border border-emerald-500/20 rounded-full font-bold text-xs brand-tagline">
-                {t('tagline')}
-              </div>
-              <h2 className="mb-2 font-bold text-xl brand-title">{t('dashboard.welcomeTitle')}</h2>
+              {tagline ? (
+                <div className="inline-block bg-primary-500/15 mb-2 px-2.5 py-0.5 border border-primary-500/30 rounded-full font-bold text-xs brand-tagline brand-tagline-badge">
+                  {tagline}
+                </div>
+              ) : null}
+              <h2 className="mb-2 font-bold text-xl brand-title">{t('dashboard.welcomeTitle', { brand: brandName })}</h2>
               <p className="mx-auto max-w-sm text-gray-500 dark:text-gray-400 text-sm">
                 {t('dashboard.welcomeDesc')}
               </p>
             </div>
             <div className="gap-4 grid grid-cols-1 sm:grid-cols-3 text-start">
               {[
-                { icon: <Plus size={18} />, step: '1', title: t('dashboard.step1Title'), desc: t('dashboard.step1Desc'), clr: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
+                { icon: <Plus size={18} />, step: '1', title: t('dashboard.step1Title'), desc: t('dashboard.step1Desc'), clr: 'border-primary-500/30 text-primary-600 dark:text-primary-400 bg-primary-500/10' },
                 { icon: <Zap  size={18} />, step: '2', title: t('dashboard.step2Title'), desc: t('dashboard.step2Desc'), clr: 'border-blue-500/30 text-blue-600 dark:text-blue-400 bg-blue-500/10' },
-                { icon: <Bot  size={18} />, step: '3', title: t('dashboard.step3Title'), desc: t('dashboard.step3Desc'), clr: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
+                { icon: <Bot  size={18} />, step: '3', title: t('dashboard.step3Title'), desc: t('dashboard.step3Desc'), clr: 'border-primary-500/30 text-primary-600 dark:text-primary-400 bg-primary-500/10' },
               ].map(s => (
                 <div key={s.step} className={`p-4 rounded-xl border ${s.clr} space-y-2`}>
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${s.clr}`}>{s.icon}</div>
@@ -267,7 +278,7 @@ export function DashboardPage() {
               </div>
               <div className="mt-0.5 text-gray-500 text-xs">
                 {isAdmin ? (
-                  <span className="font-medium text-emerald-500 dark:text-emerald-400">{t('dashboard.superAdminLifetime')}</span>
+                  <span className="font-medium text-primary-500 dark:text-primary-400">{t('dashboard.superAdminLifetime')}</span>
                 ) : isPendingApproval ? (
                   <span className="text-amber-600 dark:text-amber-400 font-medium">{t('dashboard.pendingApprovalNote')}</span>
                 ) : (

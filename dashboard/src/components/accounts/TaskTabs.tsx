@@ -90,14 +90,14 @@ export function TaskTabs({ active, onChange, errorTab }: TaskTabsProps) {
                 border: isError
                   ? '1px solid rgba(239,68,68,0.7)'
                   : isActive
-                  ? '1px solid rgba(34,197,94,0.35)'
+                  ? '1px solid rgba(var(--theme-primary-rgb, 34,197,94), 0.5)'
                   : '1px solid transparent',
                 background: isError
                   ? 'rgba(239,68,68,0.14)'
                   : isActive
-                  ? 'linear-gradient(135deg, rgba(5,150,105,0.25) 0%, rgba(16,185,129,0.15) 100%)'
+                  ? 'linear-gradient(135deg, rgba(var(--theme-primary-rgb, 5,150,105), 0.3) 0%, rgba(var(--theme-primary-rgb, 16,185,129), 0.15) 100%)'
                   : 'none',
-                color: isError ? '#fca5a5' : isActive ? '#6ee7b7' : '#9ca3af',
+                color: isError ? '#fca5a5' : isActive ? 'var(--theme-primary-light, #6ee7b7)' : '#9ca3af',
                 fontSize: '11px',
                 fontWeight: isActive ? 600 : 400,
                 cursor: 'pointer',

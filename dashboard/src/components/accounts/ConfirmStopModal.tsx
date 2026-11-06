@@ -48,14 +48,7 @@ export function ConfirmStopModal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             onClick={onClose}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9998,
-              background: 'rgba(0, 0, 0, 0.72)',
-              backdropFilter: 'blur(6px)',
-              WebkitBackdropFilter: 'blur(6px)',
-            }}
+            className="fixed inset-0 z-[9998] bg-slate-900/40 dark:bg-black/75 backdrop-blur-sm modal-backdrop"
           />
 
           {/* Modal Centered Container */}
@@ -130,7 +123,7 @@ export function ConfirmStopModal({
                     disabled={isPending}
                     className="flex flex-1 justify-center items-center gap-1.5 bg-gradient-to-r from-rose-600 hover:from-rose-500 to-red-600 hover:to-red-500 disabled:opacity-50 shadow-[0_0_20px_rgba(244,63,94,0.3)] px-4 py-2.5 rounded-xl font-bold text-white text-xs sm:text-sm active:scale-98 transition-all cursor-pointer modal-btn-confirm"
                   >
-                    {t('modals.stopTitle')}
+                    {isAll ? t('modals.confirmStopAllBtn') : t('modals.confirmStopBtn')}
                   </button>
                 </div>
               </div>

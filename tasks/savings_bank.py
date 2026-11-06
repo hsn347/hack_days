@@ -11,7 +11,7 @@ tasks/savings_bank.py — مهمة دار الادخار وبنك التوفير
      - إيداع الذهب تلقائياً بأقصى حد متاح (6023/1) للمدة المختارة (1 أو 7 أو 15 أو 30 يوماً).
 
 الاستخدام كملف مستقل:
-    python tasks/savings_bank.py --email "hichambaraki10@gmail.com" --days 1
+    python tasks/savings_bank.py --email "johan2003@yopmail.com" --days 7
     python tasks/savings_bank.py --email "samartilleli@yopmail.com" --days 7
     python tasks/savings_bank.py --email "zzoro8290@gmail.com" --days 30
     python tasks/savings_bank.py --email "ossso5040@gmail.com" --days 15 --deposit 4000
@@ -33,6 +33,7 @@ if _ROOT_DIR not in sys.path:
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, Dict, List, Optional
 
@@ -120,6 +121,7 @@ class SavingsBankTask(BaseTask):
                     # تفريغ الوديعة القديمة في الذاكرة
                     if isinstance(savings_ctrl, dict):
                         savings_ctrl['slip'] = {}
+                    await asyncio.sleep(random.uniform(1.4, 2.8))
                 else:
                     err_code = str(r_withdraw.get('err', 'unknown')) if r_withdraw else 'timeout'
                     self.log.warning(f"⚠️ فشل سحب أرباح دار الادخار (كود: {err_code})")
@@ -152,51 +154,40 @@ class SavingsBankTask(BaseTask):
         custom_deposit = cfg.get('deposit')
         desired_amount = int(custom_deposit) if custom_deposit else plan_info.get("max_deposit", 2000)
 
-        # ── فحص 1: هل توجد وديعة نشطة بالفعل؟ (من init_data مباشرة) ──────────
-        sb_ctrl_live = self.conn.init_data.get('savingsBankAgCtrl', {})
-        live_slip = sb_ctrl_live.get('slip', {}) if isinstance(sb_ctrl_live, dict) else {}
-        if isinstance(live_slip, dict) and live_slip.get('startTime'):
-            s_days = int(live_slip.get('day', 7))
-            s_start = int(live_slip.get('startTime', 0))
-            s_end = s_start + (s_days * 86400)
-            if int(time.time()) < s_end:
-                remaining_sec = s_end - int(time.time())
-                rem_days = remaining_sec // 86400
-                rem_hours = (remaining_sec % 86400) // 3600
-                self.log.info(
-                    f"ℹ️ توجد وديعة نشطة بالفعل ({live_slip.get('deposit', 0):,} ذهب لمدة {s_days} يوم) | "
-                    f"متبقي: {rem_days} يوم و {rem_hours} ساعة — لا حاجة للإيداع."
-                )
-                return TaskResult.ok(
-                    "توجد وديعة نشطة بالفعل",
-                    status="investing",
-                    slip=live_slip,
-                    remaining_seconds=remaining_sec,
-                    retry_after=min(remaining_sec + 60, 86400)
-                )
-
-        # ── فحص 2: الاستعلام عن الذهب الحالي للقلعة (1001/1 حي) ──────────────
+        # ── الاستعلام عن الذهب الحي للقلعة (فقط عند عدم وجود وديعة نشطة وحاجة لإيداع جديد) ──
         current_gold = 0
         try:
-            r_city = await self.conn.query('1001', '1', {}, timeout=8)
-            if r_city and str(r_city.get('err', '0')) == '0':
+            # استعلام حي ومؤكد عن بيانات الأمير ورصيد الذهب عبر 1002/1 (REQ_INIT_LORDDATA)
+            r_val = await self.conn.query('1002', '1', {}, timeout=6)
+            if r_val and str(r_val.get('err', '0')) == '0':
+                base_data = r_val.get('data', {}).get('base', {})
+                if isinstance(base_data, dict) and 'gold' in base_data:
+                    current_gold = int(base_data.get('gold', 0))
+                    # تحديث كاش init_data المحلي
+                    lord_ctrl = self.conn.init_data.setdefault('lordInfoCtrl', {})
+                    lord_ctrl.setdefault('base', {})['gold'] = current_gold
+
+            # في حال تعذر الرد المباشر، نقرأ من الكاش المحلي
+            if current_gold == 0:
                 lord_ctrl = self.conn.init_data.get('lordInfoCtrl', {})
                 base_info = lord_ctrl.get('base', {}) if isinstance(lord_ctrl, dict) else {}
                 current_gold = int(base_info.get('gold', 0))
-                # أحياناً يعود الذهب في الرد المباشر
-                if current_gold == 0:
-                    current_gold = int(r_city.get('data', {}).get('gold', 0))
+
             self.log.info(f"🪙 الذهب الحالي في القلعة: {current_gold:,}")
         except Exception as e:
-            self.log.warning(f"⚠️ لم نتمكن من الاستعلام عن الذهب الحالي: {e}")
+            self.log.warning(f"⚠️ استثناء أثناء الاستعلام عن الذهب الحي: {e}")
+            lord_ctrl = self.conn.init_data.get('lordInfoCtrl', {})
+            base_info = lord_ctrl.get('base', {}) if isinstance(lord_ctrl, dict) else {}
+            current_gold = int(base_info.get('gold', 0))
 
         if current_gold < 100:
-            self.log.warning(
-                f"⚠️ رصيد الذهب غير كافٍ للإيداع ({current_gold:,} ذهب) — الحد الأدنى المطلوب 100 ذهب. تخطي المهمة."
-            )
-            return TaskResult.fail(
-                f"رصيد الذهب غير كافٍ ({current_gold:,})",
-                retry_after=3600
+            msg = f"رصيد الذهب الحالي ({current_gold:,} ذهب) أقل من الحد الأدنى للإيداع (100 ذهب) — تم تخطي المهمة"
+            self.log.info(f"⏭️ [دار الادخار] {msg}.")
+            return TaskResult.ok(
+                msg,
+                status="insufficient_gold",
+                current_gold=current_gold,
+                retry_after=7200
             )
 
         # تعديل مبلغ الإيداع ليكون بحد أقصى ما تملكه القلعة
@@ -215,11 +206,17 @@ class SavingsBankTask(BaseTask):
             "deposit": deposit_amount
         }
 
+        await asyncio.sleep(random.uniform(1.2, 2.4))
         r_deposit = await self.conn.query('6023', '1', payload, timeout=8)
         if r_deposit and str(r_deposit.get('err', '0')) == '0':
             new_slip = r_deposit.get('data', {}).get('slip', payload)
             if isinstance(savings_ctrl, dict):
                 savings_ctrl['slip'] = new_slip
+
+            # خصم المبلغ المودع من كاش الذهب المحلي فورياً لضمان اتساق الذاكرة
+            if "lordInfoCtrl" in self.conn.init_data:
+                base_data = self.conn.init_data["lordInfoCtrl"].setdefault("base", {})
+                base_data["gold"] = max(0, int(base_data.get("gold", 0)) - deposit_amount)
 
             retry_delay = target_days * 86400
             success_msg = f"تم إيداع {deposit_amount:,} ذهب بنجاح لمدة {target_days} يوماً في دار الادخار"
@@ -244,6 +241,16 @@ class SavingsBankTask(BaseTask):
             elif err_code == "6":
                 self.log.info("ℹ️ توجد وديعة نشطة بالفعل في دار الادخار.")
                 return TaskResult.ok("توجد وديعة نشطة بالفعل", status="investing", retry_after=43200)
+            elif err_code == "3":
+                msg = f"رصيد الذهب في القلعة غير كافٍ لإيداع {deposit_amount:,} ذهب (Err_GOLD_NOT_REACH)"
+                self.log.warning(f"⚠️ [دار الادخار] {msg}.")
+                if "lordInfoCtrl" in self.conn.init_data:
+                    self.conn.init_data["lordInfoCtrl"].setdefault("base", {})["gold"] = 0
+                return TaskResult.ok(
+                    msg,
+                    status="insufficient_gold",
+                    retry_after=7200
+                )
             else:
                 self.log.error(f"❌ فشل إيداع الذهب في دار الادخار (كود السيرفر: {err_code})")
                 return TaskResult.fail(f"فشل الإيداع (كود: {err_code})", retry_after=3600)

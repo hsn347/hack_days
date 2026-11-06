@@ -20,7 +20,10 @@ export interface User {
   username: string
   email: string
   phone?: string
-  role: 'user' | 'admin'
+  role: 'user' | 'admin' | 'merchant_admin' | string
+  tenant_domain?: string
+  is_super_admin?: boolean
+  is_merchant_admin?: boolean
   created_at: string
   is_banned: boolean
   banned_reason?: string
@@ -36,6 +39,8 @@ export interface CastleInfo {
   vip_level: number
   alliance_name: string
   coordinates: { x: number; y: number }
+  avatar?: string
+  image_id?: number
 }
 
 export interface Resources {
@@ -45,6 +50,14 @@ export interface Resources {
   diamond: number
   gold: number
   stamina: number
+  unprotected_food?: number
+  unprotected_wood?: number
+  unprotected_iron?: number
+  unprotected_diamond?: number
+  safe_food?: number
+  safe_wood?: number
+  safe_iron?: number
+  safe_diamond?: number
   last_updated: string
 }
 
@@ -79,18 +92,18 @@ export interface TrainLevels {
 export interface MarchManagerConfig extends BaseTaskConfig {
   max_queues?: number
   priority_order?: string[]
+  abra?: AbraConfig
   prestige_invaders?: { enabled: boolean }
   prestige_stronghold?: { enabled: boolean }
   prestige_gather?: { enabled: boolean }
   transport: { enabled: boolean; target_x: number | null; target_y: number | null; resource_ids: number[] }
   ruins: { enabled: boolean; explore_time: number; formation_id: number }
   combat: { enabled: boolean; choice: 'elf' | 'invaders' | 'rebels'; level: number; formation_id: number }
-  elf: { enabled: boolean; formation_id: number }
   invaders: { enabled: boolean; level: number; formation_id: number }
   rebels: { enabled: boolean; level: number; formation_id: number }
   stronghold: { enabled: boolean; level: number; count: number; formation_id: number }
   gold_gather?: { enabled: boolean; locations?: GoldLocation[] }
-  gather: { enabled: boolean; res_type: number; level: number; search_range: number }
+  gather: { enabled: boolean; res_type: number; level: number; search_range: number; use_boost?: boolean }
 }
 
 export interface PrestigeSubtasks {
@@ -103,7 +116,7 @@ export interface PrestigeSubtasks {
 export interface CastleConfig {
   city_harvest: BaseTaskConfig
   research: BaseTaskConfig
-  alliance: BaseTaskConfig & { auto_help: boolean; gold_donations: number }
+  alliance: BaseTaskConfig & { gold_donations: number; auto_help?: boolean; open_treasure?: boolean }
   port: BaseTaskConfig
   train: BaseTaskConfig & { levels: TrainLevels }
   pet_patrol: BaseTaskConfig & { pet?: string; destination?: number }
@@ -127,10 +140,11 @@ export interface CastleConfig {
   material_workshop: BaseTaskConfig & { materials: string[] }
   caravan: BaseTaskConfig
   port_delegate: BaseTaskConfig & { shop_item: string }
-  savings_bank: BaseTaskConfig & { days: number }
+  savings_bank: BaseTaskConfig & { days: number; deposit?: number }
   building: BaseTaskConfig & { upgrade_castle: boolean; speedup_castle: boolean; upgrade_support_buildings: boolean; target_buildings?: Record<string, boolean> }
   prestige: BaseTaskConfig & { subtasks: PrestigeSubtasks }
   march_manager: MarchManagerConfig
+  elf?: BaseTaskConfig & { formation_id: number }
   troy_treasure?: BaseTaskConfig & {
     subtasks?: {
       claim_quests?: boolean
@@ -138,7 +152,18 @@ export interface CastleConfig {
     }
   }
   warrior_exchange?: BaseTaskConfig & { count: number }
+  auction?: BaseTaskConfig & { max_gold: number }
+  hospital?: BaseTaskConfig & { mode?: 'prestige' | 'all' }
+  gather_boost?: BaseTaskConfig
   gold_gather?: { enabled: boolean; locations: GoldLocation[] }
+  abra?: AbraConfig
+}
+
+export interface AbraConfig extends BaseTaskConfig {
+  x: number
+  y: number
+  killing_blow: boolean
+  formation_id?: number
 }
 
 
@@ -153,13 +178,15 @@ export interface Castle {
   resources: Resources
   bot_status: BotStatus
   config: CastleConfig
+  version?: number
+  loop_interval?: number
 }
 
 export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
-  // المهام الأساسية الإلزامية مفعّلة افتراضياً
-  city_harvest: { enabled: true },
+  // جميع المهام مغلقة افتراضياً عند إضافة قلعة جديدة باستثناء جمع القمح لفل 4
+  city_harvest: { enabled: false },
   research: { enabled: false },
-  alliance: { enabled: false, auto_help: true, gold_donations: 0 },
+  alliance: { enabled: false, gold_donations: 0, open_treasure: true },
   port: { enabled: false },
   train: { enabled: false, levels: { infantry: 0, cavalry: 0, archers: 0, chariots: 0 } },
   pet_patrol: { enabled: false, pet: 'الأسد', destination: 1350 },
@@ -171,20 +198,20 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   stamina: { enabled: false, gold_buys: 0 },
   skills: { enabled: false, target_skills: [] },
   hero_draw: { enabled: false },
-  treasure_pavilion: { enabled: true },
-  blacksmith_forge: { enabled: true },
-  imperial_mausoleum: { enabled: true },
-  alliance_treasure: { enabled: true, index: 1 },
-  daily_luxury_gift: { enabled: true },
-  vip_gift: { enabled: true },
+  treasure_pavilion: { enabled: false },
+  blacksmith_forge: { enabled: false },
+  imperial_mausoleum: { enabled: false },
+  alliance_treasure: { enabled: false, index: 1 },
+  daily_luxury_gift: { enabled: false },
+  vip_gift: { enabled: false },
   tactics_hall: { enabled: false, tactic: 'القلعة الفارغة' },
   watermill: { enabled: false, types: 'food', allow_shop_buy: false },
   fountain: { enabled: false, resources: ['food', 'wood', 'iron', 'diamond'], allow_gold: false, gold_times: 0 },
   material_workshop: { enabled: false, materials: [] },
   caravan: { enabled: false },
   port_delegate: { enabled: false, shop_item: 'all' },
-  savings_bank: { enabled: false, days: 7 },
-  building: { enabled: false, upgrade_castle: true, speedup_castle: false, upgrade_support_buildings: true },
+  savings_bank: { enabled: false, days: 7, deposit: 2000 },
+  building: { enabled: false, upgrade_castle: false, speedup_castle: false, upgrade_support_buildings: false },
   prestige: {
     enabled: false,
     subtasks: {
@@ -197,24 +224,27 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   troy_treasure: {
     enabled: false,
     subtasks: {
-      claim_quests: true,
+      claim_quests: false,
     },
   },
   warrior_exchange: { enabled: false, count: 15 },
+  hospital: { enabled: false, mode: 'prestige' },
+  gather_boost: { enabled: false },
+  elf: { enabled: false, formation_id: 1 },
   march_manager: {
     enabled: true,
+    abra: { enabled: false, x: 0, y: 0, killing_blow: false, formation_id: 1 },
     prestige_invaders: { enabled: false },
     prestige_stronghold: { enabled: false },
     prestige_gather: { enabled: false },
     transport: { enabled: false, target_x: null, target_y: null, resource_ids: [] },
-    ruins: { enabled: false, explore_time: 120, formation_id: 1 },
+    ruins: { enabled: false, explore_time: 900, formation_id: 1 },
     combat: { enabled: false, choice: 'invaders', level: 15, formation_id: 1 },
-    elf: { enabled: false, formation_id: 1 },
     invaders: { enabled: false, level: 15, formation_id: 1 },
     rebels: { enabled: false, level: 5, formation_id: 1 },
     stronghold: { enabled: false, level: 5, count: 1, formation_id: 1 },
     gold_gather: { enabled: false, locations: [] },
-    gather: { enabled: false, res_type: 2, level: 5, search_range: 20 },
+    gather: { enabled: true, res_type: 2, level: 4, search_range: 100 },
   },
 }
 
@@ -228,7 +258,6 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
     transport: { enabled: false, target_x: null, target_y: null, resource_ids: [] },
     ruins: { enabled: false, explore_time: 900, formation_id: 1 },
     combat: { enabled: false, choice: 'elf', level: 30, formation_id: 1 },
-    elf: { enabled: false, formation_id: 1 },
     invaders: { enabled: false, level: 30, formation_id: 1 },
     rebels: { enabled: false, level: 5, formation_id: 1 },
     stronghold: { enabled: false, level: 30, count: 2, formation_id: 1 },
@@ -240,7 +269,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
   // 3. مهمة قافلة الغنيمة
   caravan: { enabled: true },
   // 4. مهام التحالف مع التبرع للتحالف
-  alliance: { enabled: true, auto_help: true, gold_donations: 0 },
+  alliance: { enabled: true, gold_donations: 0, open_treasure: true },
   // 5. دورية الحيوانات على حيوان كلب الكانغال (1371)
   pet_patrol: { enabled: true, pet: 'كلب الكنغال', destination: 1371 },
   // 6. دراسة الاستراتيجيات على القلعة الفارغة
@@ -273,7 +302,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
   alliance_treasure: { enabled: true, index: 1 },
   daily_luxury_gift: { enabled: true },
   vip_gift: { enabled: true },
-  savings_bank: { enabled: false, days: 7 },
+  savings_bank: { enabled: false, days: 7, deposit: 2000 },
   building: { enabled: false, upgrade_castle: false, speedup_castle: false, upgrade_support_buildings: false },
   prestige: {
     enabled: false,
@@ -291,6 +320,10 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
     },
   },
   warrior_exchange: { enabled: false, count: 15 },
+  hospital: { enabled: false, mode: 'prestige' },
+  gather_boost: { enabled: false },
+  elf: { enabled: false, formation_id: 1 },
+  abra: { enabled: false, x: 0, y: 0, killing_blow: false },
 }
 
 export interface CastleLog {
@@ -318,6 +351,7 @@ export type TaskTab =
   | 'building'
   | 'events'
   | 'gold'
+  | 'gold_bot'
 
 export interface GoldLocation {
   x: number
