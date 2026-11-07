@@ -2253,7 +2253,7 @@ export function TaskTabContent({
             </div>
 
             {/* حقل المبلغ الأقصى للادخار */}
-            <div className="flex items-center justify-between p-1 pt-2 border-t border-slate-200 dark:border-white/10 task-field-row">
+            <div className="flex justify-between items-center p-1 pt-2 border-slate-200 dark:border-white/10 border-t task-field-row">
               <div className="flex items-center gap-1.5">
                 <img
                   src="/images/gather/altin.png"
@@ -2261,7 +2261,7 @@ export function TaskTabContent({
                   style={{ width: '16px', height: '16px', objectFit: 'contain' }}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
-                <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
+                <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs task-field-label">
                   {t('tasks.savingsBankMaxAmount', 'المبلغ الأقصى للادخار')}
                 </span>
               </div>
@@ -2287,7 +2287,7 @@ export function TaskTabContent({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
+              <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs task-field-label">
                 {t('tasks.warriorExchangeCount')}
               </span>
             </div>
@@ -2297,6 +2297,47 @@ export function TaskTabContent({
               max={15}
               onChange={v => update('warrior_exchange', { count: v })}
             />
+          </div>
+        </TaskRow>
+
+        {/* علاج الجرحى (Hospital / Medical Tent) */}
+        <TaskRow
+          id="hospital"
+          emoji="🏥"
+          label={t('tasks.hospitalCure', 'علاج الجرحى (الخيمة الطبية)')}
+          enabled={cfg.hospital?.enabled ?? false}
+          onToggle={toggle('hospital')}
+        >
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex justify-between items-center p-1 pt-1.5 task-field-row">
+              <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs task-field-label">
+                {t('tasks.hospitalMode', 'نمط العلاج')}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {[
+                  { id: 'prestige', labelKey: 'tasks.hospitalModePrestige', defaultLabel: 'للهيبة فقط' },
+                  { id: 'all',      labelKey: 'tasks.hospitalModeAll',      defaultLabel: 'علاج الكل' },
+                ].map(m => {
+                  const currentMode = cfg.hospital?.mode || 'prestige'
+                  const isSelected = currentMode === m.id
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => update('hospital', { mode: m.id as 'prestige' | 'all' })}
+                      className={clsx(
+                        'px-2.5 py-1 rounded-lg font-medium text-xs transition-all cursor-pointer select-none',
+                        isSelected
+                          ? 'bg-emerald-600 text-white font-bold shadow-sm dark:bg-emerald-500'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10'
+                      )}
+                    >
+                      {t(m.labelKey, m.defaultLabel)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </TaskRow>
 
@@ -3462,7 +3503,7 @@ export function TaskTabContent({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
+              <span className="font-semibold text-slate-800 dark:text-gray-200 text-xs task-field-label">
                 {t('tasks.auctionBidMaxGold')}
               </span>
             </div>

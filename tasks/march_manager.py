@@ -1548,7 +1548,13 @@ class MarchManagerTask(BaseTask):
             err_msg = str(res.error) if res.error else ""
 
             if res.success and sent_this_round > 0:
-                # نجاح الإرسال، ننتظر قليلاً قبل فحص الفيلق التالي (المنسق سيفحص الفيالق في بداية الحلقة)
+                # إذا توقف بسبب نفاد القوات أثناء الإرسال → انتظر فوراً
+                if stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
+                    has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {res_name}", is_retry=True)
+                    if not has_army:
+                        return {"status": "critical_no_army", "sent": total_sent}
+                    continue
+                # وإلا: نجاح عادي، انتظر قليلاً وكمّل
                 await asyncio.sleep(round(random.uniform(4.0, 7.0), 2))
                 continue
                 
