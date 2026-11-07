@@ -121,7 +121,7 @@ class WatermillTask(BaseTask):
             self.log.error(f"❌ لم يتم تحديد أي موارد صالحة للتعزيز: {raw_types}")
             return TaskResult.fail(f"نوع المورد غير معروف: {raw_types}")
 
-        self.log.info(f"💧 بدء مهمة الساقية لزيادة الإنتاج (الأنواع: {display_res} | شراء من متجر التحالف: {'مسموح' if auto_buy else 'معطل'})")
+        self.log.debug(f"💧 بدء مهمة الساقية لزيادة الإنتاج (الأنواع: {display_res} | شراء من متجر التحالف: {'مسموح' if auto_buy else 'معطل'})")
 
         # 2. جلب مباني القلعة (1001/1)
         r_city = await self.conn.query('1001', '1', {}, timeout=8)
@@ -184,15 +184,15 @@ class WatermillTask(BaseTask):
                 needed_activations.extend(to_activate)
                 summary_by_type[bname] = len(to_activate)
                 total_needed_count += len(to_activate)
-                self.log.info(f"📌 {bname}: {len(to_activate)} مبنى بحاجة للتفعيل (من أصل {len(iids)})")
+                self.log.debug(f"📌 {bname}: {len(to_activate)} مبنى بحاجة للتفعيل (من أصل {len(iids)})")
             else:
-                self.log.info(f"✓ {bname}: جميع المباني الـ {len(iids)} مفعلة ونشطة مسبقاً ✅")
+                self.log.debug(f"✓ {bname}: جميع المباني الـ {len(iids)} مفعلة ونشطة مسبقاً ✅")
 
         if not needed_activations:
-            self.log.info("🎉 جميع مباني الموارد المستهدفة مفعلة ونشطة حالياً — لا حاجة للتفعيل.")
+            self.log.debug("🎉 جميع مباني الموارد المستهدفة مفعلة ونشطة حالياً — لا حاجة للتفعيل.")
             return TaskResult.ok("جميع مباني الموارد مفعلة ونشطة", activated=0)
 
-        self.log.info(f"⚡ إجمالي المباني المطلوب تفعيلها: {total_needed_count} مبنى")
+        self.log.debug(f"⚡ إجمالي المباني المطلوب تفعيلها: {total_needed_count} مبنى")
 
         # 5. فحص توفر الأدوات في الحقيبة (1004/1)
         r_bag = await self.conn.query('1004', '1', {}, timeout=8)

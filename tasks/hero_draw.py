@@ -66,7 +66,7 @@ class HeroDrawTask(BaseTask):
         super().__init__(conn, config)
 
     async def run(self) -> TaskResult:
-        self.log.info("🎖️ بدء مهمة الشارات الملكية (تجنيد الأبطال / بحث المهارات / صندوق البطل)...")
+        self.log.debug("🎖️ بدء مهمة الشارات الملكية (تجنيد الأبطال / بحث المهارات / صندوق البطل)...")
 
         now_ts = int(time.time())
         enlist_ctrl = self.conn.init_data.get('heroEnlistCtrl', {})
@@ -85,7 +85,7 @@ class HeroDrawTask(BaseTask):
             can_use_time = int(info.get('canusetime', 0))
             type_name = meta["name"]
 
-            self.log.info(f"🔍 فحص [{type_name}]: المرات المجانية المتبقية اليوم: {left_times} | وقت الاستحقاق: {can_use_time}")
+            self.log.debug(f"🔍 فحص [{type_name}]: المرات المجانية المتبقية اليوم: {left_times} | وقت الاستحقاق: {can_use_time}")
 
             # هل السحبة المجانية متاحة وجاهزة الآن؟
             if left_times > 0 and (can_use_time <= now_ts or can_use_time == 0):
@@ -120,10 +120,10 @@ class HeroDrawTask(BaseTask):
             elif left_times > 0 and can_use_time > now_ts:
                 rem_sec = can_use_time - now_ts
                 rem_mins = rem_sec // 60
-                self.log.info(f"⏳ [{type_name}] قيد التهدئة | متبقي {rem_mins} دقيقة ({rem_sec} ثانية)")
+                self.log.debug(f"⏳ [{type_name}] قيد التهدئة | متبقي {rem_mins} دقيقة ({rem_sec} ثانية)")
                 next_ready_times.append(rem_sec)
             else:
-                self.log.info(f"ℹ️ [{type_name}] تم استهلاك جميع المرات المجانية اليوم.")
+                self.log.debug(f"ℹ️ [{type_name}] تم استهلاك جميع المرات المجانية اليوم.")
 
         # تحديد وقت التكرار القادم
         if next_ready_times:
@@ -148,7 +148,7 @@ class HeroDrawTask(BaseTask):
             else:
                 msg = "لا توجد سحبات مجانية متاحة حالياً (تم استهلاك السحبات اليومية)"
             
-            self.log.info(f"ℹ️ {msg}")
+            self.log.debug(f"ℹ️ {msg}")
             return TaskResult.ok(
                 msg,
                 status="no_free_draws_ready",

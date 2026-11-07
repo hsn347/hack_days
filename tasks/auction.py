@@ -181,7 +181,7 @@ class AuctionTask(BaseTask):
         max_gold = int(self.config.get("max_gold", 2000))
         my_uid = self._get_my_uid()
 
-        self.log.info(f"🕊️ [مهمة المزاد] بدء فحص سوق المزاد للحمام الزاجل (الحد الأقصى: {max_gold:,} ذهب)...")
+        self.log.debug(f"🕊️ [مهمة المزاد] بدء فحص سوق المزاد للحمام الزاجل (الحد الأقصى: {max_gold:,} ذهب)...")
 
         # 1. جلب بيانات المزاد الحالية من السيرفر
         ok, items_list, not_receive_gold, err_msg = await self._fetch_auction_data()
@@ -193,7 +193,7 @@ class AuctionTask(BaseTask):
         target_item = self._find_target_item(items_list)
         if not target_item:
             msg = "🕊️ سلعة الحمام الزاجل غير معروضة في دورة المزاد الحالية."
-            self.log.info(f"⏭️ {msg}")
+            self.log.debug(f"⏭️ {msg}")
             return TaskResult.ok(msg, skipped=True, reason="ITEM_NOT_IN_AUCTION")
 
         item_id = int(target_item.get("item", target_item.get("goodId", 0)))

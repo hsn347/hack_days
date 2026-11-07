@@ -185,14 +185,14 @@ class TacticsHallTask(BaseTask):
 
         # 1. التحقق من توفر مرات مجانية متبقية اليوم
         if left_times <= 0:
-            self.log.info("ℹ️ [قاعة الاستراتيجيات] تم استهلاك كافة سحوبات كتب التكتيكات المجانية لهذا اليوم (تم التجاهل لمنع صرف الذهب).")
+            self.log.debug("ℹ️ [قاعة الاستراتيجيات] تم استهلاك كافة سحوبات كتب التكتيكات المجانية لهذا اليوم (تم التجاهل لمنع صرف الذهب).")
             return {"collected": False, "reason": "exhausted", "left_times": 0}
 
         # 2. التحقق من فترة التهدئة الفاصلة
         if can_use_time > now_ts:
             rem_sec = can_use_time - now_ts
             rem_min = rem_sec // 60
-            self.log.info(f"⏳ [قاعة الاستراتيجيات] سحب كتب التكتيكات قيد التهدئة (متبقي {rem_min} دقيقة و {rem_sec % 60} ثانية — تم التجاهل بأمان).")
+            self.log.debug(f"⏳ [قاعة الاستراتيجيات] سحب كتب التكتيكات قيد التهدئة (متبقي {rem_min} دقيقة و {rem_sec % 60} ثانية — تم التجاهل بأمان).")
             return {"collected": False, "reason": "cooldown", "rem_sec": rem_sec, "left_times": left_times}
 
         # 3. السحبة المجانية جاهزة ومتاحة فوراً!
@@ -234,7 +234,7 @@ class TacticsHallTask(BaseTask):
 
     async def run(self) -> TaskResult:
         t_info = TACTICS_MAP.get(self.target_mid, {"name_ar": f"بحث #{self.target_mid}", "category": "", "icon": "📜"})
-        self.log.info(f"🏛️ بدء مهمة قاعة الاستراتيجيات | البحث المستهدف: {t_info['icon']} [{t_info['name_ar']}] ({t_info['category']})...")
+        self.log.debug(f"🏛️ بدء مهمة قاعة الاستراتيجيات | البحث المستهدف: {t_info['icon']} [{t_info['name_ar']}] ({t_info['category']})...")
 
         now_ts = int(time.time())
         actions_performed: List[str] = []
@@ -279,7 +279,10 @@ class TacticsHallTask(BaseTask):
                 msg = f"✅ ({' + '.join(actions_performed)}) | ⏳ {status_msg}"
             else:
                 msg = status_msg
-            self.log.info(f"ℹ️ {msg}")
+            if actions_performed:
+                self.log.info(f"ℹ️ {msg}")
+            else:
+                self.log.debug(f"ℹ️ {msg}")
 
             return TaskResult.ok(
                 msg,

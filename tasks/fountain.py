@@ -423,9 +423,8 @@ class FountainTask(BaseTask):
         if not status:
             return TaskResult.fail("فشل في جلب بيانات النافورة الملكية من السيرفر!")
 
-        self._print_status_report(status)
-
         if self.check_only:
+            self._print_status_report(status)
             return TaskResult.ok(
                 f"🔍 تم فحص النافورة بنجاح: {status['free_wishes']} مرة مجانية متاحة",
                 free_wishes=status["free_wishes"],
@@ -438,7 +437,7 @@ class FountainTask(BaseTask):
         # 🛡️ قاعدة أمان صارمة: إذا لم تكن هناك أمنيات مجانية متاحة، لا يتم عمل المهمة ولا يتم الشراء بالذهب
         if free_wishes_left <= 0:
             msg = "ℹ️ لا توجد مرات مجانية متاحة في نافورة الأمنيات اليوم (تم إنهاء المهمة دون استهلاك ذهب)."
-            self.log.info(msg)
+            self.log.debug(msg)
             return TaskResult.ok(msg, free_wishes=0, gold_spent=0)
 
         total_free_done = 0

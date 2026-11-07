@@ -98,9 +98,10 @@ log.propagate = False  # لا نُكرر الرسائل في root logger
 
 
 class _LogCallbackStream:
-    """محوّل يحول log_callback إلى كائن شبيه بالملف ليعمل مع StreamHandler."""
-    def __init__(self, callback):
+    """محوّل يحول log_callback إلى كائن شبيه بالملف ليعمل مع StreamHandler مع منع الازدواجية في الطباعة."""
+    def __init__(self, callback, already_printed: bool = True):
         self._callback = callback
+        self._already_printed = already_printed
         self._buffer = ""
 
     def write(self, msg):
@@ -108,16 +109,22 @@ class _LogCallbackStream:
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
             if line.strip():
-                self._callback(line)
+                try:
+                    self._callback(line, already_printed=self._already_printed)
+                except TypeError:
+                    self._callback(line)
 
     def flush(self):
         if self._buffer.strip():
-            self._callback(self._buffer.strip())
+            try:
+                self._callback(self._buffer.strip(), already_printed=self._already_printed)
+            except TypeError:
+                self._callback(self._buffer.strip())
             self._buffer = ""
 
 
 def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = logging.INFO) -> None:
-    """تنظيف أي StreamHandler سابق وربط callback والطباعة المباشرة لمنع تكرار السجلات نهائياً عبر الدورات دون ازدواجية في الـ root logger."""
+    """تنظيف أي StreamHandler سابق وربط callback والطباعة المباشرة ببادئة مدمجة لمنع تكرار السجلات."""
     if not hasattr(task, "log") or not task.log:
         return
     task.log.propagate = False
@@ -127,11 +134,15 @@ def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = loggin
     except Exception:
         task.log.handlers = []
 
-    # ربط StreamHandler للطباعة على stdout مباشرة (journalctl / terminal) لضمان ظهور سجلات منسق الفيالق والمهام
+    # استخراج اسم الحساب المختصر لتوفير المساحة وتوحيد المظهر
+    task_email = getattr(task, "email", "") or getattr(task, "name", "bot")
+    short_user = task_email.split("@")[0] if "@" in str(task_email) else str(task_email)
+
+    # ربط StreamHandler للطباعة على stdout مباشرة (journalctl / terminal) ببادئة مدمجة وأنيقة
     try:
         console_h = logging.StreamHandler(sys.stdout)
         console_h.setLevel(level)
-        console_h.setFormatter(logging.Formatter("[%(asctime)s][%(levelname)s][%(name)s] %(message)s", datefmt="%H:%M:%S"))
+        console_h.setFormatter(logging.Formatter(f"[%(asctime)s][{short_user}] %(message)s", datefmt="%H:%M:%S"))
         task.log.addHandler(console_h)
     except Exception:
         pass
@@ -139,7 +150,7 @@ def _safe_bind_task_logger(task: Any, log_cb: Optional[Any], level: int = loggin
     if not log_cb:
         return
     try:
-        h = logging.StreamHandler(_LogCallbackStream(log_cb))
+        h = logging.StreamHandler(_LogCallbackStream(log_cb, already_printed=True))
         h.setLevel(level)
         h.setFormatter(logging.Formatter("%(message)s"))
         task.log.addHandler(h)
@@ -1517,6 +1528,7 @@ class BotManager:
             return False
 
         self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
+        self.conn.log_callback = self._log_callback
         ok = await self.conn.connect()
 
         if self._stop_event.is_set():
@@ -1538,6 +1550,7 @@ class BotManager:
                     return False
                 self.account = fresh_acc
                 self.conn = GameConnection(self.account, on_disconnect=_on_disconnect)
+                self.conn.log_callback = self._log_callback
                 ok = await self.conn.connect()
                 if self._stop_event.is_set():
                     if self.conn:
@@ -2754,6 +2767,19 @@ class BotManager:
             log.info(msg)
             return {"skipped": True, "message": msg}
 
+        # فحص مبنى الأكاديمية (113) في الذاكرة الحية بنمط Zero-Request
+        blist = self.conn.init_data.get("cityCtrl", {}).get("blist", []) if self.conn and hasattr(self.conn, "init_data") else []
+        has_academy = any(
+            str(b.get("binfo", {}).get("bid")) == "113"
+            and str(b.get("binfo", {}).get("state")) != "8"
+            and int(b.get("binfo", {}).get("lv", 0)) >= 1
+            for b in blist if isinstance(b, dict)
+        )
+        if not has_academy:
+            msg = "⏭️ تم تخطي أبحاث الأكاديمية: مبنى الأكاديمية (113) غير مشيّد أو مقفل بعد."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
         task_cfg = {
             "enabled": True,
             "tree": res_cfg.get("tree", "balanced"),
@@ -2951,6 +2977,24 @@ class BotManager:
             log.info(msg)
             return {"skipped": True, "message": msg}
 
+        # فحص حدث التوسع الإقليمي (9001373) والجوائز الجاهزة في الذاكرة الحية (Zero-Request)
+        aty_mgr = self.conn.init_data.get("generalAtyMgr", {}) if self.conn and hasattr(self.conn, "init_data") else {}
+        exp_aty = aty_mgr.get("9001373") or aty_mgr.get(9001373, {})
+        quests = exp_aty.get("data", {}).get("quests", {}) if isinstance(exp_aty, dict) else {}
+
+        if not quests:
+            msg = "⏭️ تم تخطي جوائز التوسع الإقليمي: حدث التوسع غير متاح أو منتهٍ في الحساب حالياً."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        has_ready = any(int(q.get("status", 0)) == 3 for q in quests.values() if isinstance(q, dict))
+        is_all_events = bool(self.config.get("territory_expansion", {}).get("all_events", False))
+
+        if not has_ready and not is_all_events:
+            msg = "⏭️ تم تخطي جوائز التوسع الإقليمي: لا توجد أي مكافآت جاهزة للاستلام حالياً."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
         log.info("🚩 بدء فحص واستلام مكافآت وجوائز حدث التوسع الإقليمي...")
         task = TerritoryExpansionTask(self.conn, te_cfg)
         res = await task.run()
@@ -2973,6 +3017,40 @@ class BotManager:
 
         if not buy_enabled and not open_enabled:
             msg = "⏭️ تم تخطي مهمة صندوق مشعل رويال بناءً على رغبة المستخدم (torch_chest و open_torch_chest غير مفعّلين)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+                # فحص إمكانية الشراء والفتح لصندوق مشعل رويال في الذاكرة الحية (Zero-Request)
+        init = getattr(self.conn, "init_data", {}) or {}
+        now_ts = int(time.time())
+
+        # 1. التحقق من توفر الشراء من المتجر (Item 1000182)
+        can_buy = False
+        if buy_enabled:
+            shop_data = init.get("itemShop", {}).get("configData", {})
+            t_item = shop_data.get("1000182") or shop_data.get(1000182, {})
+            if isinstance(t_item, dict) and t_item:
+                endtime = int(t_item.get("endtime", 0))
+                limit_num = int(t_item.get("limitNum", 15))
+                buy_mgr = init.get("shopItemBuyTimesMgr", {})
+                buy_entry = buy_mgr.get("1000182") or buy_mgr.get(1000182, {})
+                bought = int(buy_entry.get("buyNum", 0)) if isinstance(buy_entry, dict) else 0
+                if (endtime == 0 or now_ts < endtime) and (bought < limit_num):
+                    can_buy = True
+
+        # 2. التحقق من وجود صناديق بالحقيبة لفتحها (Item 811037)
+        bag_count = 0
+        if open_enabled:
+            bp = init.get("backpackCtrl", {})
+            if isinstance(bp, dict):
+                item_entry = bp.get("811037") or bp.get(811037, {})
+                if isinstance(item_entry, dict):
+                    bag_count = int(item_entry.get("count", 0))
+
+        can_open = open_enabled and (bag_count > 0 or can_buy)
+
+        if not can_buy and not can_open:
+            msg = "⏭️ تم تخطي مهمة مشعل رويال: الصندوق غير متاح للشراء بالمتجر ولا توجد صناديق بالحقيبة لفتحها."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
@@ -3676,8 +3754,8 @@ class BotManager:
         finally:
             _safe_unbind_task_logger(task)
 
-        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
-        if self._log_callback:
+        # إشعار لوحة التحكم وملف السجل فقط عند معالجة رسائل فعلية لتطبيق الصمت
+        if self._log_callback and res.data and res.data.get("total_processed", 0) > 0:
             self._log_callback(f"📬 {res.message}")
 
         if res.success:
@@ -3761,7 +3839,8 @@ class BotManager:
         finally:
             _safe_unbind_task_logger(task)
 
-        if self._log_callback:
+        # إشعار لوحة التحكم وملف السجل فقط عند المزايدة أو السحب الفعلي
+        if self._log_callback and not res.data.get("skipped", False) and res.data.get("reason") != "ITEM_NOT_IN_AUCTION":
             self._log_callback(f"🕊️ {res.message}")
 
         if res.success:
@@ -3804,16 +3883,9 @@ class BotManager:
         finally:
             _safe_unbind_task_logger(task)
 
-        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة
+        # إشعار لوحة التحكم وملف السجل بالنتيجة المباشرة الصريحة دون تكرار
         if self._log_callback:
             self._log_callback(f"🎖️ {res.message}")
-
-        if res.success:
-            task.log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
-            log.info(f"🎉 نتيجة مهمة منسق الفيالق: {res.message}")
-        else:
-            task.log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
-            log.warning(f"⚠️ تنبيه في مهمة منسق الفيالق: {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
 

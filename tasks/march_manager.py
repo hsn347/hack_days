@@ -1596,7 +1596,7 @@ class MarchManagerTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تشغيل منسق الفيالق والمسيرات المركزي عبر استدعاء المهام المتخصصة بالترتيب."""
-        self.log.info(f"🎖️ [منسق المسيرات] بدء التنسيق")
+        self.log.debug(f"🎖️ [منسق المسيرات] بدء التنسيق")
         self.start_time = time.time() 
 
         pipeline_results: Dict[str, Any] = {}

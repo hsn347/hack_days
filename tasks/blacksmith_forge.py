@@ -114,14 +114,14 @@ class BlacksmithForgeTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تنفيذ فحص واستكشاف معمل الحدادة المجاني بدقة وأمان تام."""
-        log.info("🔨 بدء فحص مهمة معمل الحدادة وصقل الرون (Blacksmith Forge)...")
+        log.debug("🔨 بدء فحص مهمة معمل الحدادة وصقل الرون (Blacksmith Forge)...")
 
         # ── الخطوة 1: فحص الأمان المسبق لمنع صرف الذهب ─────────────────────────────
         status = self.get_free_status()
 
         if not status["ready"]:
             msg = f"⏳ [معمل الحدادة] {status['message']}. إيقاف المهمة الآن لمنع استهلاك الذهب/المواد (إعادة المحاولة بعد {max(1, status['retry_after'] // 60)} د)."
-            log.info(msg)
+            log.debug(msg)
             return TaskResult(
                 success=True,
                 message=f"معمل الحدادة قيد الانتظار: {status['message']}",

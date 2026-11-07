@@ -275,8 +275,8 @@ class PrestigeTask(BaseTask):
         return summary
 
     def log_prestige_overview(self, quests_status: Dict[str, Dict[str, Any]]):
-        """طباعة ملخص حالة مهام الهيبة الداخلية في سجل البوت."""
-        self.log.info("📊 ───【 فحص حالة مهام الهيبة اليومية (الاستعلام المسبق من السيرفر) 】───")
+        """طباعة ملخص حالة مهام الهيبة الداخلية في سجل البوت (مستوى DEBUG)."""
+        self.log.debug("📊 ───【 فحص حالة مهام الهيبة اليومية (الاستعلام المسبق من السيرفر) 】───")
         for key, info in quests_status.items():
             name = PRESTIGE_QUEST_NAMES.get(key, key)
             if not info.get("found"):
@@ -288,8 +288,7 @@ class PrestigeTask(BaseTask):
                 l = info['l_num']
                 rem = info['remaining']
                 st_label = f"⏳ قيد الإنجاز ({c:,}/{l:,} — متبقي {rem:,})"
-            self.log.info(f"   • {name:<35}: {st_label}")
-        self.log.info("─" * 60)
+            self.log.debug(f"   • {name:<35}: {st_label}")
 
     def _get_castle_resources(self) -> Dict[int, float]:
         """استخراج رصيد موارد القلعة الحالية."""

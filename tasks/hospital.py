@@ -360,7 +360,7 @@ class HospitalTask(BaseTask):
         remaining_needed = 0
 
         if not is_all_mode:
-            self.log.info("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى ومهمة الهيبة (نمط: prestige)...")
+            self.log.debug("🏥 [مهمة المشفى] بدء فحص جاهزية المشفى ومهمة الهيبة (نمط: prestige)...")
             # التحقق المسبق من إنجاز مهمة علاج الجرحى في مهام الهيبة اليومية (#4112009)
             await self._refresh_merit_data()
             is_prestige_done, q_info = self.check_prestige_cure_done()
@@ -372,7 +372,7 @@ class HospitalTask(BaseTask):
                     f"✨ [مهام الهيبة] مهمة علاج الجرحى في مهام الهيبة اليومية منجزة مسبقاً {status_desc} "
                     f"— تم تخطي مهمة المشفى تلقائياً لتوفير الموارد ومنع الاستهلاك غير الضروري!"
                 )
-                self.log.info(f"⏭️ {skip_msg}")
+                self.log.debug(f"⏭️ {skip_msg}")
                 return TaskResult.ok(
                     skip_msg,
                     skipped=True,
@@ -384,34 +384,34 @@ class HospitalTask(BaseTask):
             # إذا كانت المهمة غير مسندة لهذا الحساب اليوم يتم التخطي لحفظ الموارد
             if not q_info.get("found", False):
                 skip_msg = "✨ [مهام الهيبة] مهمة علاج الجرحى (#4112009) غير مطلوبة اليوم في هذا الحساب — تم التخطي لحفظ الموارد."
-                self.log.info(f"⏭️ {skip_msg}")
+                self.log.debug(f"⏭️ {skip_msg}")
                 return TaskResult.ok(skip_msg, skipped=True, reason="PRESTIGE_CURE_NOT_ACTIVE")
 
             # قراءة العدد المتبقي المطلوب للهيبة بالضبط
             remaining_needed = q_info.get("remaining", 0)
             if remaining_needed <= 0:
                 skip_msg = "✨ [مهام الهيبة] تم استيفاء عدد الجنود المطلوب علاجهم — تخطي المشفى."
-                self.log.info(f"⏭️ {skip_msg}")
+                self.log.debug(f"⏭️ {skip_msg}")
                 return TaskResult.ok(skip_msg, skipped=True, reason="NO_REMAINING_PRESTIGE_CURE")
         else:
-            self.log.info("🛡️ [مهمة المشفى] بدء فحص جاهزية المشفى لعلاج كافة الجرحى الممكنين (نمط: all)...")
+            self.log.debug("🛡️ [مهمة المشفى] بدء فحص جاهزية المشفى لعلاج كافة الجرحى الممكنين (نمط: all)...")
 
         # 1. التحقق من وجود مبنى المشفى
         has_bld, b_lv, b_desc = self.check_hospital_building()
         if not has_bld:
-            self.log.warning(f"⏭️ {b_desc} — تخطي مهمة العلاج.")
+            self.log.debug(f"⏭️ {b_desc} — تخطي مهمة العلاج.")
             return TaskResult.ok(b_desc, skipped=True, reason="NO_HOSPITAL_BUILDING")
 
         # 2. فحص طابور المشفى هل هو متاح أم مشغول حالياً
         q_avail, q_remain, q_desc = self.check_hospital_queue()
         if not q_avail:
-            self.log.info(f"⏳ {q_desc} — المشفى مشغول حالياً، تخطي العلاج بأمان لهذه الدورة.")
+            self.log.debug(f"⏳ {q_desc} — المشفى مشغول حالياً، تخطي العلاج بأمان لهذه الدورة.")
             return TaskResult.ok(q_desc, skipped=True, reason="HOSPITAL_BUSY", remaining_seconds=q_remain)
 
         # 3. جلب الجنود الجرحى من الذاكرة الحية مباشرة
         all_wounded, total_wounded = await self.get_wounded_troops()
         if total_wounded <= 0 or not all_wounded:
-            self.log.info("✅ [المشفى سليم] لا يوجد أي جنود جرحى بحاجة للعلاج في المشفى حالياً.")
+            self.log.debug("✅ [المشفى سليم] لا يوجد أي جنود جرحى بحاجة للعلاج في المشفى حالياً.")
             return TaskResult.ok("لا يوجد جنود جرحى", wounded_count=0)
 
         # تحديد العدد المستهدف:
@@ -422,7 +422,7 @@ class HospitalTask(BaseTask):
         # اقتطاع القوات المرشحة بدءاً من المستوى الأقل (الأرخص والأسرع)
         candidates, cand_count = self._select_prestige_troops(all_wounded, target_count)
         if cand_count <= 0 or not candidates:
-            self.log.info("✅ لا توجد قوات صالحة للعلاج حالياً.")
+            self.log.debug("✅ لا توجد قوات صالحة للعلاج حالياً.")
             return TaskResult.ok("تم استيفاء المطلوب", wounded_count=0)
 
         # 4. الفحص الاستباقي لموارد القلعة والتأكد من كفايتها قبل إرسال طلب العلاج

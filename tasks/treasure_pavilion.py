@@ -89,7 +89,7 @@ class TreasurePavilionTask(BaseTask):
         return True, left_times, can_use_time, day_num, "جاهز للاستكشاف المجاني"
 
     async def run(self) -> TaskResult:
-        self.log.info("💎 بدء فحص مهمة جناح الكنز (Treasure Pavilion)...")
+        self.log.debug("💎 بدء فحص مهمة جناح الكنز (Treasure Pavilion)...")
 
         is_ready, left_times, can_use_time, day_num, reason = self.get_free_status()
         now_ts = int(time.time())
@@ -99,7 +99,7 @@ class TreasurePavilionTask(BaseTask):
             # حساب أقرب موعد للمحاولة القادمة
             if left_times > 0 and can_use_time > now_ts:
                 retry_after = max(10, can_use_time - now_ts + 5)
-                self.log.info(f"⏳ [جناح الكنز] {reason}. إيقاف المهمة الآن لمنع استهلاك الذهب (إعادة المحاولة بعد {retry_after // 60} د).")
+                self.log.debug(f"⏳ [جناح الكنز] {reason}. إيقاف المهمة الآن لمنع استهلاك الذهب (إعادة المحاولة بعد {retry_after // 60} د).")
                 return TaskResult.ok(
                     f"جناح الكنز قيد التهدئة: {reason}",
                     status="cooldown",
@@ -108,7 +108,7 @@ class TreasurePavilionTask(BaseTask):
                     day_num=day_num
                 )
             else:
-                self.log.info(f"ℹ️ [جناح الكنز] لا يوجد استكشاف مجاني متاح ({reason}). تم إنهاء المهمة بأمان تام دون طلب.")
+                self.log.debug(f"ℹ️ [جناح الكنز] لا يوجد استكشاف مجاني متاح ({reason}). تم إنهاء المهمة بأمان تام دون طلب.")
                 return TaskResult.ok(
                     f"لا يوجد استكشاف مجاني متاح: {reason}",
                     status="no_free_explore",

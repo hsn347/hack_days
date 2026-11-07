@@ -96,7 +96,7 @@ class SavingsBankTask(BaseTask):
             target_days = DEFAULT_DAYS
 
         plan_info = SAVINGS_PLANS[target_days]
-        self.log.info(f"🏦 بدء مهمة دار الادخار (الخطة المستهدفة: {plan_info['name']})")
+        self.log.debug(f"🏦 بدء مهمة دار الادخار (الخطة المستهدفة: {plan_info['name']})")
 
         now_ts = int(time.time())
         savings_ctrl = self.conn.init_data.get('savingsBankAgCtrl', {})
@@ -132,7 +132,7 @@ class SavingsBankTask(BaseTask):
                 rem_hours = (remaining_sec % 86400) // 3600
                 rem_mins = (remaining_sec % 3600) // 60
                 msg = f"الوديعة قيد الاستثمار ({slip_deposit} ذهب - {slip_days} يوم) | متبقي: {rem_days} يوم و {rem_hours} ساعة و {rem_mins} دقيقة"
-                self.log.info(f"⏳ {msg}")
+                self.log.debug(f"⏳ {msg}")
                 return TaskResult.ok(
                     msg,
                     status="investing",

@@ -80,7 +80,6 @@ class AllianceTask(BaseTask):
             return None
 
         # ─── كود الفحص والطباعة للعلوم غير المكتملة ───
-        self.log.info("📋 قائمة بكل علوم التحالف الغير مكتملة (أقل من مستوى 20):")
         incomplete_count = 0
         
         for cat, items in scilist.items():
@@ -90,24 +89,9 @@ class AllianceTask(BaseTask):
                     # طباعة أي تقنية مستواها أقل من 20 (غير مكتملة)
                     if lv < 20:
                         sci_id = int(item.get('id', 0))
-                        point = int(item.get('point', 0))
-                        is_rec = bool(item.get('recommend'))
                         
-                        # تحديد حالة التقنية للشاشة
-                        if is_rec:
-                            status = "⭐ موصى بها من القائد"
-                        elif point > 0:
-                            status = "⏳ قيد التطوير حالياً"
-                        else:
-                            status = "🔘 متاحة للتطوير"
-                            
-                        self.log.info(f"   • التقنية #{sci_id} | المستوى: {lv}/20 | النقاط المودعة: {point:,} | الحالة: {status}")
                         incomplete_count += 1
                         
-        self.log.info(f"📊 إجمالي العلوم المتاحة للتطوير في التحالف: {incomplete_count}")
-        self.log.info("─" * 60)
-        # ──────────────────────────────────────────────
-
         # 1. البحث عن التقنية الموصى بها
         for cat, items in scilist.items():
             if isinstance(items, list):
@@ -140,30 +124,6 @@ class AllianceTask(BaseTask):
 
         return None
 
-    async def _help_members(self) -> int:
-        """
-        تقديم المساعدة لطلبات أعضاء التحالف.
-        """
-        helped = 0
-        try:
-            r = await self.conn.query('1012', '1', {}, timeout=8)
-            if r and 'data' in r:
-                helps = r['data'].get('helpList', [])
-                if helps:
-                    for item in helps:
-                        req_id = item.get('id')
-                        if req_id:
-                            r_help = await self.conn.query('1012', '2', {"id": req_id}, timeout=6)
-                            if r_help and str(r_help.get('err', '0')) == '0':
-                                helped += 1
-                            # تأخير بشري عشوائي بين مساعدة كل عضو والآخر
-                            await asyncio.sleep(round(random.uniform(0.9, 1.8), 2))
-                    if helped > 0:
-                        self.log.info(f"🤝 تمت مساعدة {helped} من طلبات أعضاء التحالف ✅")
-        except Exception as e:
-            self.log.debug(f"خطأ غير حرج في مساعدة التحالف: {e}")
-        return helped
-
     async def run(self) -> TaskResult:
         cfg = self.config
         uid = int(self.conn.uid) if self.conn.uid else 0
@@ -192,23 +152,15 @@ class AllianceTask(BaseTask):
                 retry_after=7200
             )
 
-        self.log.info(f"🏛️ بدء مهمة التحالف (التحالف ID: {alliance_id})")
+        self.log.debug(f"🏛️ بدء مهمة التحالف (التحالف ID: {alliance_id})")
 
-        # 2. مساعدة أعضاء التحالف تلقائياً
-        helped_count = await self._help_members()
+        alliance_ctrl = self.conn.init_data.get("allianceCtrl", {})
+        minfo = alliance_ctrl.get("memberinfo", {}).get("minfo", {}) if isinstance(alliance_ctrl, dict) else {}
 
-        # 3. استعلام رصيد التبرعات المتاحة (1010/81)
-        r_81 = await self.conn.query('1010', '81', {"uid": uid}, timeout=8)
-        if not r_81 or str(r_81.get('err', '0')) != '0':
-            self.log.error("❌ فشل استعلام بيانات التبرع من السيرفر (1010/81)")
-            return TaskResult.fail("فشل استعلام حالة التبرع", retry_after=300)
-
-        retdata = r_81.get('data', {}).get('retdata', {})
-        free_available   = int(retdata.get('donateCount', 0))
-        gold_done        = int(retdata.get('donateGlodCount', 0))
-        refresh_time     = int(retdata.get('donateResCountCheckTime', 0))
-
-        self.log.info(f"📊 رصيد التبرع الحالي: {free_available}/20 مجاني | تبرعات الذهب: {gold_done}")
+        free_available = int(minfo.get("donateCount", 0))
+        gold_done      = int(minfo.get("donateGlodCount", 0))
+        
+        self.log.debug(f"📊 رصيد التبرع الحالي: {free_available}/20 مجاني | تبرعات الذهب: {gold_done}")
 
         # 4. تحديد التقنية المستهدفة للتبرع
         custom_sciid = cfg.get('sciid')
@@ -245,7 +197,7 @@ class AllianceTask(BaseTask):
                 # تأخير بشري عشوائي يحاكي نقر اليد البشرية الطبيعية
                 await asyncio.sleep(round(random.uniform(*DONATE_DELAY_RANGE), 2))
 
-            self.log.info(f"✅ اكتملت التبرعات المجانية: {total_donated_free} تبرع (شرف: +{total_honor_earned:,} | نقاط علم: +{total_scipoints:,})")
+            self.log.info(f"✅ اكتملت التبرعات المجانية")
         else:
             self.log.info("ℹ️ رصيد التبرعات المجانية مستهلك حالياً (0/20) — بانتظار التجديد.")
 
@@ -272,13 +224,7 @@ class AllianceTask(BaseTask):
                 # تأخير بشري عشوائي يحاكي نقر اليد البشرية الطبيعية
                 await asyncio.sleep(round(random.uniform(*DONATE_DELAY_RANGE), 2))
 
-            self.log.info(f"🪙 اكتمل التبرع بالذهب: {total_donated_gold} تبرع")
-
-        # 7. حساب وقت التكرار القادم (كل تبرع يتجدد كل ~20 دقيقة، أو موعد التجديد)
-        now_ts = int(time.time())
-        retry_delay = 1800  # افتراضي 30 دقيقة
-        if refresh_time > now_ts:
-            retry_delay = max(600, refresh_time - now_ts + 60)
+            self.log.info(f" اكتمل التبرع بالذهب: {total_donated_gold} تبرع")
 
         summary_msg = f"تم إنجاز {total_donated_free} تبرع مجاني + {total_donated_gold} تبرع ذهب (شرف +{total_honor_earned:,})"
         return TaskResult.ok(
@@ -288,9 +234,7 @@ class AllianceTask(BaseTask):
             gold_donated=total_donated_gold,
             honor_earned=total_honor_earned,
             sci_points=total_scipoints,
-            helped_members=helped_count,
             sciid=target_sciid,
-            retry_after=retry_delay
         )
 
 

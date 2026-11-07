@@ -574,9 +574,9 @@ class BuildingTask(BaseTask):
         """تأخير أمان عشوائي فائق الحذر (3.0 - 6.0 ثوانٍ) يحاكي السلوك البشري لتفادي كشف البوت أو حظر الحساب."""
         delay = round(random.uniform(min_s, max_s), 2)
         if action_name:
-            self.log.info(f"🛡️ أمان ضد الحظر: انتظار {delay} ثانية ({action_name})...")
+            self.log.debug(f"🛡️ أمان ضد الحظر: انتظار {delay} ثانية ({action_name})...")
         else:
-            self.log.info(f"🛡️ أمان ضد الحظر: انتظار {delay} ثانية...")
+            self.log.debug(f"🛡️ أمان ضد الحظر: انتظار {delay} ثانية...")
         await asyncio.sleep(delay)
         return delay
 
@@ -931,13 +931,13 @@ class BuildingTask(BaseTask):
                 if cnt > 0:
                     avail_opt_info.append(f"{ch['name']} (حجم {ch['amount']:,} × {cnt} حبة)")
 
-            self.log.info(f"🔍 [فحص الصناديق] مطلوب تغطية عجز {int(deficit):,} من {r_name}")
+            self.log.debug(f"🔍 [فحص الصناديق] مطلوب تغطية عجز {int(deficit):,} من {r_name}")
             if avail_reg_info:
-                self.log.info(f"   📦 الصناديق العادية المتوفرة في الحقيبة: {', '.join(avail_reg_info[:4])}")
+                self.log.debug(f"   📦 الصناديق العادية المتوفرة في الحقيبة: {', '.join(avail_reg_info[:4])}")
             if avail_safe_info:
-                self.log.info(f"   🛡️ الصناديق الآمنة المتوفرة في الحقيبة: {', '.join(avail_safe_info[:4])}")
+                self.log.debug(f"   🛡️ الصناديق الآمنة المتوفرة في الحقيبة: {', '.join(avail_safe_info[:4])}")
             if avail_opt_info:
-                self.log.info(f"   🎁 الصناديق الاختيارية المتوفرة في الحقيبة: {', '.join(avail_opt_info[:4])}")
+                self.log.debug(f"   🎁 الصناديق الاختيارية المتوفرة في الحقيبة: {', '.join(avail_opt_info[:4])}")
 
             if not avail_reg_info and not avail_safe_info and not avail_opt_info:
                 self.log.warning(f"   ⚠️ لا توجد أي صناديق متوفرة (عادية أو آمنة أو اختيارية) في الحقيبة لمورد {r_name}!")

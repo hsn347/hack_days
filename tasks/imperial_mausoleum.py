@@ -112,7 +112,7 @@ class ImperialMausoleumTask(BaseTask):
             pass
 
     async def run(self) -> TaskResult:
-        self.log.info("🏛️ بدء فحص مهمة الضريح الإمبراطوري (Imperial Mausoleum)...")
+        self.log.debug("🏛️ بدء فحص مهمة الضريح الإمبراطوري (Imperial Mausoleum)...")
 
         total_received: List[Dict[str, Any]] = []
         round_idx = 0
@@ -126,7 +126,7 @@ class ImperialMausoleumTask(BaseTask):
             # ── التحقق الصارم لحماية الذهب/النحاس ─────────────────────────────
             if not is_ready:
                 if round_idx == 1:
-                    self.log.info(f"ℹ️ [الضريح الإمبراطوري] {reason}. إنهاء المهمة بأمان تام دون طلب شبكي لحماية الذهب.")
+                    self.log.debug(f"ℹ️ [الضريح الإمبراطوري] {reason}. إنهاء المهمة بأمان تام دون طلب شبكي لحماية الذهب.")
                 else:
                     self.log.info(f"ℹ️ [الضريح الإمبراطوري] انتهت كافة المحاولات المجانية المتاحة اليوم ({len(total_received)} مكافأة مستلمة).")
                 break

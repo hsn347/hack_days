@@ -150,7 +150,6 @@ class BaseTask(ABC):
         has_local = bool(getattr(self.conn, 'local_queues', None))
         if force_sync or not has_local:
             try:
-                self.log.warning("🛑🛑🛑🛑🛑🛑")
                 await self.conn.query('1007', '1000', {}, timeout=2)
                 await asyncio.sleep(0.3)
             except Exception:

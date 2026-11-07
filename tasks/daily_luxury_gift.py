@@ -105,11 +105,11 @@ class DailyLuxuryGiftTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تنفيذ مهمة جمع الهدية الفاخرة اليومية وجمع كافة الهدايا المتاحة."""
-        self.log.info("🎁 بدء مهمة جمع الهدية الفاخرة اليومية (Daily Luxury Gift)...")
+        self.log.debug("🎁 بدء مهمة جمع الهدية الفاخرة اليومية (Daily Luxury Gift)...")
 
         available_gifts = self.get_available_gifts()
         if not available_gifts:
-            self.log.info("ℹ️ [الهدية الفاخرة] لا توجد هدايا جديدة جاهزة للاستلام حالياً.")
+            self.log.debug("ℹ️ [الهدية الفاخرة] لا توجد هدايا جديدة جاهزة للاستلام حالياً.")
             return TaskResult(
                 success=True,
                 message="✅ تم استلام كافة الهدايا الفاخرة المتاحة مسبقاً",

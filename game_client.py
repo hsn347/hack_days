@@ -53,6 +53,270 @@ log = logging.getLogger("game_client")
 
 
 # ════════════════════════════════════════════════════════════════════
+#  قاموس الأوامر الشبكية الشامل والتوثيق الموحد
+# ════════════════════════════════════════════════════════════════════
+
+SILENT_NETWORK_COMMANDS = {
+    ('1037', '1'),  # Heartbeat دوري كل 15 ثانية
+    ('1037', ''),
+    ('1000', '1'),  # حزمة تهيئة المقبس الأولية
+    ('1009', '36'), # حزم مزامنة داخلية لمصافحة الاتصال
+    ('1005', '1'),  # حزم مزامنة داخلية لمصافحة الاتصال
+}
+
+# استعلامات القراءة والمزامنة الدورية (تُسجل في debug فقط لعدم حشو السجلات بالضوضاء)
+ROUTINE_READ_COMMANDS = {
+    ('1001', '1'),   # مزامنة عامة أولية
+    ('1002', '1'),   # استعلام رصيد الذهب والموارد
+    ('1002', '7'),   # استعلام معلومات اللاعب
+    ('1003', '1'),   # استعلام طوابير البناء
+    ('1004', '1'),   # استعلام الحقيبة
+    ('1005', '1'),   # استعلام الفيالق
+    ('1006', '15'),  # استعلام بلاطة بالخريطة
+    ('1006', '22'),  # استعلام إحداثيات هدف
+    ('1006', '25'),  # استعلام معلومات القلعة
+    ('1006', '1000'),# استعلام حالة البلاطة
+    ('1007', '16'),  # استعلام المسيرات النشطة
+    ('1007', '1000'),# مزامنة الفيالق النشطة
+    ('1010', '39'),  # استعلام متجر التحالف
+    ('1010', '75'),  # استعلام قائمة علوم التحالف
+    ('1010', '81'),  # استعلام رصيد تبرعات التحالف
+    ('1012', '1'),   # استعلام طلبات المساعدة
+    ('1013', '1'),   # استعلام مهام الهيبة
+    ('1015', '1'),   # استعلام قائمة البريد
+    ('1017', '3'),   # استعلام قائمة علوم التحالف
+    ('1018', '1'),   # استعلام بيانات التحالف
+    ('1018', '2'),   # استعلام أعضاء التحالف
+    ('1019', '1'),   # استعلام بوفات القلعة
+    ('1024', '1'),   # فحص صندوق VIP اليومي
+    ('1028', '5'),   # استعلام معلومات المهمة
+    ('2011', '3'),   # بحث بالخريطة
+    ('2011', '4'),   # رادار البحث عن الوحوش
+    ('2015', '1'),   # استعلام كنز التحالف
+    ('2031', '1'),   # استعلام فعالية خاصة
+    ('2057', '1'),   # استعلام واجهة الأبطال
+    ('2059', '36'),  # مزامنة بيانات الفيلق
+    ('2064', '9'),   # استعلام متجر الفعالية
+    ('3081', '5'),   # استعلام جوائز الحيوان الأليف
+    ('3129', '4'),   # استعلام مهام يومية
+    ('3137', '1'),   # استعلام نشاط
+    ('3139', '6'),   # استعلام مسيرة القافلة
+    ('3139', '14'),  # فحص أحداث طريق القافلة
+    ('3148', '1'),   # استعلام رحلات الأبطال
+    ('6023', '2'),   # استعلام ودائع دار الادخار
+}
+
+# الأكواد التي تدل على حالات طبيعية وليست أخطاء فشل
+BENIGN_STATUS_CODES = {
+    "0",
+    "Err_CARRIAGE_ESCORT_NOT_DOING",  # لا توجد قافلة تسير حالياً (حالة طبيعية)
+    "Err_ALLIANCE_NOT_HAVE",          # الحساب ليس في تحالف بعد
+}
+
+CMD_REGISTRY: Dict[Tuple[str, str], str] = {
+    # ── الاتصال والمزامنة ──────────────────────────────────────────
+    ('1000', '1'):    "تهيئة المقبس الأولي",
+    ('1001', '1'):    "مزامنة عامة للحساب",
+    ('1001', '2'):    "تشييد مبنى جديد",
+    ('1001', '8'):    "ترقية مبنى إضافي",
+    ('1001', '9'):    "تطبيق مظهر / ترقيات المدينة",
+
+    # ── الموارد والمهارات والمعلومات ──────────────────────────────
+    ('1002', '1'):    "استعلام رصيد الذهب والموارد",
+    ('1002', '7'):    "استعلام معلومات اللاعب والقلعة",
+    ('1002', '22'):   "تفعيل مهارة اللورد / البطل",
+    ('1002', '23'):   "إلغاء مهارة اللورد",
+    ('1002', '45'):   "استعلام الحيوان الأليف",
+
+    # ── الطوابير والحقيبة والفيالق ──────────────────────────────────
+    ('1003', '1'):    "استعلام طوابير القلعة",
+    ('1003', '2'):    "تسريع طابور (تسريع مجاني / أدوات)",
+    ('1004', '1'):    "استعلام محتويات الحقيبة",
+    ('1004', '2'):    "استخدام عنصر / فتح صندوق",
+    ('1005', '1'):    "استعلام الفيالق والقوات",
+    ('1005', '2'):    "تغيير اسم فيلق",
+    ('1005', '4'):    "علاج جرحى المشفى",
+    ('1005', '5'):    "تسريع علاج الجرحى",
+    ('1005', '7'):    "ضبط تشكيلة الفيلق",
+
+    # ── الخريطة والأهداف ───────────────────────────────────────────
+    ('1006', '15'):   "استعلام بيانات بلاطة بالخريطة",
+    ('1006', '22'):   "استعلام هدف بالخريطة",
+    ('1006', '25'):   "استعلام معلومات القلعة الخارجية",
+    ('1006', '1000'): "استعلام حالة الهدف بالخريطة",
+    ('1007', '2'):    "إرسال مسيرة عسكرية",
+    ('1007', '3'):    "استدعاء مسيرة عسكرية",
+    ('1007', '16'):   "استعلام المسيرات العسكرية النشطة",
+    ('1007', '1000'): "مزامنة الفيالق النشطة",
+
+    # ── المباني والترقية والتدريب ───────────────────────────────────
+    ('1008', '1'):    "ترقية مبنى بالقلعة",
+    ('1008', '2'):    "تسريع مجاني لمبنى",
+    ('1008', '7'):    "تدريب قوات بالثكنة",
+    ('1008', '10'):   "تسريع علاج المشفى",
+
+    # ── التحالف والمساعدات والتبرعات ───────────────────────────────
+    ('1010', '39'):   "استعلام متجر التحالف",
+    ('1010', '40'):   "شراء من متجر التحالف",
+    ('1010', '47'):   "تحديث متجر التحالف",
+    ('1010', '48'):   "تبرع علوم التحالف",
+    ('1010', '75'):   "استعلام قائمة علوم التحالف",
+    ('1010', '81'):   "استعلام رصيد تبرعات التحالف",
+    ('1012', '1'):    "استعلام طلبات مساعدة التحالف",
+    ('1012', '2'):    "تقديم مساعدة لأعضاء التحالف",
+    ('1017', '1'):    "تبرع علوم التحالف",
+    ('1017', '3'):    "استعلام قائمة علوم التحالف",
+    ('1018', '1'):    "استعلام بيانات التحالف",
+    ('1018', '2'):    "استعلام أعضاء التحالف",
+
+    # ── الهيبة والبريد والبوفات ─────────────────────────────────────
+    ('1013', '1'):    "استعلام مهام الهيبة",
+    ('1015', '1'):    "استعلام قائمة البريد",
+    ('1015', '4'):    "حذف رسائل بريد",
+    ('1015', '18'):   "جمع مكافآت بريد",
+    ('1015', '19'):   "جمع شامل لجوائز البريد",
+    ('1019', '1'):    "استعلام بوفات القلعة",
+    ('1019', '6'):    "تفعيل بوف للقلعة",
+    ('1024', '1'):    "فحص صندوق VIP اليومي",
+    ('1024', '2'):    "استلام صندوق VIP اليومي",
+    ('1024', '3'):    "تفعيل نقاط VIP",
+    ('1028', '5'):    "استعلام معلومات المهمة",
+
+    # ── الفعاليات والموانئ والأنشطة ────────────────────────────────
+    ('1032', '2'):    "مبادلة القافلة",
+    ('1033', '2'):    "استلام جوائز سفن الميناء",
+    ('1034', '1'):    "مزايدة في المزاد",
+    ('1034', '2'):    "شراء فوري من المزاد",
+    ('1035', '1'):    "تجنيد الأبطال",
+    ('1040', '1'):    "تشغيل طاحونة الماء",
+    ('1041', '1'):    "نافورة الأمنيات",
+    ('1043', '2'):    "استلام مكافأة الهيبة",
+    ('1045', '1'):    "مهمة خاصة",
+    ('1046', '1'):    "دورية الحيوان الأليف",
+    ('1067', '1'):    "استلام مكافآت الفعالية",
+    ('1067', '2'):    "تفاعل فعالية",
+    ('1087', '3'):    "استلام مكافأة",
+
+    # ── الكنوز والخرائط والأبطال ────────────────────────────────────
+    ('2011', '3'):    "بحث بالخريطة",
+    ('2011', '4'):    "رادار البحث عن الوحوش",
+    ('2015', '1'):    "استعلام كنز التحالف",
+    ('2015', '3'):    "حفر صندوق تحالف",
+    ('2015', '4'):    "طلب مساعدة لصندوق تحالف",
+    ('2015', '6'):    "استلام جوائز صندوق تحالف",
+    ('2031', '1'):    "استعلام فعالية خاصة",
+    ('2031', '2'):    "تفاعل فعالية خاصة",
+    ('2031', '5'):    "استلام مكافأة فعالية",
+    ('2057', '1'):    "استعلام واجهة الأبطال",
+    ('2058', '1'):    "سحب بطاقات الأبطال",
+    ('2059', '36'):   "مزامنة بيانات الفيلق",
+    ('2060', '1'):    "شراء صندوق المشاعل",
+    ('2063', '2'):    "استلام صناديق الهيبة",
+    ('2064', '9'):    "استعلام متجر الفعالية",
+    ('2064', '10'):   "شراء من متجر الفعالية",
+    ('2064', '11'):   "تحديث متجر الفعالية",
+
+    # ── الأنشطة الإمبراطورية والحيوانات الأليفة ─────────────────────
+    ('3078', '1'):    "إنهاء إرشاد الدليل",
+    ('3080', '1'):    "رمي مكعب الضريح",
+    ('3081', '1'):    "فتح / ترقية الحيوان الأليف",
+    ('3081', '4'):    "إرسال دورية الحيوان الأليف",
+    ('3081', '5'):    "استلام جوائز الحيوان الأليف",
+    ('3105', '2'):    "استلام مكافأة نشاط",
+    ('3120', '1'):    "إيداع دار الادخار",
+    ('3129', '4'):    "استعلام مهام يومية",
+    ('3130', '1'):    "استكشاف كنز طروادة",
+    ('3137', '1'):    "استعلام نشاط",
+    ('3137', '2'):    "مشاركة نشاط",
+    ('3139', '1'):    "إرسال القافلة وحراسة الكنز",
+    ('3139', '6'):    "استعلام مسيرة القافلة",
+    ('3139', '7'):    "استلام جوائز وصول القافلة",
+    ('3139', '14'):   "معالجة أحداث طريق القافلة",
+    ('3140', '1'):    "تفعيل قاعة التكتيك",
+    ('3142', '2'):    "استكشاف جناح الكنز",
+    ('3148', '1'):    "استعلام رحلات الأبطال",
+    ('3148', '3'):    "استدعاء رحلة الأبطال",
+    ('3148', '4'):    "إرسال رحلة الأبطال",
+    ('3148', '5'):    "استلام مكافأة رحلة الأبطال",
+    ('3148', '7'):    "تسريع رحلة الأبطال",
+    ('5011', '1'):    "تفعيل ميزة خاصة",
+    ('6023', '1'):    "إيداع دار الادخار (خطة شهرية/أسبوعية)",
+    ('6023', '2'):    "استعلام ودائع دار الادخار",
+}
+
+def _summarize_payload(data: Any) -> str:
+    """استخلاص ملخص بشري ذكي وموجز من حمولة الطلب لمنع حشو السجلات."""
+    if not isinstance(data, dict) or not data:
+        return ""
+    try:
+        parts = []
+        if "skillID" in data:
+            parts.append(f"مهارة #{data['skillID']}")
+        if "scienceId" in data or "techId" in data:
+            s_id = data.get("scienceId") or data.get("techId")
+            parts.append(f"تقنية #{s_id}")
+        if "buildingId" in data or "bid" in data:
+            b_id = data.get("buildingId") or data.get("bid")
+            parts.append(f"مبنى #{b_id}")
+        if "itemid" in data or "itemId" in data:
+            item_id = data.get("itemid") or data.get("itemId")
+            count = data.get("count", 1)
+            parts.append(f"عنصر #{item_id} ×{count}")
+        if "mailIds" in data:
+            m_len = len(data["mailIds"]) if isinstance(data["mailIds"], list) else 1
+            parts.append(f"{m_len} رسالة")
+        if "to" in data and isinstance(data["to"], dict):
+            parts.append(f"هدف ({data['to'].get('x')}, {data['to'].get('y')})")
+        if "cId" in data or "heroId" in data:
+            parts.append(f"بطل #{data.get('cId') or data.get('heroId')}")
+        if "boxId" in data or "box_id" in data:
+            parts.append(f"صندوق #{data.get('boxId') or data.get('box_id')}")
+        if "dest" in data:
+            parts.append(f"وجهة #{data['dest']}")
+        if "bossType" in data:
+            parts.append(f"نوع #{data['bossType']}")
+        if parts:
+            return f"({', '.join(parts)})"
+    except Exception:
+        pass
+    return ""
+
+def _format_network_event(cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False) -> str:
+    """صياغة سطر شبكي موحد وموجز وأنيق يوضح الطلب والنتيجة."""
+    try:
+        cmd_str = str(cmd)
+        sub_str = str(subcmd)
+        desc = CMD_REGISTRY.get((cmd_str, sub_str)) or CMD_REGISTRY.get((cmd_str, "")) or f"طلب {cmd_str}/{sub_str}"
+        summary = _summarize_payload(data)
+        summary_str = f" {summary}" if summary else ""
+
+        if is_nowait:
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ 🚀 تم الإرسال"
+
+        t_str = f" ({elapsed:.2f}ث)" if elapsed > 0 else ""
+
+        if error:
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ ⚠️ خطأ شبكة: {error}{t_str}"
+
+        if not content:
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ ❌ لا توجد استجابة{t_str}"
+
+        # فحص كود الخطأ في الرد
+        err_code = "0"
+        if isinstance(content, dict):
+            err_code = str(content.get("err", content.get("code", "0")))
+
+        if err_code == "0":
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ ✅ نجاح{t_str}"
+        elif err_code in BENIGN_STATUS_CODES:
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ ℹ️ {err_code}{t_str}"
+        else:
+            return f"🌐 [{cmd_str}/{sub_str}] {desc}{summary_str} ➔ ❌ كود: {err_code}{t_str}"
+    except Exception:
+        return ""
+
+
+# ════════════════════════════════════════════════════════════════════
 #  نماذج البيانات
 # ════════════════════════════════════════════════════════════════════
 
@@ -176,6 +440,7 @@ class GateClient:
         self.on_disconnect: Optional[Callable[[str], Any]] = None
         self._explicit_close: bool = False
         self._last_query_time: float = 0.0  # توقيت آخر طلب API
+        self.log_callback: Optional[Callable[[str], Any]] = None
 
     @property
     def is_connected(self) -> bool:
@@ -510,6 +775,44 @@ class GateClient:
         if listener in self._packet_listeners:
             self._packet_listeners.remove(listener)
 
+    def _log_network_action(self, cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False):
+        """توثيق آمن ومعزول تماماً لأحداث الشبكة دون التأثير على عمل المقابس."""
+        try:
+            cmd_s = str(cmd)
+            sub_s = str(subcmd)
+            cmd_pair = (cmd_s, sub_s)
+
+            # 1. كتم أوامر التهيئة والنبض الصامت تماماً
+            if cmd_pair in SILENT_NETWORK_COMMANDS or (cmd_s, "") in SILENT_NETWORK_COMMANDS:
+                return
+
+            line = _format_network_event(cmd_s, sub_s, data, content, elapsed, error, is_nowait)
+            if not line:
+                return
+
+            # فحص كود الرد للتمييز
+            err_code = "0"
+            if isinstance(content, dict):
+                err_code = str(content.get("err", content.get("code", "0")))
+
+            # 2. استعلامات القراءة والمزامنة الروتينية (Routine Read Queries)
+            # إذا نجحت أو أعادت حالة طبيعية دون أخطاء شبكية حقيقية:
+            # تُسجل في debug فقط لعدم حشو تيرمنال المستخدم وسجلات الحساب.
+            is_routine_read = (cmd_pair in ROUTINE_READ_COMMANDS or (cmd_s, "") in ROUTINE_READ_COMMANDS)
+            is_clean_status = (not error) and (err_code in BENIGN_STATUS_CODES)
+
+            if is_routine_read and is_clean_status and not is_nowait:
+                log.debug(line)
+                return
+
+            # 3. الطلبات الإجرائية الحقيقية أو الأخطاء الفعلية تُرسل للـ callback والتيرمنال
+            if hasattr(self, "log_callback") and callable(self.log_callback):
+                self.log_callback(line)
+            else:
+                log.info(line)
+        except Exception:
+            pass
+
     async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15, client_data: list = None) -> Optional[dict]:
         """إرسال أمر والانتظار للرد — مع حماية تلقائية من السرعة الزائدة."""
         if not self._alive: return None
@@ -541,12 +844,20 @@ class GateClient:
             self._writer.write(pkt)
             await self._writer.drain()
 
+        t_start = time.time()
         try:
             result = await asyncio.wait_for(fut, timeout=timeout)
-            if not result or not result.get('ok'):
-                return None
-            return result.get('content')
-        except (asyncio.TimeoutError, ConnectionError):
+            content = result.get('content') if (result and result.get('ok')) else None
+            try:
+                self._log_network_action(str_cmd, str_sub, data, content, time.time() - t_start)
+            except Exception:
+                pass
+            return content
+        except (asyncio.TimeoutError, ConnectionError) as ex:
+            try:
+                self._log_network_action(str_cmd, str_sub, data, None, time.time() - t_start, error=str(ex))
+            except Exception:
+                pass
             return None
         finally:
             self._pending.pop(sess, None)
@@ -561,6 +872,10 @@ class GateClient:
         if self.spy_mode:
             print(f"🚀 [SPY C2S] NOWAIT CMD={cmd}/{subcmd} (session={sess}) | data={data}")
         self._writer.write(pack_request(cmd, str(subcmd), data or {}, sess))
+        try:
+            self._log_network_action(str(cmd), str(subcmd), data, None, 0.0, is_nowait=True)
+        except Exception:
+            pass
 
     def on_notify(self, notify_id: str, handler: Callable):
         self._notifies[notify_id] = handler
@@ -638,6 +953,17 @@ class GameConnection:
         self._gate:  Optional[GateClient]      = None
         self._spy_mode: bool                   = False
         self._packet_listeners: List[Callable] = []
+        self._log_callback: Optional[Callable[[str], Any]] = None
+
+    @property
+    def log_callback(self) -> Optional[Callable[[str], Any]]:
+        return self._log_callback
+
+    @log_callback.setter
+    def log_callback(self, cb: Optional[Callable[[str], Any]]):
+        self._log_callback = cb
+        if self._gate:
+            self._gate.log_callback = cb
 
     @property
     def init_data(self) -> dict:
@@ -670,6 +996,7 @@ class GameConnection:
         self._gate.on_disconnect = self.on_disconnect
         self._gate.spy_mode = self._spy_mode
         self._gate._packet_listeners = list(self._packet_listeners)
+        self._gate.log_callback = self._log_callback
         return await self._gate.connect()
 
     @property

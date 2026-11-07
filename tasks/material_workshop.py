@@ -114,7 +114,7 @@ class MaterialWorkshopTask(BaseTask):
         self.selected_mids = parse_materials_choice(raw_mat)
 
     async def run(self) -> TaskResult:
-        self.log.info("🔨 بدء مهمة ورشة المواد (إنتاج خامات العتاد)...")
+        self.log.debug("🔨 بدء مهمة ورشة المواد (إنتاج خامات العتاد)...")
 
         now_ts = int(time.time())
 
@@ -143,25 +143,25 @@ class MaterialWorkshopTask(BaseTask):
         occupied_count = (1 if has_active_production else 0) + len(waiting_queues)
         free_slots = max(0, MAX_TOTAL_CAPACITY - occupied_count)
 
-        self.log.info(f"📊 حالة مسار الورشة: {occupied_count}/{MAX_TOTAL_CAPACITY} ممتلئ | الفراغات المتاحة: {free_slots}")
+        self.log.debug(f"📊 حالة مسار الورشة: {occupied_count}/{MAX_TOTAL_CAPACITY} ممتلئ | الفراغات المتاحة: {free_slots}")
         if has_active_production:
             m_info = MATERIALS_MAP.get(active_mid, {"name_ar": f"خامة #{active_mid}", "icon": "📦"})
             remaining_s = active_end_time - now_ts
-            self.log.info(f"⏳ قيد التصنيع حالياً: {m_info['icon']} {m_info['name_ar']} (متبقي: {remaining_s // 60} دقيقة)")
+            self.log.debug(f"⏳ قيد التصنيع حالياً: {m_info['icon']} {m_info['name_ar']} (متبقي: {remaining_s // 60} دقيقة)")
 
         if waiting_queues:
             waiting_names = [f"{MATERIALS_MAP.get(m, {}).get('icon', '')} {MATERIALS_MAP.get(m, {}).get('name_ar', str(m))}" for m in waiting_queues]
-            self.log.info(f"📋 قائمة الانتظار ({len(waiting_queues)}): {', '.join(waiting_names)}")
+            self.log.debug(f"📋 قائمة الانتظار ({len(waiting_queues)}): {', '.join(waiting_names)}")
 
         # عرض الخامات المختارة للإنتاج
         chosen_names = [f"{MATERIALS_MAP[m]['icon']} {MATERIALS_MAP[m]['name_ar']}" for m in self.selected_mids if m in MATERIALS_MAP]
-        self.log.info(f"🎯 الخامات المحددة للإنتاج: {', '.join(chosen_names)}")
+        self.log.debug(f"🎯 الخامات المحددة للإنتاج: {', '.join(chosen_names)}")
 
         # 2. إذا كانت كافة المسارات ممتلئة بالكامل
         if free_slots <= 0:
             retry_seconds = max(60, active_end_time - now_ts) if active_end_time > now_ts else 3600
             msg = f"مسار ورشة المواد ممتلئ بالكامل ({occupied_count}/{MAX_TOTAL_CAPACITY}). سينتهي أقرب عنصر بعد {retry_seconds // 60} دقيقة."
-            self.log.info(f"ℹ️ {msg}")
+            self.log.debug(f"ℹ️ {msg}")
             return TaskResult.ok(
                 msg,
                 status="queue_full",

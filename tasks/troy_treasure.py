@@ -156,7 +156,7 @@ class TroyTreasureTask(BaseTask):
                 data={"skipped": True}
             )
 
-        self.log.info("🏛️ بدء تنفيذ مهمة كنز طروادة...")
+        self.log.debug("🏛️ بدء تنفيذ مهمة كنز طروادة...")
 
         # 1. تحديث بيانات طروادة من السيرفر
         troy_data = await self._refresh_troy_data()
@@ -177,7 +177,7 @@ class TroyTreasureTask(BaseTask):
 
             if not ready_quests:
                 msg = "لا توجد أي جوائز مهام جاهزة للاستلام في كنز طروادة حالياً"
-                self.log.info(f"ℹ️ {msg}")
+                self.log.debug(f"ℹ️ {msg}")
                 return TaskResult(
                     success=True,
                     message=msg,

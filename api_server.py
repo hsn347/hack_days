@@ -869,55 +869,8 @@ def _bot_thread(req: StartBotRequest):
                 pass
 
     def _log_callback(line: str, already_printed: bool = False):
-        # طباعة السجلات إلى الكونسول: السجلات الهامة فقط التي لم تُطبع مسبقاً عبر console_h
-        if not already_printed:
-            should_print = any(
-                k in line for k in ("منسق", "مسيرة", "مسيرات", "فيالق", "فيلق", "جمع", "غزاة", "معقل", "أولوية", "🚨", "🎉", "⚠️", "❌", "🎖️", "⚔️", "🌾", "🏰", "🏗️", "البناء", "building", "march_manager", "gather", "monster", "stronghold", "✅", "⏭️", "نجاح", "فشل", "كود الخطأ", "🐉", "Abra", "وحش")
-            )
-            if should_print:
-                print(f"[{email}] {line}", flush=True)
-
-        if _log_file_handle:
-            try:
-                # كتابة السطر مع التاريخ والوقت كاملاً لدقة حساب مدة الـ 24 ساعة
-                _log_file_handle.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {line}\n")
-                _log_file_handle.flush()
-                _log_line_counter[0] += 1
-                # تقليم السجل كل 1000 سطر لتفادي ضغط الـ I/O على القرص
-                if _log_line_counter[0] >= 1000:
-                    _log_line_counter[0] = 0
-                    _trim_log_file()
-            except Exception:
-                pass
-        stamped = f"[{datetime.now():%H:%M:%S}] {line}"
-        _safe_log_put(log_q, stamped)
-
-        if stop_event.is_set():
-            return
-
-        # ── تحليل أحداث البوت الموجهة لتحديث الحالة ──
-        if "[FIREBASE_EVENT]" in line or "[BOT_EVENT]" in line:
-            try:
-                tag = "[FIREBASE_EVENT]" if "[FIREBASE_EVENT]" in line else "[BOT_EVENT]"
-                parts = line.split(tag, 1)[1].strip()
-                m_st  = re.search(r'conn_state=(\w+)', parts)
-                m_nr  = re.search(r'next_run_time=(\S+)', parts)
-                m_msg = re.search(r'message=(.+?)(?:\s+next_run_time=\S+)?$', parts)
-                ev_state = m_st.group(1) if m_st else ""
-                ev_msg   = m_msg.group(1).strip() if m_msg else ""
-                ev_nr    = m_nr.group(1) if m_nr else None
-                if ev_state:
-                    with _lock:
-                        prev_ev = _conn_states.get(castle_id)
-                        _conn_states[castle_id] = ev_state
-                    if prev_ev != ev_state:
-                        bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
-                        update_castle_status_db(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
-            except Exception as ex:
-                log.debug(f"Bot event parse error: {ex}")
-
-        # ── تحليل أحداث مزامنة الموارد ──
-        elif "[RESOURCE_SYNC]" in line:
+        # 1. أحداث مزامنة الموارد الفنية: يتم تحديث قاعدة البيانات فوراً واستثناؤها من ملفات السجلات والواجهة
+        if "[RESOURCE_SYNC]" in line:
             try:
                 parts = line.split("[RESOURCE_SYNC]", 1)[1].strip()
                 rmap = {}
@@ -956,6 +909,57 @@ def _bot_thread(req: StartBotRequest):
                     )
             except Exception as ex:
                 log.debug(f"Resource sync parse error: {ex}")
+            return
+
+        display_line = line
+
+        # 2. تحليل أحداث البوت الموجهة لتحديث الحالة وتنسيقها بشرياً
+        if "[FIREBASE_EVENT]" in line or "[BOT_EVENT]" in line:
+            try:
+                tag = "[FIREBASE_EVENT]" if "[FIREBASE_EVENT]" in line else "[BOT_EVENT]"
+                parts = line.split(tag, 1)[1].strip()
+                m_st  = re.search(r'conn_state=(\w+)', parts)
+                m_nr  = re.search(r'next_run_time=(\S+)', parts)
+                m_msg = re.search(r'message=(.+?)(?:\s+next_run_time=\S+)?$', parts)
+                ev_state = m_st.group(1) if m_st else ""
+                ev_msg   = m_msg.group(1).strip() if m_msg else ""
+                ev_nr    = m_nr.group(1) if m_nr else None
+                if ev_state:
+                    with _lock:
+                        prev_ev = _conn_states.get(castle_id)
+                        _conn_states[castle_id] = ev_state
+                    if prev_ev != ev_state:
+                        bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
+                        update_castle_status_db(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
+                if ev_msg:
+                    display_line = ev_msg
+            except Exception as ex:
+                log.debug(f"Bot event parse error: {ex}")
+
+        # 3. طباعة السجلات إلى الكونسول ببادئة مدمجة مع منع الازدواجية
+        short_user = email.split('@')[0] if '@' in email else email
+        if not already_printed:
+            should_print = any(
+                k in display_line for k in ("منسق", "مسيرة", "مسيرات", "فيالق", "فيلق", "جمع", "غزاة", "معقل", "أولوية", "🚨", "🎉", "⚠️", "❌", "🎖️", "⚔️", "🌾", "🏰", "🏗️", "البناء", "building", "march_manager", "gather", "monster", "stronghold", "✅", "⏭️", "نجاح", "فشل", "كود الخطأ", "🐉", "Abra", "وحش", "🌐")
+            )
+            if should_print:
+                print(f"[{datetime.now():%H:%M:%S}][{short_user}] {display_line}", flush=True)
+
+        # 4. كتابة السجل النظيف في ملف القرص
+        if _log_file_handle:
+            try:
+                _log_file_handle.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {display_line}\n")
+                _log_file_handle.flush()
+                _log_line_counter[0] += 1
+                if _log_line_counter[0] >= 1000:
+                    _log_line_counter[0] = 0
+                    _trim_log_file()
+            except Exception:
+                pass
+
+        # 5. بث السجل عبر WebSocket للواجهة
+        stamped = f"[{datetime.now():%H:%M:%S}] {display_line}"
+        _safe_log_put(log_q, stamped)
 
     # 5. فحص الاشتراك يتم طبيعياً في بداية كل دورة داخل البوت نفسه بدون أي خيوط إضافية
     forced_stop_reason = ""

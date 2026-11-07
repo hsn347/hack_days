@@ -340,7 +340,7 @@ class HeroConsignTask(BaseTask):
 
                 await asyncio.sleep(random.uniform(1.6, 2.8))
         else:
-            self.log.info(f"ℹ️ رحلات الأبطال (الترحال): مكتملة مسبقاً ({used_physical}/10).")
+            self.log.debug(f"ℹ️ رحلات الأبطال (الترحال): مكتملة مسبقاً ({used_physical}/10).")
 
         # ── المرحلة الثانية: استلام جوائز مهام التكليف المنجزة (Award Consign) ──
         consign_tasks = voyage.get('consignTasks', [])
@@ -380,7 +380,7 @@ class HeroConsignTask(BaseTask):
             voyage = self.conn.init_data.get('heroVoyageAgCtrl', voyage)
             consign_tasks = voyage.get('consignTasks', consign_tasks)
         else:
-            self.log.info("ℹ️ لا توجد صناديق/جوائز مهام منجزة جاهزة للاستلام حالياً. المتابعة إلى تكليف الأبطال...")
+            self.log.debug("ℹ️ لا توجد صناديق/جوائز مهام منجزة جاهزة للاستلام حالياً. المتابعة إلى تكليف الأبطال...")
 
         # ── المرحلة الثالثة: تكليف الأبطال (Hero Consign) ──
         consign_count = voyage.get('consignCount', 0)

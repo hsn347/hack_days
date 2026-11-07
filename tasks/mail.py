@@ -67,7 +67,7 @@ class MailTask(BaseTask):
         if not self.is_connected:
             return TaskResult.fail("الاتصال بالسيرفر مقطوع")
 
-        self.log.info(f"📬 بدء مهمة فحص وجمع بريد القلعة (التبويبات: {self.set_types})...")
+        self.log.debug(f"📬 بدء مهمة فحص وجمع بريد القلعة (التبويبات: {self.set_types})...")
 
         # تهيئة جلسة البريد مع السيرفر أولاً كما في ملفات اللعبة (mailCtrl:REQ_INIT_MAILDATA)
         try:
@@ -111,7 +111,7 @@ class MailTask(BaseTask):
 
                 mail_list = r_list.get("data", {}).get("list", [])
                 if not isinstance(mail_list, list) or not mail_list:
-                    self.log.info(f"📭 انتهت جميع رسائل التبويب {set_type} واكتمل تنظيف الصندوق بالكامل.")
+                    self.log.debug(f"📭 انتهت جميع رسائل التبويب {set_type} واكتمل تنظيف الصندوق بالكامل.")
                     break
 
                 # تصفية الرسائل غير المقفلة (isLock == 0) والتي لم يسبق معالجتها في هذه الدورة
@@ -130,7 +130,7 @@ class MailTask(BaseTask):
                             pass
 
                 if not unlocked_mids:
-                    self.log.info(f"📭 لا توجد رسائل جديدة غير مقفلة في التبويب {set_type} (تم الانتهاء).")
+                    self.log.debug(f"📭 لا توجد رسائل جديدة غير مقفلة في التبويب {set_type} (تم الانتهاء).")
                     break
 
                 self.log.info(f"📬 [دفعة #{loop_iteration}] تم العثور على {len(unlocked_mids)} رسالة غير مقفلة في التبويب {set_type}...")

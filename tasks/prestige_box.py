@@ -142,18 +142,18 @@ class PrestigeBoxTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تنفيذ فحص واستلام صناديق مهام الهيبة اليومية."""
-        self.log.info("🎁 ───【 بدء مهمة استلام صناديق مهام الهيبة والنشاط اليومي 】───")
+        self.log.debug("🎁 ───【 بدء مهمة استلام صناديق مهام الهيبة والنشاط اليومي 】───")
 
         # 1. استعلام مسبق عن أحدث حالة للصناديق ونقاط النشاط
         merit_data = await self._refresh_merit_data()
         daily_points, ready_boxes, claimed_boxes = self.get_ready_boxes(merit_data)
 
-        self.log.info(f"📊 [استعلام مسبق] نقاط النشاط الحالية: {daily_points} نقطة | الصناديق المستلمة سابقاً: {claimed_boxes}")
+        self.log.debug(f"📊 [استعلام مسبق] نقاط النشاط الحالية: {daily_points} نقطة | الصناديق المستلمة سابقاً: {claimed_boxes}")
 
         # 2. فحص: إذا لم تكن هناك أي صناديق جاهزة للاستلام، يتم إنهاء المهمة فوراً
         if not ready_boxes:
             msg = f"ℹ️ لا توجد صناديق هيبة جاهزة للاستلام حالياً (النقاط: {daily_points} — المستلم: {len(claimed_boxes)}/6)."
-            self.log.info(msg)
+            self.log.debug(msg)
             return TaskResult.ok(
                 msg,
                 daily_points=daily_points,

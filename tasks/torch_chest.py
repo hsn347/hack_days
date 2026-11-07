@@ -52,7 +52,7 @@ class TorchChestTask(BaseTask):
         if not self.buy_enabled and not self.open_enabled:
             return TaskResult.ok("⏭️ تم تخطي مهمة صندوق مشعل رويال (الخيارات غير مفعّلة)")
 
-        self.log.info("🔍 جاري فحص توفر صندوق الشعلة (مشعل رويال) في المتجر...")
+        self.log.debug("🔍 جاري فحص توفر صندوق الشعلة (مشعل رويال) في المتجر...")
 
         # 1. فحص توفر الصندوق في المتجر
         config_data = await self._get_shop_config()
@@ -60,7 +60,7 @@ class TorchChestTask(BaseTask):
 
         if not torch_item:
             msg = "⏭️ صندوق الشعلة (مشعل رويال) غير متوفر في المتجر حالياً — تم إنهاء المهمة."
-            self.log.info(msg)
+            self.log.debug(msg)
             return TaskResult.ok(msg, in_store=False)
 
         self.log.info(f"✨ تم العثور على صندوق الشعلة في المتجر (shopItemID: {SHOP_ITEM_ID}) 🎉")
@@ -155,7 +155,7 @@ class TorchChestTask(BaseTask):
         remaining = max(0, limit_num - buy_num)
 
         if remaining <= 0:
-            self.log.info(f"ℹ️ تم شراء جميع صناديق الشعلة المتاحة للفعالية مسبقاً ({buy_num}/{limit_num}).")
+            self.log.debug(f"ℹ️ تم شراء جميع صناديق الشعلة المتاحة للفعالية مسبقاً ({buy_num}/{limit_num}).")
             return 0
 
         self.log.info(f"🪙 جاري شراء {remaining} صندوق شعلة بالذهب (سعر الحبة: {price} ذهب، المتبقي: {remaining}/{limit_num})...")
@@ -239,7 +239,7 @@ class TorchChestTask(BaseTask):
         """فتح جميع صناديق مشعل رويال المتوفرة بالحقيبة بالكامل."""
         count = await self._get_backpack_torch_count()
         if count <= 0:
-            self.log.info("ℹ️ لا توجد صناديق مشعل رويال في الحقيبة لفتحها.")
+            self.log.debug("ℹ️ لا توجد صناديق مشعل رويال في الحقيبة لفتحها.")
             return 0
 
         self.log.info(f"📦 جاري فتح {count} من صندوق مشعل رويال بالحقيبة دفعة واحدة عبر 1004/2...")

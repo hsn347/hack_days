@@ -61,8 +61,6 @@ class AllianceTreasureTask(BaseTask):
 
     def is_open_treasure_enabled(self) -> bool:
         """فحص هل خيار استلام كنز التحالف الخاص مفعّل في الإعدادات."""
-        if "open_treasure" in self.config:
-            return bool(self.config.get("open_treasure"))
         alliance_cfg = self.config.get("alliance", {})
         if isinstance(alliance_cfg, dict) and "open_treasure" in alliance_cfg:
             return bool(alliance_cfg.get("open_treasure"))
@@ -91,13 +89,13 @@ class AllianceTreasureTask(BaseTask):
         init_data = getattr(self.conn, "init_data", {})
         
         # التحقق الأولي من عضوية التحالف
-        member_mgr = init_data.get("memberMgr", {})
-        own_member = member_mgr.get("ownMember") if isinstance(member_mgr, dict) else None
-        has_alliance = bool(own_member and isinstance(own_member, dict) and own_member.get("aid"))
+        allianceCtrl = init_data.get("allianceCtrl", {})
+        own_member = allianceCtrl.get("memberinfo") if isinstance(allianceCtrl, dict) else None
+        minfo = own_member.get("minfo", {})
+        has_alliance = bool(minfo and isinstance(minfo, dict) and minfo.get("aid"))
 
         # جلب أحدث بيانات صندوق التحالف عبر 2015/1
-        cached_ctrl = init_data.get("allianceTreasureCtrl", {})
-        raw_data = cached_ctrl.get("data") if isinstance(cached_ctrl, dict) else None
+        raw_data = init_data.get("allianceTreasureCtrl", {})
 
         if force_query or not raw_data:
             try:
@@ -293,36 +291,6 @@ class AllianceTreasureTask(BaseTask):
         help_requested_count = 0
         received_indices = set()
 
-        # ── الخطوة 2أ: استلام أي صناديق حفر خاصة مكتملة (2015/6 - receiveType: 1) ──
-        can_receive_list = st.get("can_receive_list", [])
-        if can_receive_list:
-            if not self.is_open_treasure_enabled():
-                self.log.info(f"⏸️ يوجد {len(can_receive_list)} كنز مكتمل في صفحة 'الكنوز الخاصة بي' تم تخطي استلامها (open_treasure معطل).")
-            else:
-                for item in can_receive_list:
-                    own_uid = item.get("ownUid") or self.uid or getattr(self.conn, "uid", 0)
-                    idx = item.get("index")
-                    if idx is not None:
-                        idx_int = int(idx)
-                        self.log.info(f"🎁 استلام جوائز صندوق التحالف المكتمل الخاص بي #{idx_int} [UID: {own_uid}] (2015/6 Type 1)...")
-                        await asyncio.sleep(0.3)
-                        r_recv = await self.conn.query(
-                            self.CMD_ALLIANCE_TREASURE,
-                            self.REQ_RECEIVE,
-                            {"receiveType": 1, "ownUid": int(own_uid), "index": idx_int},
-                            timeout=8
-                        )
-                        if r_recv and str(r_recv.get("err", "-1")) == "0":
-                            total_received += 1
-                            received_indices.add(idx_int)
-                            self.log.info(f"✅ تم استلام جوائز صندوق التحالف الخاص بي #{idx_int} بنجاح!")
-                        elif r_recv and str(r_recv.get("err")) == "620002":
-                            received_indices.add(idx_int)
-                            self.log.info(f"ℹ️ جائزة صندوق التحالف الخاص بي #{idx_int} مستلمة مسبقاً.")
-                        else:
-                            err = r_recv.get("err") if r_recv else "timeout"
-                            self.log.warning(f"⚠️ تعذر استلام صندوق التحالف الخاص بي #{idx_int}: {err}")
-
         # ── الخطوة 2ب: استلام جوائز مساعدة أعضاء التحالف (2015/6 - receiveType: 2) ──
         can_receive_help_rewards = st.get("can_receive_help_rewards", [])
         if can_receive_help_rewards:
@@ -345,10 +313,6 @@ class AllianceTreasureTask(BaseTask):
                     else:
                         err = r_recv.get("err") if r_recv else "timeout"
                         self.log.warning(f"⚠️ تعذر استلام جائزة مساعدة العضو {nick} #{idx}: {err}")
-
-        if can_receive_list or can_receive_help_rewards:
-            # إعادة تحديث الحالة بعد الاستلامات
-            st = await self.get_free_status(force_query=True)
 
         # ── الخطوة 3: تقديم المساعدة لأعضاء التحالف (2015/5) [إلزامي وتلقائي] ──
         can_help_members = st.get("unhelped_members", [])

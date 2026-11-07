@@ -81,14 +81,14 @@ class VipGiftTask(BaseTask):
 
     async def run(self) -> TaskResult:
         """تنفيذ فحص واستلام صندوق الـ VIP المجاني."""
-        self.log.info("👑 بدء فحص مهمة صندوق الـ VIP اليومي (VIP Daily Gift)...")
+        self.log.debug("👑 بدء فحص مهمة صندوق الـ VIP اليومي (VIP Daily Gift)...")
 
         status = self.get_vip_status()
         vip_lv = status["vip_lv"]
 
         # 1. التحقق من توفر الصندوق المجاني
         if not status["free_available"]:
-            self.log.info(f"ℹ️ [صندوق VIP] الصندوق المجاني مستلم اليوم مسبقاً (VIP مستوى {vip_lv}). إنهاء المهمة بأمان.")
+            self.log.debug(f"ℹ️ [صندوق VIP] الصندوق المجاني مستلم اليوم مسبقاً (VIP مستوى {vip_lv}). إنهاء المهمة بأمان.")
             return TaskResult(
                 success=True,
                 message=f"✅ تم استلام صندوق الـ VIP المجاني اليوم مسبقاً (VIP مستوى {vip_lv})",

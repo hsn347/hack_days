@@ -97,9 +97,14 @@ def sdk_login(email: str, password: str, device_id: str = None, proxy_url: str =
             "raw": None
         }
     except requests.exceptions.RequestException as re:
+        err_text = str(re)
+        if "Missing dependencies for SOCKS support" in err_text:
+            msg = "مكتبة PySocks غير مثبتة في بيئة بايثون لدعم بروكسي SOCKS5 (نفذ: pip install PySocks)"
+        else:
+            msg = f"تعذر الوصول لخوادم المصادقة (خطأ اتصال بالشبكة): {re}"
         return {
             "success": False,
-            "error_msg": f"تعذر الوصول لخوادم المصادقة (خطأ اتصال بالشبكة): {re}",
+            "error_msg": msg,
             "raw": None
         }
     except Exception as e:

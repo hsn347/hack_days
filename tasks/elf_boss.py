@@ -582,7 +582,7 @@ class ElfBossTask(BaseTask):
         self._busy_heroes.update(self._hero_busy_until.keys())
 
         if self._busy_heroes:
-            self.log.info(f"⏳ أبطال مشغولون في مسيرات قائمة: {list(self._busy_heroes)} (عدد المسيرات النشطة: {active_march_count})")
+            self.log.debug(f"⏳ أبطال مشغولون في مسيرات قائمة: {list(self._busy_heroes)} (عدد المسيرات النشطة: {active_march_count})")
 
     async def _find_unique_elf_boss(
         self,

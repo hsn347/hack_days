@@ -66,7 +66,7 @@ class CaravanTask(BaseTask):
         cargo_amount = int(cfg.get('cargo', DEFAULT_CARGO_AMOUNT))
         custom_hero  = cfg.get('hero_id')
 
-        self.log.info(f"🐪 بدء مهمة القافلة وحراسة الكنز (البضائع: {cargo_amount:,})")
+        self.log.debug(f"🐪 بدء مهمة القافلة وحراسة الكنز (البضائع: {cargo_amount:,})")
 
         # 1. المعالجة السريعة لجميع أحداث الطريق إن وجدت (3139/14)
         r_events = await self.conn.query('3139', '14', {}, timeout=8)
@@ -191,24 +191,24 @@ class CaravanTask(BaseTask):
         if not r_start or str(r_start.get('err', '0')) != '0':
             err_code = str(r_start.get('err', 'unknown')) if r_start else 'timeout'
             if "TODAY_LIMIT_MAX" in err_code or "LIMIT_MAX" in err_code:
-                self.log.info("ℹ️ تم استهلاك جميع محاولات إرسال القوافل المتاحة لهذا اليوم (الحد اليومي مكتمل) ✅")
+                self.log.debug("ℹ️ تم استهلاك جميع محاولات إرسال القوافل المتاحة لهذا اليوم (الحد اليومي مكتمل) ✅")
                 return TaskResult.ok(
                     "تم استهلاك الحد اليومي لإرسال القوافل لهذا اليوم",
                     status="daily_limit_reached",
                     retry_after=14400
                 )
             elif "NOT_ESCORT_TIME" in err_code:
-                self.log.info("ℹ️ خارج أوقات إرسال القوافل اليومية (مغلقة حالياً في السيرفر) ⏳")
+                self.log.debug("ℹ️ خارج أوقات إرسال القوافل اليومية (مغلقة حالياً في السيرفر) ⏳")
                 return TaskResult.ok(
                     "خارج أوقات إرسال القوافل اليومية (مغلقة حالياً بالسيرفر)",
                     status="not_escort_time",
                     retry_after=1800
                 )
             elif "HAS_MARCHING" in err_code or "CARRIAGE_ESCORT_DOING" in err_code:
-                self.log.info("ℹ️ توجد قافلة تسير بالفعل في الطريق حالياً.")
+                self.log.debug("ℹ️ توجد قافلة تسير بالفعل في الطريق حالياً.")
                 return TaskResult.ok("توجد قافلة تسير بالفعل", status="marching", retry_after=1800)
             elif "ATY_NOT_OPEN" in err_code:
-                self.log.info("ℹ️ فعالية القافلة وحراسة الكنز غير مفتوحة حالياً في السيرفر.")
+                self.log.debug("ℹ️ فعالية القافلة وحراسة الكنز غير مفتوحة حالياً في السيرفر.")
                 return TaskResult.ok("فعالية القافلة غير مفتوحة حالياً", status="activity_closed", retry_after=7200)
             else:
                 self.log.error(f"❌ فشل إرسال القافلة (كود السيرفر: {err_code})")
