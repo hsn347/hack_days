@@ -1990,7 +1990,7 @@ async def test_admin_proxy(payload: Dict[str, str], admin: Dict[str, Any] = Depe
 
 @app.get("/api/admin/network-mode")
 def get_admin_network_mode(admin: Dict[str, Any] = Depends(require_super_admin)):
-    """استعلام نمط الشبكة المعتمد (direct أو socks5)."""
+    """استعلام نمط الشبكة المعتمد (residential أو free أو direct)."""
     from proxy import get_network_mode, is_proxy_enabled, proxy_status
     status = proxy_status()
     return {
@@ -1998,6 +1998,9 @@ def get_admin_network_mode(admin: Dict[str, Any] = Depends(require_super_admin))
         "network_mode": get_network_mode(),
         "enabled": is_proxy_enabled(),
         "total_proxies": status.get("total_proxies", 0),
+        "residential_count": status.get("residential_count", 0),
+        "free_count": status.get("free_count", 0),
+        "active_pool_name": status.get("active_pool_name", ""),
         "total_bound_castles": status.get("total_bound_castles", 0),
         "total_bound_users": status.get("total_bound_users", 0),
     }
@@ -2007,20 +2010,28 @@ def get_admin_network_mode(admin: Dict[str, Any] = Depends(require_super_admin))
 def toggle_admin_network_mode(payload: Dict[str, Any], admin: Dict[str, Any] = Depends(require_super_admin)):
     """
     تبديل نمط الاتصال بين:
+    - 'residential': بروكسيات سكنية مدفوعة معتمدة (Static Residential).
+    - 'free': بروكسيات مجانية احتياطية (Free Datacenter).
     - 'direct': استخدام IP السيرفر مباشرة لكل الاتصالات.
-    - 'socks5': استخدام بروكسيات SOCKS5 الموزعة لكل مستخدم وقلعة.
     """
     mode = str(payload.get("mode", "")).strip().lower()
-    if mode not in ("direct", "socks5"):
-        raise HTTPException(status_code=400, detail="نمط الشبكة غير صالح (يجب أن يكون direct أو socks5)")
+    if mode not in ("direct", "socks5", "residential", "free"):
+        raise HTTPException(status_code=400, detail="نمط الشبكة غير صالح (يجب أن يكون residential أو free أو direct)")
 
     from proxy import set_network_mode
     active_mode = set_network_mode(mode)
 
+    if active_mode == "residential":
+        label = "البروكسيات السكنية المدفوعة (Static Residential)"
+    elif active_mode == "free":
+        label = "البروكسيات المجانية الاحتياطية (Free Datacenter)"
+    else:
+        label = "IP السيرفر المباشر"
+
     return {
         "status": "success",
         "network_mode": active_mode,
-        "message": f"تم تفعيل نمط {'بروكسيات SOCKS5' if active_mode == 'socks5' else 'IP السيرفر المباشر'} بنجاح"
+        "message": f"تم تفعيل نمط {label} بنجاح"
     }
 
 

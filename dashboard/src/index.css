@@ -1365,10 +1365,20 @@ html.light .task-row-card.disabled {
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
 }
+html.light .task-row-card.disabled.task-row-expanded {
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
 html.light .task-row-card.enabled {
-  background-color: var(--theme-primary-50) !important;
-  border: 1px solid var(--theme-primary-300) !important;
-  box-shadow: 0 1px 4px rgba(var(--theme-primary-rgb), 0.08) !important;
+  background-color: #f0fdf4 !important;
+  border: 1px solid #a7f3d0 !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.08) !important;
+}
+html.light .task-row-card.enabled.task-row-expanded {
+  background-color: #f0fdf4 !important;
+  border: 1.5px solid #10b981 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.12) !important;
 }
 html.light .task-row-card.coming-soon {
   background-color: #f8fafc !important;
@@ -1407,11 +1417,11 @@ html.light .task-res-card.unselected:hover {
   color: #0f172a !important;
 }
 html.light .task-res-card.selected {
-  background: linear-gradient(135deg, var(--theme-primary-100) 0%, var(--theme-primary-200) 100%) !important;
-  border: 1.5px solid var(--theme-primary) !important;
-  color: var(--theme-primary-900) !important;
+  background: #ecfdf5 !important;
+  border: 1.5px solid #059669 !important;
+  color: #065f46 !important;
   font-weight: 700 !important;
-  box-shadow: 0 2px 8px rgba(var(--theme-primary-rgb), 0.15) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;
 }
 
 /* Section Labels */
@@ -1494,6 +1504,16 @@ html.light .task-tab-content-root input:focus {
   box-shadow: 0 0 0 2px rgba(var(--theme-primary-rgb), 0.20) !important;
 }
 
+/* Stepper input isolation: prevent border and inset shadow inside Stepper */
+html.light .task-tab-content-root .task-stepper input,
+html.light .task-tab-content-root .task-stepper-input {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+}
+
 html.light .task-tab-content-root select {
   background-color: #ffffff !important;
   border: 1.5px solid #d97706 !important;
@@ -1506,11 +1526,13 @@ html.light .task-tab-content-root select option {
 }
 
 /* Toggles off-state clean styling */
-html.light .task-tab-content-root button[role="switch"][aria-checked="false"] {
+html.light .task-tab-content-root button[role="switch"][aria-checked="false"],
+html.light button[role="switch"][aria-checked="false"] {
   background-color: #cbd5e1 !important;
   border: 1px solid #94a3b8 !important;
 }
-html.light .task-tab-content-root button[role="switch"][aria-checked="false"]:hover {
+html.light .task-tab-content-root button[role="switch"][aria-checked="false"]:hover,
+html.light button[role="switch"][aria-checked="false"]:hover {
   background-color: #94a3b8 !important;
 }
 
@@ -1622,6 +1644,47 @@ html.light .task-tab-content-root [style*="color:#e2e8f0"],
 html.light .task-tab-content-root [style*="color: rgb(226, 232, 240)"],
 html.light .task-tab-content-root [style*="color:rgb(226,232,240)"] {
   color: #0f172a !important;
+}
+
+html.light .task-tab-content-root [style*="color: #e5e7eb"],
+html.light .task-tab-content-root [style*="color:#e5e7eb"],
+html.light .task-tab-content-root [style*="color: rgb(229, 231, 235)"],
+html.light .task-tab-content-root [style*="color:rgb(229,231,235)"] {
+  color: #0f172a !important;
+}
+
+html.light .task-tab-content-root [style*="color: #f0fdf4"],
+html.light .task-tab-content-root [style*="color:#f0fdf4"] {
+  color: #0f172a !important;
+}
+
+html.light .task-tab-content-root [style*="color: #6ee7b7"],
+html.light .task-tab-content-root [style*="color:#6ee7b7"] {
+  color: #047857 !important;
+}
+
+html.light .task-tab-content-root [style*="color: #86efac"],
+html.light .task-tab-content-root [style*="color:#86efac"] {
+  color: #047857 !important;
+}
+
+html.light .task-tab-content-root [style*="color: #d1fae5"],
+html.light .task-tab-content-root [style*="color:#d1fae5"] {
+  color: #065f46 !important;
+}
+
+html.light .task-field-label {
+  color: #0f172a !important;
+}
+
+html.light .task-field-row {
+  border-top-color: #e2e8f0 !important;
+}
+
+html.light .task-tab-content-root [style*="border-top: 1px solid rgba(255, 255, 255"],
+html.light .task-tab-content-root [style*="border-top:1px solid rgba(255,255,255"],
+html.light .task-tab-content-root [style*="border-top: 1px solid rgba(255,255,255"] {
+  border-top-color: #e2e8f0 !important;
 }
 
 /* Background Translucency Replacements in Light Mode */
@@ -1783,10 +1846,17 @@ html.light .task-pet-btn.unselected {
   border: 1px solid #cbd5e1 !important;
   color: #334155 !important;
 }
+html.light .task-pet-btn.unselected span {
+  color: #334155 !important;
+}
 html.light .task-pet-btn.selected {
-  background-color: var(--theme-primary-100) !important;
-  border: 1.5px solid var(--theme-primary) !important;
-  color: var(--theme-primary-900) !important;
+  background-color: #ecfdf5 !important;
+  border: 1.5px solid #059669 !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+}
+html.light .task-pet-btn.selected span {
+  color: #065f46 !important;
   font-weight: 700 !important;
 }
 
@@ -1795,10 +1865,22 @@ html.light .task-savings-btn.unselected {
   border: 1px solid #cbd5e1 !important;
   color: #334155 !important;
 }
+html.light .task-savings-btn.unselected span {
+  color: #334155 !important;
+}
+html.light .task-savings-btn.unselected:hover {
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
 html.light .task-savings-btn.selected {
-  background: linear-gradient(135deg, var(--theme-primary-100) 0%, var(--theme-primary-200) 100%) !important;
-  border: 1.5px solid var(--theme-primary) !important;
-  color: var(--theme-primary-900) !important;
+  background: #ecfdf5 !important;
+  border: 1.5px solid #059669 !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.15) !important;
+}
+html.light .task-savings-btn.selected span {
+  color: #065f46 !important;
   font-weight: 700 !important;
 }
 

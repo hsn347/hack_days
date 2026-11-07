@@ -802,16 +802,24 @@ export interface ProxyCardInfo {
   ip: string
   port: number
   country: string
+  city?: string
+  asn?: string
+  type?: 'residential' | 'free'
   assigned_castles: string[]
   assigned_users: string[]
   full_url: string
 }
 
+export type NetworkMode = 'residential' | 'free' | 'direct' | 'socks5'
+
 export interface ProxiesStatusResponse {
   enabled: boolean
-  network_mode?: 'socks5' | 'direct'
+  network_mode?: NetworkMode
   server_ip?: string
   total_proxies: number
+  residential_count?: number
+  free_count?: number
+  active_pool_name?: string
   total_bound_castles: number
   total_bound_users: number
   proxies_list: ProxyCardInfo[]
@@ -841,10 +849,13 @@ export async function testAdminProxy(proxyUrl: string, options?: RequestOptions)
 
 export interface NetworkModeResponse {
   status: string
-  network_mode: 'socks5' | 'direct'
+  network_mode: NetworkMode
   server_ip?: string
   enabled: boolean
   total_proxies: number
+  residential_count?: number
+  free_count?: number
+  active_pool_name?: string
   total_bound_castles: number
   total_bound_users: number
 }
@@ -860,7 +871,7 @@ export async function getAdminNetworkMode(options?: RequestOptions): Promise<Net
 }
 
 export async function toggleAdminNetworkMode(
-  mode: 'socks5' | 'direct',
+  mode: NetworkMode,
   options?: RequestOptions
 ): Promise<{ status: string; network_mode: string; message: string }> {
   const authHeaders = await getAuthHeader()

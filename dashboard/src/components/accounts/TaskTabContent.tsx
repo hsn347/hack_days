@@ -1203,6 +1203,7 @@ export function TaskTabContent({
   if (tab === 'combat') {
     const mm = cfg.march_manager
     const elf = cfg.elf || { enabled: false, formation_id: 1 }
+    const abra = mm.abra || { enabled: false, x: 0, y: 0, killing_blow: false, formation_id: 1 }
     
     // استنتاج الخيار النشط: نعتمد على جذر elf أو march_manager.combat
     const combatChoice: 'elf' | 'invaders' | 'rebels' | null = 
@@ -1242,6 +1243,7 @@ export function TaskTabContent({
     const setSharedFormation = (v: number) => {
       update('elf', { formation_id: v })
       update('march_manager', {
+        abra:       { ...abra,          formation_id: v },
         combat:     { ...mm.combat,     formation_id: v },
         invaders:   { ...mm.invaders,   formation_id: v },
         rebels:     { ...mm.rebels,     formation_id: v },
@@ -1356,6 +1358,101 @@ export function TaskTabContent({
               </div>
             )
           })}
+        </div>
+
+        {/* Abra Boss (وحش ابرا) */}
+        <div
+          onClick={() => update('march_manager', { enabled: true, abra: { ...abra, enabled: !abra.enabled } })}
+          style={{
+            background: abra.enabled ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+            border: abra.enabled ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '10px', padding: '8px 10px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: abra.enabled ? '8px' : 0,
+            pointerEvents: 'none',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px', lineHeight: 1 }}>🐉</span>
+              <div>
+                <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t('tasks.abraBoss')}</div>
+              </div>
+            </div>
+            <Toggle value={abra.enabled} onChange={v => update('march_manager', { enabled: true, abra: { ...abra, enabled: v } })} size="sm" />
+          </div>
+
+          {abra.enabled && (
+            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+              {/* Coordinates X & Y */}
+              <div>
+             
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>X</div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={abra.x || ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9]/g, '')
+                        update('march_manager', { enabled: true, abra: { ...abra, x: val === '' ? 0 : Number(val) } })
+                      }}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="task-coord-label" style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px' }}>Y</div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={abra.y || ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9]/g, '')
+                        update('march_manager', { enabled: true, abra: { ...abra, y: val === '' ? 0 : Number(val) } })
+                      }}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Killing Blow toggle sub-card */}
+              <div
+                onClick={() => update('march_manager', { enabled: true, abra: { ...abra, killing_blow: !abra.killing_blow } })}
+                className={clsx('task-sub-card', abra.killing_blow ? 'enabled' : 'disabled')}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: abra.killing_blow ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
+                  border: abra.killing_blow ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '8px', padding: '8px 10px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
+                  <span style={{ fontSize: '16px' }}>⚡</span>
+                  <div>
+                    <div style={{ color: abra.killing_blow ? '#f0fdf4' : '#e5e7eb', fontSize: '12px', fontWeight: 600 }}>{t('tasks.killingBlow')}</div>
+                  </div>
+                </div>
+                <div style={{ pointerEvents: 'none' }}>
+                  <Toggle
+                    value={abra.killing_blow}
+                    onChange={() => {}}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Ruins */}
@@ -1907,13 +2004,40 @@ export function TaskTabContent({
           enabled={cfg.alliance.enabled} onToggle={toggle('alliance')}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* فتح كنز التحالف (open_treasure) */}
+            <div
+              onClick={() => update('alliance', { open_treasure: !(cfg.alliance.open_treasure ?? true) })}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '6px 10px', borderRadius: '9px',
+                background: (cfg.alliance.open_treasure ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+                border: (cfg.alliance.open_treasure ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <div>
+                <div style={{ color: '#f0fdf4', fontSize: '12px', fontWeight: 600 }}>{t('tasks.openAllianceTreasure')}</div>
+              </div>
+              <Toggle
+                value={cfg.alliance.open_treasure ?? true}
+                onChange={v => update('alliance', { open_treasure: v })}
+                size="sm"
+              />
+            </div>
+
             {/* التبرع للتحالف (auto_help) */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '6px 10px', borderRadius: '9px',
-              background: (cfg.alliance.auto_help ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
-              border: (cfg.alliance.auto_help ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
-            }}>
+            <div
+              onClick={() => update('alliance', { auto_help: !(cfg.alliance.auto_help ?? true) })}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '6px 10px', borderRadius: '9px',
+                background: (cfg.alliance.auto_help ?? true) ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+                border: (cfg.alliance.auto_help ?? true) ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.07)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
               <div>
                 <div style={{ color: '#f0fdf4', fontSize: '12px', fontWeight: 600 }}>{t('tasks.allianceDonation')}</div>
               </div>
@@ -2071,59 +2195,85 @@ export function TaskTabContent({
 
         {/* بنك الادخار */}
         <TaskRow
+          id="savings_bank"
           img="/images/daily/goldenchest.png" label={t('tasks.savingsBank')}
           enabled={cfg.savings_bank.enabled} onToggle={toggle('savings_bank')}
         >
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {[
-              { d: 1,  labelKey: 'tasks.day1',   img: 'goldenchest.png' },
-              { d: 7,  labelKey: 'tasks.days7',  img: 'silverchest.png' },
-              { d: 15, labelKey: 'tasks.days15', img: 'silverchest.png' },
-              { d: 30, labelKey: 'tasks.days30', img: 'silverchest.png' },
-            ].map(opt => {
-              const currentDays = cfg.savings_bank.days || 7
-              const isSelected = currentDays === opt.d
-              return (
-                <button
-                  key={opt.d}
-                  type="button"
-                  className={clsx('task-savings-btn', isSelected ? 'selected' : 'unselected')}
-                  onClick={() => update('savings_bank', { days: opt.d })}
-                  style={{
-                    flex: 1,
-                    padding: '5px 4px',
-                    borderRadius: '8px',
-                    border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
-                    background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-                    color: isSelected ? '#6ee7b7' : '#9ca3af',
-                    fontSize: '11px',
-                    fontWeight: isSelected ? 600 : 400,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '3px',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <img
-                    src={`/images/daily/${opt.img}`}
-                    alt=""
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '2px' }}>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {[
+                { d: 1,  labelKey: 'tasks.day1',   img: 'goldenchest.png' },
+                { d: 7,  labelKey: 'tasks.days7',  img: 'silverchest.png' },
+                { d: 15, labelKey: 'tasks.days15', img: 'silverchest.png' },
+                { d: 30, labelKey: 'tasks.days30', img: 'silverchest.png' },
+              ].map(opt => {
+                const currentDays = cfg.savings_bank.days || 7
+                const isSelected = currentDays === opt.d
+                return (
+                  <button
+                    key={opt.d}
+                    type="button"
+                    className={clsx('task-savings-btn', isSelected ? 'selected' : 'unselected')}
+                    onClick={() => update('savings_bank', { days: opt.d })}
                     style={{
-                      width: '22px',
-                      height: '22px',
-                      objectFit: 'contain',
-                      filter: isSelected ? 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' : 'grayscale(15%) opacity(0.85)',
+                      flex: 1,
+                      padding: '5px 4px',
+                      borderRadius: '8px',
+                      border: isSelected ? '1.5px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)',
+                      background: isSelected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                      color: isSelected ? '#6ee7b7' : '#9ca3af',
+                      fontSize: '11px',
+                      fontWeight: isSelected ? 600 : 400,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '3px',
                       transition: 'all 0.15s',
                     }}
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  />
-                  <span>{t(opt.labelKey)}</span>
-                </button>
-              )
-            })}
+                  >
+                    <img
+                      src={`/images/daily/${opt.img}`}
+                      alt=""
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        objectFit: 'contain',
+                        filter: isSelected ? 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' : 'grayscale(15%) opacity(0.85)',
+                        transition: 'all 0.15s',
+                      }}
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                    <span>{t(opt.labelKey)}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* حقل المبلغ الأقصى للادخار */}
+            <div className="flex items-center justify-between p-1 pt-2 border-t border-slate-200 dark:border-white/10 task-field-row">
+              <div className="flex items-center gap-1.5">
+                <img
+                  src="/images/gather/altin.png"
+                  alt=""
+                  style={{ width: '16px', height: '16px', objectFit: 'contain' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+                <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
+                  {t('tasks.savingsBankMaxAmount', 'المبلغ الأقصى للادخار')}
+                </span>
+              </div>
+              <Stepper
+                value={cfg.savings_bank.deposit ?? cfg.savings_bank.max_amount ?? 2000}
+                min={100}
+                max={100000}
+                step={100}
+                podClassName="w-auto min-w-[64px] px-2"
+                onChange={v => update('savings_bank', { deposit: v, max_amount: v })}
+              />
+            </div>
           </div>
         </TaskRow>
 
@@ -2137,7 +2287,7 @@ export function TaskTabContent({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ color: '#e5e7eb', fontSize: '12px', fontWeight: 500 }}>
+              <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
                 {t('tasks.warriorExchangeCount')}
               </span>
             </div>
@@ -3312,7 +3462,7 @@ export function TaskTabContent({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ color: '#e5e7eb', fontSize: '12px', fontWeight: 500 }}>
+              <span className="text-xs font-semibold text-slate-800 dark:text-gray-200 task-field-label">
                 {t('tasks.auctionBidMaxGold')}
               </span>
             </div>

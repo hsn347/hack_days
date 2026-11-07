@@ -1,5 +1,14 @@
 {
+  "residential": {
+    "users": {},
+    "castles": {}
+  },
+  "free": {
+    "users": {},
+    "castles": {}
+  },
   "users": {},
   "castles": {},
-  "updated_at": 1793738463.1230788
+  "active_mode": "residential",
+  "updated_at": 1794021559.7606213
 }

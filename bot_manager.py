@@ -328,7 +328,8 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "savings_bank": {
         "enabled": True,             # تفعيل/تعطيل استثمار الذهب وسحب الأرباح في دار الادخار تلقائياً
         "days": 7,                   # خطة الاستثمار والمدة المختارة بالأيام: 7 (أسبوعية), 15 (نصف شهرية), 30 (شهرية)
-        "deposit": 2000,             # مبلغ الذهب المراد إيداعه (100 - 6000)
+        "deposit": 2000,             # مبلغ الذهب المراد إيداعه (100 - 60000)
+        "max_amount": 2000,          # المبلغ الأقصى للادخار بالذهب
     },
 
     # 🏗️ 20. مهمة ترقية القلعة والمباني والتسريع (Building Upgrade & Castle)
@@ -406,6 +407,15 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "march_manager": {
         "enabled": True,                   # تفعيل/تعطيل منسق الفيالق كلياً
         "duration_minutes": 20,            # مدة تشغيل المهمة الإجمالية بالدقائق (ثلث ساعة = 20 دقيقة ككل)
+
+        # [0] أولوية الهجوم على وحش ابرا (Abra Boss Attack)
+        "abra": {
+            "enabled": False,              # تفعيل مهاجمة وحش ابرا
+            "x": 0,                        # إحداثي X للوحش
+            "y": 0,                        # إحداثي Y للوحش
+            "killing_blow": False,         # أخذ الضربة القاضية (إنهاء الوحش)
+            "formation_id": 1,             # رقم التشكيلة
+        },
 
         # [1] أولوية قتل غزاة الهيبة (Prestige Invaders)
         "prestige_invaders": {
@@ -3186,8 +3196,12 @@ class BotManager:
     async def step_11e_alliance_treasure_task(self) -> Dict[str, Any]:
         """فحص واستلام/حفر صندوق التحالف المجاني تلقائياً في كل دورة مع التحقق الصارم لحماية الذهب."""
         at_cfg = self.config.get("alliance_treasure", {}) if isinstance(self.config.get("alliance_treasure"), dict) else {}
+        alliance_cfg = self.config.get("alliance", {}) if isinstance(self.config.get("alliance"), dict) else {}
+        combined_cfg = {**at_cfg, "alliance": alliance_cfg}
+        if "open_treasure" in alliance_cfg and "open_treasure" not in combined_cfg:
+            combined_cfg["open_treasure"] = alliance_cfg["open_treasure"]
         log.info("📦 بدء مهمة صندوق التحالف (Alliance Treasure)...")
-        task = AllianceTreasureTask(self.conn, at_cfg)
+        task = AllianceTreasureTask(self.conn, combined_cfg)
         res = await task.run()
 
         if res.success:

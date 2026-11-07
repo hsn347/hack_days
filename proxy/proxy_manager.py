@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-core/proxy_manager.py — مدير بروكسيات SOCKS5 مع كاش دائم ونظام منع التسريب الصارم
+core/proxy_manager.py — مدير بروكسيات SOCKS5 الذكي
 ══════════════════════════════════════════════════════════════════════════════════════
-- كاش محلي دائم (Permanent Cache): صفر استهلاك لـ Webshare API أثناء التشغيل اليومي.
-- حظر التسريب الصارم (Strict Anti-Leak): لا يسمح بالاتصال المباشر إطلاقاً عند تفعيل البروكسي.
+- دعم البروكسيات السكنية المدفوعة (Static Residential) كخيار أساسي ومعتمد.
+- دعم البروكسيات المجانية (Free Datacenter) كخيار احتياطي (Fallback).
+- كاش محلي دائم لكل فئة (Permanent Caches): استهلاك صفر API أثناء التشغيل اليومي.
+- حظر التسريب الصارم (Strict Anti-Leak): لا يسمح بالاتصال المباشر إطلاقاً عند تفعيل أي نمط بروكسي.
 - توحيد IP قلاع نفس المستخدم (User-Centric Grouping) لتبدو كشبكة منزلية طبيعية.
 - توزيع متوازن ومتساوٍ للحمولة (Least-Loaded Balancing) على جميع الـ IPs.
 - دعم الفحص المباشر للبروكسي من لوحة التحكم (Live Proxy Health Test).
@@ -28,13 +30,23 @@ WEBSHARE_API_URL = "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&pag
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_DIR)
+
+# ملفات الكاش المنفصلة
+_RESIDENTIAL_CACHE_FILE = os.path.join(_DIR, "static_residential_proxies.json")
+_FREE_CACHE_FILE = os.path.join(_DIR, "webshare_free_proxies.json")
 _CACHE_FILE = os.path.join(_DIR, "webshare_proxies.json")
 _USER_BINDINGS_FILE = os.path.join(_DIR, "user_proxy_bindings.json")
 _DB_PATH = os.path.join(_ROOT, "database", "castles.db")
 
-_proxies: List[Dict[str, Any]] = []
-_user_bindings: Dict[str, str] = {}    # {user_key: proxy_url}
-_castle_bindings: Dict[str, str] = {}  # {email: proxy_url}
+# الذاكرة الحية لمجموعات البروكسيات
+_residential_proxies: List[Dict[str, Any]] = []
+_free_proxies: List[Dict[str, Any]] = []
+_proxies: List[Dict[str, Any]] = []  # توافق عكسي للباقة النشطة
+
+# قواميس الارتباطات لكل فئة: {"residential": {...}, "free": {...}}
+_user_bindings: Dict[str, Dict[str, str]] = {"residential": {}, "free": {}}
+_castle_bindings: Dict[str, Dict[str, str]] = {"residential": {}, "free": {}}
+
 _manager_lock = threading.Lock()
 _lock = _manager_lock
 _proxy_enabled: bool = True
@@ -56,37 +68,58 @@ def get_server_public_ip() -> str:
 
 
 def get_network_mode() -> str:
-    """استرجاع نمط الاتصال: 'socks5' (افتراضي) أو 'direct' (IP السيرفر المباشر)."""
+    """
+    استرجاع نمط الاتصال:
+      - 'residential': بروكسيات سكنية ثابتة مدفوعة (Static Residential - أساسي افتراضي)
+      - 'free': بروكسيات مجانية (Free Datacenter - احتياطي)
+      - 'direct': IP السيرفر المباشر
+    """
     try:
         from core.database import get_system_setting
-        val = get_system_setting("network_mode", default="socks5")
-        if val in ("direct", "socks5"):
+        val = get_system_setting("network_mode", default="residential")
+        if val in ("direct", "free", "residential"):
             return val
+        if val == "socks5":
+            return "residential"
     except Exception:
         pass
-    return "socks5" if _proxy_enabled else "direct"
+    return "residential" if _proxy_enabled else "direct"
 
 
 def set_network_mode(mode: str) -> str:
-    """تحديد نمط الاتصال وحفظه في قاعدة البيانات."""
+    """تحديد نمط الاتصال وحفظه في قاعدة البيانات وتحميل الباقة المطلوبة."""
     global _proxy_enabled
-    target = "direct" if mode == "direct" else "socks5"
+    target = str(mode or "").strip().lower()
+    if target not in ("direct", "free", "residential"):
+        if target == "socks5":
+            target = "residential"
+        else:
+            target = "residential"
+
     try:
         from core.database import set_system_setting
         set_system_setting("network_mode", target)
     except Exception as e:
         log.warning(f"[ProxyMgr] فشل حفظ نمط الشبكة في قاعدة البيانات: {e}")
 
-    _proxy_enabled = (target == "socks5")
+    _proxy_enabled = (target != "direct")
+
+    # إعادة تحميل الباقة النشطة فوراً
+    with _manager_lock:
+        _ensure_loaded(force=False)
+        _sync_active_proxies_legacy()
+
     if target == "direct":
         log.warning("[ProxyMgr] 🌐 تم تفعيل نمط الاتصال المباشر (Direct Server IP) — البروكسيات معطلة.")
+    elif target == "free":
+        log.info("[ProxyMgr] 🛡️ تم تفعيل نمط البروكسيات المجانية الاحتياطية (Free Datacenter).")
     else:
-        log.info("[ProxyMgr] 🛡️ تم تفعيل نمط البروكسيات (SOCKS5 Proxies).")
+        log.info("[ProxyMgr] 🌟 تم تفعيل نمط البروكسيات السكنية المدفوعة المعتمدة (Static Residential).")
     return target
 
 
 def is_proxy_enabled() -> bool:
-    return get_network_mode() == "socks5"
+    return get_network_mode() in ("residential", "free", "socks5")
 
 
 def disable_proxy():
@@ -94,10 +127,11 @@ def disable_proxy():
 
 
 def enable_proxy():
-    set_network_mode("socks5")
+    set_network_mode("residential")
 
 
 def _fetch_from_api() -> List[Dict[str, Any]]:
+    """جلب قائمة البروكسيات السكنية من Webshare API."""
     if not WEBSHARE_API_KEY:
         log.warning("[ProxyMgr] لم يتم تعيين مفتاح Webshare API!")
         return []
@@ -120,59 +154,90 @@ def _fetch_from_api() -> List[Dict[str, Any]]:
         return []
 
 
-def _load_cache() -> List[Dict[str, Any]]:
-    try:
-        target = _CACHE_FILE
-        if not os.path.exists(target):
-            fallback = os.path.join(_ROOT, "webshare_proxies.json")
-            if os.path.exists(fallback):
-                target = fallback
+def _load_pool(pool_name: str) -> List[Dict[str, Any]]:
+    """قراءة البروكسيات المخزنة لفئة محددة ('residential' أو 'free')."""
+    if pool_name == "free":
+        targets = [_FREE_CACHE_FILE, _CACHE_FILE]
+    else:
+        targets = [_RESIDENTIAL_CACHE_FILE, _CACHE_FILE]
+
+    for target in targets:
         if os.path.exists(target):
-            with open(target, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                proxies = data.get("proxies", [])
-                if proxies:
-                    return proxies
-    except Exception as e:
-        log.debug(f"[ProxyMgr] تعذرت قراءة الكاش المحلي: {e}")
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    proxies = data.get("proxies", [])
+                    if proxies:
+                        return proxies
+            except Exception as e:
+                log.debug(f"[ProxyMgr] تعذرت قراءة الكاش ({target}): {e}")
     return []
 
 
-def _save_cache(proxies: List[Dict[str, Any]]):
+def _save_pool(pool_name: str, proxies: List[Dict[str, Any]]):
+    """حفظ قائمة البروكسيات لفئة محددة في ملف الكاش المخصص لها."""
+    target = _FREE_CACHE_FILE if pool_name == "free" else _RESIDENTIAL_CACHE_FILE
     try:
         payload = {
             "saved_at": time.time(),
             "count": len(proxies),
+            "type": "free_datacenter" if pool_name == "free" else "static_residential",
             "proxies": proxies
         }
-        with open(_CACHE_FILE, "w", encoding="utf-8") as f:
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        log.warning(f"[ProxyMgr] فشل حفظ كاش البروكسي: {e}")
+        log.warning(f"[ProxyMgr] فشل حفظ كاش البروكسي ({pool_name}): {e}")
 
 
 def _load_bindings():
+    """تحميل ارتباطات القلاع والمستخدمين مع دعم العزل بين المدفوع والمجاني."""
     global _user_bindings, _castle_bindings
     target = _USER_BINDINGS_FILE
     if not os.path.exists(target):
         fallback = os.path.join(_ROOT, "user_proxy_bindings.json")
         if os.path.exists(fallback):
             target = fallback
+
     if os.path.exists(target):
         try:
             with open(target, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                _user_bindings = data.get("users", {})
-                _castle_bindings = data.get("castles", {})
+                if "residential" in data and isinstance(data["residential"], dict):
+                    _user_bindings["residential"] = data["residential"].get("users", {}) or {}
+                    _castle_bindings["residential"] = data["residential"].get("castles", {}) or {}
+                    _user_bindings["free"] = data.get("free", {}).get("users", {}) or {}
+                    _castle_bindings["free"] = data.get("free", {}).get("castles", {}) or {}
+                else:
+                    # ترحيل البيانات السابقة: وضعها في المجاني وتفريغ السكني لبدء توزيع نقي
+                    old_users = data.get("users", {}) or {}
+                    old_castles = data.get("castles", {}) or {}
+                    _user_bindings["free"] = dict(old_users)
+                    _castle_bindings["free"] = dict(old_castles)
+                    _user_bindings["residential"] = {}
+                    _castle_bindings["residential"] = {}
         except Exception as e:
             log.warning(f"[ProxyMgr] فشل قراءة ملف الارتباطات: {e}")
 
 
 def _save_bindings():
+    """حفظ ارتباطات القلاع والمستخدمين بشكل معزول وآمن."""
     try:
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
         payload = {
-            "users": _user_bindings,
-            "castles": _castle_bindings,
+            "residential": {
+                "users": _user_bindings.get("residential", {}),
+                "castles": _castle_bindings.get("residential", {}),
+            },
+            "free": {
+                "users": _user_bindings.get("free", {}),
+                "castles": _castle_bindings.get("free", {}),
+            },
+            # توافق عكسي للبرامج التي تقرأ المفاتيح العامة
+            "users": _user_bindings.get(pool_key, {}),
+            "castles": _castle_bindings.get(pool_key, {}),
+            "active_mode": mode,
             "updated_at": time.time()
         }
         with open(_USER_BINDINGS_FILE, "w", encoding="utf-8") as f:
@@ -194,24 +259,45 @@ def _format_proxy_url(item: Dict[str, Any]) -> Optional[str]:
 
 
 def _ensure_loaded(force: bool = False):
+    """التأكد من تحميل كلا الكاشين (السكني المدفوع والمجاني الاحتياطي)."""
+    global _residential_proxies, _free_proxies
+
+    # 1. تحميل البروكسيات السكنية المدفوعة
+    if force or not _residential_proxies:
+        cached_res = _load_pool("residential")
+        if cached_res and not force:
+            _residential_proxies = cached_res
+        else:
+            api_res = _fetch_from_api()
+            if api_res:
+                _residential_proxies = api_res
+                _save_pool("residential", api_res)
+            elif cached_res:
+                _residential_proxies = cached_res
+
+    # 2. تحميل البروكسيات المجانية الاحتياطية
+    if force or not _free_proxies:
+        _free_proxies = _load_pool("free")
+
+
+def get_active_proxies() -> List[Dict[str, Any]]:
+    """استرجاع قائمة البروكسيات النشطة بحسب النمط المختار مع العودة للبديل إن لزم."""
+    _ensure_loaded()
+    mode = get_network_mode()
+    if mode == "free":
+        if _free_proxies:
+            return _free_proxies
+        return _residential_proxies
+    else:  # residential (الأساسي)
+        if _residential_proxies:
+            return _residential_proxies
+        return _free_proxies
+
+
+def _sync_active_proxies_legacy():
+    """مزامنة القائمة العامة _proxies للتوافق مع أي استدعاءات قديمة."""
     global _proxies
-    if not force and _proxies:
-        return
-
-    if not force:
-        cached = _load_cache()
-        if cached:
-            _proxies = cached
-            return
-
-    fresh = _fetch_from_api()
-    if fresh:
-        _proxies = fresh
-        _save_cache(fresh)
-    else:
-        _proxies = _load_cache() or []
-        if not _proxies:
-            log.error("[ProxyMgr] لا توجد أي بروكسيات متاحة!")
+    _proxies = get_active_proxies()
 
 
 def _resolve_user_id_for_email(email: str) -> Optional[str]:
@@ -233,7 +319,7 @@ def _resolve_user_id_for_email(email: str) -> Optional[str]:
 
 
 def get_proxy_for_account(account_key: str, user_id: Optional[str] = None) -> Optional[str]:
-    """تخصيص بروكسي دائم مع توحيد قلاع نفس المستخدم والتوزيع المتوازن للأقل حملاً."""
+    """تخصيص بروكسي دائم مع توحيد قلاع نفس المستخدم والتوزيع المتوازن على الباقة المعتمدة."""
     if not is_proxy_enabled():
         return None
 
@@ -242,63 +328,77 @@ def get_proxy_for_account(account_key: str, user_id: Optional[str] = None) -> Op
         return None
 
     with _manager_lock:
-        _ensure_loaded()
-        if not _proxies:
+        active_proxies = get_active_proxies()
+        if not active_proxies:
+            log.error("[ProxyMgr] 🛑 لا توجد أي بروكسيات متاحة في الباقة النشطة!")
             return None
 
         _load_bindings()
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
 
-        # 1. إذا كانت القلعة مرتبطة مسبقاً
-        if clean_email in _castle_bindings:
-            return _castle_bindings[clean_email]
+        c_bindings = _castle_bindings.setdefault(pool_key, {})
+        u_bindings = _user_bindings.setdefault(pool_key, {})
 
-        # 2. استعلام صاحب القلعة
-        effective_user_id = user_id or _resolve_user_id_for_email(clean_email)
-
-        # 3. توحيد قلاع نفس المستخدم
-        if effective_user_id and effective_user_id in _user_bindings:
-            user_proxy = _user_bindings[effective_user_id]
-            _castle_bindings[clean_email] = user_proxy
-            _save_bindings()
-            log.info(f"[ProxyMgr] 🔗 تم ضم القلعة {clean_email} لبروكسي المستخدم {effective_user_id} المشترك.")
-            return user_proxy
-
-        # 4. توزيع متوازن للمستخدم الجديد على البروكسي الأقل حملاً
+        # استخراج العناوين الصالحة في الباقة النشطة
+        valid_urls = set()
         proxy_urls = []
         counts: Dict[str, int] = {}
-        for p in _proxies:
+        for p in active_proxies:
             url = _format_proxy_url(p)
             if url:
+                valid_urls.add(url)
                 proxy_urls.append(url)
                 counts[url] = 0
 
         if not proxy_urls:
             return None
 
-        for bound_url in _castle_bindings.values():
+        # 1. إذا كانت القلعة مرتبطة مسبقاً ببروكسي موجود في الباقة النشطة
+        if clean_email in c_bindings and c_bindings[clean_email] in valid_urls:
+            return c_bindings[clean_email]
+
+        # 2. استعلام صاحب القلعة
+        effective_user_id = user_id or _resolve_user_id_for_email(clean_email)
+
+        # 3. توحيد قلاع نفس المستخدم إذا كان المستخدم مرتبطاً مسبقاً ببروكسي في الباقة النشطة
+        if effective_user_id and effective_user_id in u_bindings and u_bindings[effective_user_id] in valid_urls:
+            user_proxy = u_bindings[effective_user_id]
+            c_bindings[clean_email] = user_proxy
+            _save_bindings()
+            log.info(f"[ProxyMgr] 🔗 تم ضم القلعة {clean_email} لبروكسي المستخدم {effective_user_id} المشترك ({pool_key}).")
+            return user_proxy
+
+        # 4. توزيع متوازن (Least-Loaded Balancing) على الباقة النشطة
+        for bound_url in c_bindings.values():
             if bound_url in counts:
                 counts[bound_url] += 1
 
         least_loaded_proxy = min(proxy_urls, key=lambda u: counts.get(u, 0))
 
-        _castle_bindings[clean_email] = least_loaded_proxy
+        c_bindings[clean_email] = least_loaded_proxy
         if effective_user_id:
-            _user_bindings[effective_user_id] = least_loaded_proxy
+            u_bindings[effective_user_id] = least_loaded_proxy
 
         _save_bindings()
         new_count = counts.get(least_loaded_proxy, 0) + 1
-        log.info(f"[ProxyMgr] ⚖️ [توزيع متوازن] ربط القلعة {clean_email} (مستخدم: {effective_user_id or 'فردي'}) بالبروكسي (الحمولة: {new_count} قلعة).")
+        log.info(f"[ProxyMgr] ⚖️ [توزيع {pool_key}] ربط القلعة {clean_email} بالبروكسي (الحمولة: {new_count} قلعة).")
         return least_loaded_proxy
 
 
 def get_proxy_ip_for_email(email: str) -> str:
-    """استرجاع عنوان الـ IP المخصص للقلعة (أو IP السيرفر إذا كان النمط مباشر)."""
+    """استرجاع عنوان الـ IP المخصص للقلعة في الباقة النشطة (أو IP السيرفر إذا كان النمط مباشر)."""
     if not is_proxy_enabled():
         return get_server_public_ip()
     clean_email = (email or "").strip().lower()
     with _manager_lock:
         _load_bindings()
-        url = _castle_bindings.get(clean_email, "")
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
+        url = _castle_bindings.get(pool_key, {}).get(clean_email, "")
+        if not url:
+            other_key = "residential" if pool_key == "free" else "free"
+            url = _castle_bindings.get(other_key, {}).get(clean_email, "")
         if not url:
             return ""
         try:
@@ -308,58 +408,63 @@ def get_proxy_ip_for_email(email: str) -> str:
 
 
 def remove_castle_proxy(email: str) -> bool:
-    """إزالة ارتباط البروكسي للقلعة المحذوفة وتحديث ملف الإعدادات الدائم."""
+    """إزالة ارتباط البروكسي للقلعة المحذوفة من كلا الباقتين."""
     clean_email = (email or "").strip().lower()
     if not clean_email:
         return False
     with _manager_lock:
-        if not _castle_bindings:
-            _load_bindings()
-        if clean_email in _castle_bindings:
-            del _castle_bindings[clean_email]
+        _load_bindings()
+        changed = False
+        for pool in ("residential", "free"):
+            if clean_email in _castle_bindings.get(pool, {}):
+                del _castle_bindings[pool][clean_email]
+                changed = True
+        if changed:
             _save_bindings()
             log.info(f"[ProxyMgr] 🗑️ تم حذف ارتباط البروكسي للقلعة: {clean_email}")
             return True
-        else:
-            _load_bindings()
-            if clean_email in _castle_bindings:
-                del _castle_bindings[clean_email]
-                _save_bindings()
-                log.info(f"[ProxyMgr] 🗑️ تم حذف ارتباط البروكسي للقلعة: {clean_email}")
-                return True
     return False
 
 
 def set_castle_proxy(email: str, proxy_url: str) -> None:
-    """ربط قلعة ببروكسي محدد وتحديث الارتباطات."""
+    """ربط قلعة ببروكسي محدد في الباقة النشطة وتحديث الارتباطات."""
     clean_email = (email or "").strip().lower()
     with _manager_lock:
-        _castle_bindings[clean_email] = proxy_url
+        _load_bindings()
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
+        _castle_bindings.setdefault(pool_key, {})[clean_email] = proxy_url
+        _save_bindings()
 
 
 def get_castle_proxy(email: str) -> Optional[str]:
-    """استرجاع رابط البروكسي المرتبط بالقلعة."""
+    """استرجاع رابط البروكسي المرتبط بالقلعة في الباقة النشطة."""
     clean_email = (email or "").strip().lower()
     with _manager_lock:
-        return _castle_bindings.get(clean_email)
+        _load_bindings()
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
+        return _castle_bindings.get(pool_key, {}).get(clean_email)
 
 
 def remove_user_proxy_bindings(user_id: str, castle_emails: Optional[List[str]] = None) -> None:
-    """إزالة ارتباطات البروكسي لمستخدم وجميع قلاعه المحذوفة وحفظ التغييرات."""
+    """إزالة ارتباطات البروكسي لمستخدم وجميع قلاعه المحذوفة من كلا الباقتين."""
     clean_uid = (user_id or "").strip()
     with _manager_lock:
-        if not _user_bindings and not _castle_bindings:
-            _load_bindings()
+        _load_bindings()
         changed = False
-        if clean_uid and clean_uid in _user_bindings:
-            del _user_bindings[clean_uid]
-            changed = True
-        if castle_emails:
-            for em in castle_emails:
-                clean_em = (em or "").strip().lower()
-                if clean_em in _castle_bindings:
-                    del _castle_bindings[clean_em]
-                    changed = True
+        for pool in ("residential", "free"):
+            u_b = _user_bindings.get(pool, {})
+            c_b = _castle_bindings.get(pool, {})
+            if clean_uid and clean_uid in u_b:
+                del u_b[clean_uid]
+                changed = True
+            if castle_emails:
+                for em in castle_emails:
+                    clean_em = (em or "").strip().lower()
+                    if clean_em in c_b:
+                        del c_b[clean_em]
+                        changed = True
         if changed:
             _save_bindings()
             log.info(f"[ProxyMgr] 🗑️ تم حذف ارتباطات البروكسي للمستخدم {clean_uid}")
@@ -388,9 +493,12 @@ async def test_single_proxy(proxy_url: str) -> Dict[str, Any]:
 
 
 def reload_proxies() -> int:
+    """إعادة جلب وتحديث قائمة البروكسيات السكنية من Webshare API."""
     with _manager_lock:
         _ensure_loaded(force=True)
-        return len(_proxies)
+        _sync_active_proxies_legacy()
+        active = get_active_proxies()
+        return len(active)
 
 
 def proxy_status() -> Dict[str, Any]:
@@ -398,19 +506,29 @@ def proxy_status() -> Dict[str, Any]:
     with _manager_lock:
         _ensure_loaded()
         _load_bindings()
+        _sync_active_proxies_legacy()
+
+        mode = get_network_mode()
+        pool_key = "free" if mode == "free" else "residential"
+        active_proxies = get_active_proxies()
+        c_bindings = _castle_bindings.get(pool_key, {})
+        u_bindings = _user_bindings.get(pool_key, {})
 
         proxies_list = []
-        for p in _proxies:
+        for p in active_proxies:
             url = _format_proxy_url(p)
             if url:
                 host = p.get("proxy_address", "")
                 port = p.get("socks5_port") or p.get("port")
-                assigned = [em for em, u in _castle_bindings.items() if u == url]
-                users = [uid for uid, u in _user_bindings.items() if u == url]
+                assigned = [em for em, u in c_bindings.items() if u == url]
+                users = [uid for uid, u in u_bindings.items() if u == url]
                 proxies_list.append({
                     "ip": host,
                     "port": port,
                     "country": p.get("country_code", "??"),
+                    "city": p.get("city_name", ""),
+                    "asn": p.get("asn_name", ""),
+                    "type": pool_key,
                     "assigned_castles": assigned,
                     "assigned_users": users,
                     "full_url": url
@@ -418,10 +536,14 @@ def proxy_status() -> Dict[str, Any]:
 
         return {
             "enabled": is_proxy_enabled(),
-            "network_mode": get_network_mode(),
+            "network_mode": mode,
             "server_ip": get_server_public_ip(),
-            "total_proxies": len(_proxies),
-            "total_bound_castles": len(_castle_bindings),
-            "total_bound_users": len(_user_bindings),
+            "total_proxies": len(active_proxies),
+            "residential_count": len(_residential_proxies),
+            "free_count": len(_free_proxies),
+            "active_pool_name": "سكنية مدفوعة (Static Residential)" if mode == "residential" else ("مجانية (Free Datacenter)" if mode == "free" else "IP السيرفر المباشر"),
+            "total_bound_castles": len(c_bindings),
+            "total_bound_users": len(u_bindings),
             "proxies_list": proxies_list
         }
+

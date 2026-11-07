@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react'
 import { AdminLayout } from '../components/layout/AdminLayout'
 import {
   ShieldCheck, Globe, RefreshCw, Zap, CheckCircle2,
-  XCircle, Users, Copy, Server, ChevronDown, ChevronUp, Lock,
-  ArrowRightLeft, Check
+  XCircle, Server, ChevronDown, ChevronUp,
+  ArrowRightLeft, Check, Sparkles
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { getAdminProxies, testAdminProxy, toggleAdminNetworkMode, type ProxyCardInfo } from '../lib/botApi'
+import {
+  getAdminProxies,
+  testAdminProxy,
+  toggleAdminNetworkMode,
+  type ProxyCardInfo,
+  type NetworkMode
+} from '../lib/botApi'
 import toast from 'react-hot-toast'
 
 export function AdminProxiesPage() {
@@ -15,14 +21,17 @@ export function AdminProxiesPage() {
   const [proxies, setProxies] = useState<ProxyCardInfo[]>([])
   const [totalCastles, setTotalCastles] = useState(0)
   const [totalUsers, setTotalUsers] = useState(0)
-  const [networkMode, setNetworkMode] = useState<'socks5' | 'direct'>('socks5')
+  const [residentialCount, setResidentialCount] = useState(0)
+  const [freeCount, setFreeCount] = useState(0)
+  const [activePoolName, setActivePoolName] = useState('')
+  const [networkMode, setNetworkMode] = useState<NetworkMode>('residential')
   const [testingIp, setTestingIp] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; ping?: number; msg: string }>>({})
   const [expandedIps, setExpandedIps] = useState<Set<string>>(new Set())
 
   // Toggle Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false)
-  const [targetMode, setTargetMode] = useState<'socks5' | 'direct' | null>(null)
+  const [targetMode, setTargetMode] = useState<NetworkMode | null>(null)
   const [serverIp, setServerIp] = useState<string>('')
   const [isToggling, setIsToggling] = useState(false)
 
@@ -33,13 +42,15 @@ export function AdminProxiesPage() {
       setProxies(data.proxies_list || [])
       setTotalCastles(data.total_bound_castles || 0)
       setTotalUsers(data.total_bound_users || 0)
+      setResidentialCount(data.residential_count || 0)
+      setFreeCount(data.free_count || 0)
+      if (data.active_pool_name) setActivePoolName(data.active_pool_name)
       if (data.server_ip) setServerIp(data.server_ip)
-      if (data.network_mode) {
-        setNetworkMode(data.network_mode)
-      } else if (data.enabled !== undefined) {
-        setNetworkMode(data.enabled ? 'socks5' : 'direct')
-      }
-    } catch (e: any) {
+
+      const rawMode = (data.network_mode || (data.enabled ? 'residential' : 'direct')) as NetworkMode
+      const normalizedMode = rawMode === 'socks5' ? 'residential' : rawMode
+      setNetworkMode(normalizedMode)
+    } catch {
       toast.error('تعذر جلب بيانات البروكسيات من السيرفر')
     } finally {
       setLoading(false)
@@ -57,11 +68,11 @@ export function AdminProxiesPage() {
       const result = await testAdminProxy(proxyUrl)
       setTestResults(prev => ({ ...prev, [ip]: result }))
       if (result.ok) {
-        toast.success(`✓ الـ IP (${ip}) متصل ومؤمن بنجاح (${result.ping}ms)`)
+        toast.success(`✓ الـ IP (${ip}) متصل بنجاح (${result.ping}ms)`)
       } else {
         toast.error(`❌ تعذر الاتصال بالـ IP: ${result.msg}`)
       }
-    } catch (err: any) {
+    } catch {
       setTestResults(prev => ({ ...prev, [ip]: { ok: false, msg: 'فشل الفحص' } }))
       toast.error('حدث خطأ أثناء فحص البروكسي')
     } finally {
@@ -94,6 +105,12 @@ export function AdminProxiesPage() {
     })
   }
 
+  const getModeLabel = (mode: NetworkMode) => {
+    if (mode === 'residential' || mode === 'socks5') return 'سكنية مدفوعة (Residential)'
+    if (mode === 'free') return 'مجانية احتياطية (Free)'
+    return serverIp ? `مباشر (${serverIp})` : 'سيرفر مباشر'
+  }
+
   return (
     <AdminLayout title="البروكسيات والشبكة">
       <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 py-4" dir="rtl">
@@ -102,11 +119,19 @@ export function AdminProxiesPage() {
           <div className="flex items-center gap-3">
             <div className={clsx(
               "p-2.5 rounded-xl border shrink-0 transition-colors",
-              networkMode === 'socks5'
+              networkMode === 'residential' || networkMode === 'socks5'
                 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : networkMode === 'free'
+                ? "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400"
                 : "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
             )}>
-              {networkMode === 'socks5' ? <ShieldCheck size={22} /> : <Server size={22} />}
+              {networkMode === 'residential' || networkMode === 'socks5' ? (
+                <Sparkles size={22} />
+              ) : networkMode === 'free' ? (
+                <ShieldCheck size={22} />
+              ) : (
+                <Server size={22} />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -115,37 +140,62 @@ export function AdminProxiesPage() {
                 </h1>
                 <span className={clsx(
                   "text-[11px] px-2 py-0.5 rounded-md font-mono font-bold border",
-                  networkMode === 'socks5'
+                  networkMode === 'residential' || networkMode === 'socks5'
                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                    : networkMode === 'free'
+                    ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
                     : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
                 )}>
-                  {networkMode === 'socks5' ? 'بروكسيات (SOCKS5)' : (serverIp ? `سيرفر مباشر (${serverIp})` : 'سيرفر مباشر')}
+                  {getModeLabel(networkMode)}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            {/* Mode Switcher */}
-            <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 text-xs">
+            {/* 3-way Mode Switcher */}
+            <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 text-xs gap-1">
+              {/* Option 1: Static Residential (Paid - Default) */}
               <button
                 onClick={() => {
-                  if (networkMode !== 'socks5') {
-                    setTargetMode('socks5')
+                  if (networkMode !== 'residential' && networkMode !== 'socks5') {
+                    setTargetMode('residential')
                     setShowConfirmModal(true)
                   }
                 }}
                 className={clsx(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer",
-                  networkMode === 'socks5'
+                  networkMode === 'residential' || networkMode === 'socks5'
                     ? "bg-white dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shadow-xs border border-slate-200/60 dark:border-emerald-500/30"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 )}
+                title="البروكسيات السكنية المدفوعة المعتمدة"
               >
-                <ShieldCheck size={14} />
-                <span>بروكسيات</span>
+                <Sparkles size={13} className="text-emerald-500" />
+                <span>سكنية مدفوعة</span>
               </button>
 
+              {/* Option 2: Free Tier (Backup) */}
+              <button
+                onClick={() => {
+                  if (networkMode !== 'free') {
+                    setTargetMode('free')
+                    setShowConfirmModal(true)
+                  }
+                }}
+                className={clsx(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer",
+                  networkMode === 'free'
+                    ? "bg-white dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 shadow-xs border border-slate-200/60 dark:border-sky-500/30"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                )}
+                title="البروكسيات المجانية كخيار احتياطي"
+              >
+                <ShieldCheck size={13} className="text-sky-500" />
+                <span>مجانية احتياطية</span>
+              </button>
+
+              {/* Option 3: Direct Server IP */}
               <button
                 onClick={() => {
                   if (networkMode !== 'direct') {
@@ -159,9 +209,10 @@ export function AdminProxiesPage() {
                     ? "bg-white dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 shadow-xs border border-slate-200/60 dark:border-amber-500/30"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 )}
+                title="الاتصال المباشر عبر IP السيرفر"
               >
-                <Globe size={14} />
-                <span>سيرفر مباشر</span>
+                <Globe size={13} className="text-amber-500" />
+                <span>مباشر</span>
               </button>
             </div>
 
@@ -179,8 +230,13 @@ export function AdminProxiesPage() {
         {/* Top Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-4 rounded-xl bg-white dark:bg-[#0c140f] border border-slate-200/80 dark:border-white/10 shadow-xs">
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">عناوين IP</div>
-            <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white font-mono">{proxies.length}</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">عناوين IP النشطة</div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-xl font-bold text-slate-900 dark:text-white font-mono">{proxies.length}</span>
+              <span className="text-[11px] text-slate-400">
+                ({residentialCount} سكني | {freeCount} مجاني)
+              </span>
+            </div>
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-[#0c140f] border border-slate-200/80 dark:border-white/10 shadow-xs">
@@ -194,23 +250,43 @@ export function AdminProxiesPage() {
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-[#0c140f] border border-slate-200/80 dark:border-white/10 shadow-xs">
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">نمط الشبكة الحالية</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">النمط الحالي</div>
             <div className={clsx(
-              "mt-1 text-sm font-bold",
-              networkMode === 'socks5'
+              "mt-1 text-sm font-bold truncate",
+              networkMode === 'residential' || networkMode === 'socks5'
                 ? "text-emerald-600 dark:text-emerald-400"
+                : networkMode === 'free'
+                ? "text-sky-600 dark:text-sky-400"
                 : "text-amber-600 dark:text-amber-400"
             )}>
-              {networkMode === 'socks5' ? 'عزل تام (SOCKS5)' : 'مباشر (IP السيرفر)'}
+              {networkMode === 'residential' || networkMode === 'socks5'
+                ? '🌟 سكنية مدفوعة'
+                : networkMode === 'free'
+                ? '🛡️ مجانية احتياطية'
+                : '🌐 IP مباشر'}
             </div>
           </div>
         </div>
 
-        {/* Direct Mode Notice */}
+        {/* Notices */}
+        {networkMode === 'residential' && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center gap-2 text-xs font-medium">
+            <Sparkles size={16} className="shrink-0 text-emerald-500" />
+            <span>البوتات تعمل الآن عبر بروكسيات سكنية ثابتة (Static Residential) من مزودي خدمة حقيقيين (Comcast, Telmex, Orange, 1&1 Versatel...).</span>
+          </div>
+        )}
+
+        {networkMode === 'free' && (
+          <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center gap-2 text-xs font-medium">
+            <ShieldCheck size={16} className="shrink-0 text-sky-500" />
+            <span>البوتات تعمل بالبروكسيات المجانية الاحتياطية (Free Datacenter). بيانات البروكسيات المدفوعة محفوظة ويمكنك العودة إليها بنقرة واحدة.</span>
+          </div>
+        )}
+
         {networkMode === 'direct' && (
           <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center gap-2 text-xs font-medium">
             <Globe size={16} className="shrink-0 text-amber-500" />
-            <span>اتصالات البوتات تخرج حالياً من IP السيرفر مباشرة. بيانات البروكسيات محفوظة وجاهزة للعودة بأي وقت.</span>
+            <span>اتصالات البوتات تخرج حالياً من IP السيرفر مباشرة. جميع بيانات البروكسيات محفوظة وجاهزة للعودة بأي وقت.</span>
           </div>
         )}
 
@@ -221,9 +297,11 @@ export function AdminProxiesPage() {
               <div className="flex items-center gap-3">
                 <div className={clsx(
                   "p-2.5 rounded-xl border shrink-0",
-                  targetMode === 'direct'
-                    ? "bg-amber-500/10 border-amber-500/20 text-amber-600"
-                    : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                  targetMode === 'residential'
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                    : targetMode === 'free'
+                    ? "bg-sky-500/10 border-sky-500/20 text-sky-600"
+                    : "bg-amber-500/10 border-amber-500/20 text-amber-600"
                 )}>
                   <ArrowRightLeft size={20} />
                 </div>
@@ -233,16 +311,18 @@ export function AdminProxiesPage() {
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     التحويل إلى: <span className="font-bold text-slate-800 dark:text-white">
-                      {targetMode === 'direct' ? (serverIp ? `🌐 IP السيرفر المباشر (${serverIp})` : '🌐 IP السيرفر المباشر') : '🛡️ بروكسيات SOCKS5'}
+                      {targetMode ? getModeLabel(targetMode) : ''}
                     </span>
                   </p>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                {targetMode === 'direct'
-                  ? 'ستتصل البوتات عبر IP السيرفر مباشرة. سيتم تطبيق التغيير تلقائياً مع بدء الدورة القادمة لكل قلعة.'
-                  : 'ستتصل البوتات عبر بروكسيات SOCKS5 الموزعة. سيتم تطبيق التغيير تلقائياً مع بدء الدورة القادمة لكل قلعة.'}
+                {targetMode === 'residential'
+                  ? `سيتم تحويل اتصالات البوتات إلى البروكسيات السكنية المدفوعة (${residentialCount} بروكسي سكني). سيتم توزيع القلاع فور بدء دورتها القادمة.`
+                  : targetMode === 'free'
+                  ? `سيتم تحويل اتصالات البوتات إلى البروكسيات المجانية الاحتياطية (${freeCount} بروكسي). سيتم تطبيق التغيير مع الدورة القادمة.`
+                  : 'ستتصل البوتات عبر IP السيرفر مباشرة. سيتم تطبيق التغيير تلقائياً مع بدء الدورة القادمة لكل قلعة.'}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -266,7 +346,6 @@ export function AdminProxiesPage() {
           </div>
         )}
 
-
         {/* Loading Indicator */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-emerald-500">
@@ -283,6 +362,7 @@ export function AdminProxiesPage() {
               const isTesting = testingIp === p.ip
               const isExpanded = expandedIps.has(p.ip)
               const count = p.assigned_castles?.length || 0
+              const isResidential = p.type === 'residential' || (!p.type && (networkMode === 'residential' || networkMode === 'socks5'))
 
               return (
                 <div
@@ -291,15 +371,33 @@ export function AdminProxiesPage() {
                 >
                   <div>
                     {/* Top IP Header */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 font-mono font-bold text-sm text-slate-900 dark:text-white truncate">
                         <span>🌐 {p.ip}</span>
                         <span className="text-xs text-slate-400 font-normal">:{p.port}</span>
                       </div>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-slate-300 shrink-0">
-                        {p.country}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={clsx(
+                          "text-[10px] px-1.5 py-0.5 rounded font-bold border",
+                          isResidential
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+                        )}>
+                          {isResidential ? 'سكني' : 'مجاني'}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-slate-300">
+                          {p.country}
+                        </span>
+                      </div>
                     </div>
+
+                    {/* ASN / Provider Details */}
+                    {p.asn && (
+                      <div className="mb-3 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-1 truncate">
+                        <span className="truncate font-medium">{p.asn}</span>
+                        {p.city && <span className="text-slate-400 shrink-0">({p.city})</span>}
+                      </div>
+                    )}
 
                     {/* Castles count badge & progress bar */}
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 mb-3">

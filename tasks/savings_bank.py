@@ -150,8 +150,10 @@ class SavingsBankTask(BaseTask):
                 self.log.warning(msg)
                 return TaskResult.fail(msg, retry_after=86400)
 
-        # 2. تحديد مبلغ الإيداع (الافتراضي 2000 أو المحدد صراحة)
-        custom_deposit = cfg.get('deposit')
+        # 2. تحديد مبلغ الإيداع / الحد الأقصى للمبلغ (الافتراضي 2000 أو المحدد صراحة)
+        custom_deposit = cfg.get('max_amount') if cfg.get('max_amount') is not None else cfg.get('deposit')
+        if custom_deposit is None:
+            custom_deposit = cfg.get('max_deposit')
         desired_amount = int(custom_deposit) if custom_deposit else plan_info.get("max_deposit", 2000)
 
         # ── الاستعلام عن الذهب الحي للقلعة (فقط عند عدم وجود وديعة نشطة وحاجة لإيداع جديد) ──

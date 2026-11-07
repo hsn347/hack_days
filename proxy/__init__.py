@@ -13,6 +13,11 @@ from .proxy_manager import (
     get_proxy_ip_for_email,
     disable_proxy,
     enable_proxy,
+    remove_castle_proxy,
+    remove_user_proxy_bindings,
+    get_castle_proxy,
+    set_castle_proxy,
+    reload_proxies,
 )
 
 __all__ = [
@@ -26,4 +31,9 @@ __all__ = [
     "get_proxy_ip_for_email",
     "disable_proxy",
     "enable_proxy",
+    "remove_castle_proxy",
+    "remove_user_proxy_bindings",
+    "get_castle_proxy",
+    "set_castle_proxy",
+    "reload_proxies",
 ]

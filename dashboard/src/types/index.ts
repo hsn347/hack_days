@@ -140,7 +140,7 @@ export interface CastleConfig {
   material_workshop: BaseTaskConfig & { materials: string[] }
   caravan: BaseTaskConfig
   port_delegate: BaseTaskConfig & { shop_item: string }
-  savings_bank: BaseTaskConfig & { days: number; deposit?: number }
+  savings_bank: BaseTaskConfig & { days: number; deposit?: number; max_amount?: number }
   building: BaseTaskConfig & { upgrade_castle: boolean; speedup_castle: boolean; upgrade_support_buildings: boolean; target_buildings?: Record<string, boolean> }
   prestige: BaseTaskConfig & { subtasks: PrestigeSubtasks }
   march_manager: MarchManagerConfig
@@ -210,7 +210,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
   material_workshop: { enabled: false, materials: [] },
   caravan: { enabled: false },
   port_delegate: { enabled: false, shop_item: 'all' },
-  savings_bank: { enabled: false, days: 7, deposit: 2000 },
+  savings_bank: { enabled: false, days: 7, deposit: 2000, max_amount: 2000 },
   building: { enabled: false, upgrade_castle: false, speedup_castle: false, upgrade_support_buildings: false },
   prestige: {
     enabled: false,
@@ -302,7 +302,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
   alliance_treasure: { enabled: true, index: 1 },
   daily_luxury_gift: { enabled: true },
   vip_gift: { enabled: true },
-  savings_bank: { enabled: false, days: 7, deposit: 2000 },
+  savings_bank: { enabled: false, days: 7, deposit: 2000, max_amount: 2000 },
   building: { enabled: false, upgrade_castle: false, speedup_castle: false, upgrade_support_buildings: false },
   prestige: {
     enabled: false,
