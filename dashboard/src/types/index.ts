@@ -244,7 +244,7 @@ export const DEFAULT_CASTLE_CONFIG: CastleConfig = {
     rebels: { enabled: false, level: 5, formation_id: 1 },
     stronghold: { enabled: false, level: 5, count: 1, formation_id: 1 },
     gold_gather: { enabled: false, locations: [] },
-    gather: { enabled: true, res_type: 2, level: 4, search_range: 100 },
+    gather: { enabled: true, res_type: 2, level: 4, search_range: 100, use_boost: false },
   },
 }
 
@@ -262,7 +262,7 @@ export const FIXED_PRESET_CONFIG: CastleConfig = {
     rebels: { enabled: false, level: 5, formation_id: 1 },
     stronghold: { enabled: false, level: 30, count: 2, formation_id: 1 },
     gold_gather: { enabled: false, locations: [] },
-    gather: { enabled: true, res_type: 4, level: 5, search_range: 100 },
+    gather: { enabled: true, res_type: 4, level: 5, search_range: 100, use_boost: false },
   },
   // 2. مكافأة الطاحونة لكل الموارد مع السماح للشراء من المتجر
   watermill: { enabled: true, types: 'all', allow_shop_buy: true },

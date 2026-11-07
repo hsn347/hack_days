@@ -1003,6 +1003,45 @@ export function TaskTabContent({
                 ))}
               </div>
             </div>
+
+            {/* Gather boost toggle card */}
+            <div
+              onClick={() => update('march_manager', { gather: { ...g, use_boost: !Boolean(g.use_boost) } })}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '8px 10px',
+                background: g.use_boost ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)',
+                border: g.use_boost ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '10px',
+                cursor: 'pointer', userSelect: 'none',
+                transition: 'all 0.15s ease',
+              }}
+              className={clsx('transition-colors task-header-card', g.use_boost ? 'enabled' : 'disabled')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '26px', height: '26px', borderRadius: '7px',
+                  background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
+                }}>
+                  <img
+                    src="/images/daily/yildirim_hizi.png"
+                    alt=""
+                    style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+                <div>
+                  <div style={{ color: '#f0fdf4', fontWeight: 600, fontSize: '12.5px' }}>{t('tasks.gatherBoost')}</div>
+                  <div style={{ color: '#6b7280', fontSize: '10.5px' }}>{t('tasks.gatherBoostDesc')}</div>
+                </div>
+              </div>
+              <Toggle
+                value={Boolean(g.use_boost)}
+                onChange={v => update('march_manager', { gather: { ...g, use_boost: v } })}
+                size="sm"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1163,31 +1202,47 @@ export function TaskTabContent({
   // ─────────────────────────────────────────────────────────────────────────
   if (tab === 'combat') {
     const mm = cfg.march_manager
+    const elf = cfg.elf || { enabled: false, formation_id: 1 }
     
-    // استنتاج الخيار النشط: نعتمد على الكائن الأب combat
+    // استنتاج الخيار النشط: نعتمد على جذر elf أو march_manager.combat
     const combatChoice: 'elf' | 'invaders' | 'rebels' | null = 
-      mm.combat?.enabled ? (mm.combat.choice as 'elf' | 'invaders' | 'rebels') : null
+      elf.enabled ? 'elf' : (mm.combat?.enabled ? (mm.combat.choice as 'invaders' | 'rebels') : null)
 
-    // هذه الدالة هي سر الحل: تحدّث الكائن الأب (combat) والأبناء معاً، وتُعطل القتال كلياً إذا ألغيت الخيار
     const setCombatChoice = (choice: 'elf' | 'invaders' | 'rebels' | null) => {
-      update('march_manager', {
-        combat: { 
-          ...mm.combat, 
-          enabled: choice !== null, 
-          choice: choice || mm.combat?.choice // نحتفظ بالاسم حتى لو تم التعطيل
-        },
-        elf:      { ...mm.elf,      enabled: choice === 'elf'      },
-        invaders: { ...mm.invaders, enabled: choice === 'invaders' },
-        rebels:   { ...mm.rebels,   enabled: choice === 'rebels'   },
-      })
+      if (choice === 'elf') {
+        update('elf', { enabled: true, formation_id: sharedFormation })
+        update('march_manager', {
+          combat: { ...mm.combat, enabled: false },
+          invaders: { ...mm.invaders, enabled: false },
+          rebels: { ...mm.rebels, enabled: false },
+        })
+      } else if (choice === null) {
+        update('elf', { enabled: false })
+        update('march_manager', {
+          combat: { ...mm.combat, enabled: false },
+          invaders: { ...mm.invaders, enabled: false },
+          rebels: { ...mm.rebels, enabled: false },
+        })
+      } else {
+        update('elf', { enabled: false })
+        update('march_manager', {
+          combat: { 
+            ...mm.combat, 
+            enabled: true, 
+            choice: choice || mm.combat?.choice
+          },
+          invaders: { ...mm.invaders, enabled: choice === 'invaders' },
+          rebels:   { ...mm.rebels,   enabled: choice === 'rebels'   },
+        })
+      }
     }
 
-    const sharedFormation = mm.combat?.formation_id || mm.elf?.formation_id || 1
+    const sharedFormation = elf.formation_id || mm.combat?.formation_id || 1
 
     const setSharedFormation = (v: number) => {
+      update('elf', { formation_id: v })
       update('march_manager', {
         combat:     { ...mm.combat,     formation_id: v },
-        elf:        { ...mm.elf,        formation_id: v },
         invaders:   { ...mm.invaders,   formation_id: v },
         rebels:     { ...mm.rebels,     formation_id: v },
         ruins:      { ...mm.ruins,      formation_id: v },
@@ -1254,7 +1309,7 @@ export function TaskTabContent({
             { key: 'rebels',   img: '/images/combat/yagmaci.png',     labelKey: 'tasks.eliteRebels', descKey: 'tasks.usesSelectedMarch' },
           ] as const).map(opt => {
             const isActive = combatChoice === opt.key
-            const configData = opt.key === 'elf' ? mm.elf : opt.key === 'invaders' ? mm.invaders : mm.rebels
+            const configData = opt.key === 'elf' ? elf : opt.key === 'invaders' ? mm.invaders : mm.rebels
             return (
               <div
                 key={opt.key}
@@ -2671,15 +2726,27 @@ export function TaskTabContent({
     const sk = cfg.skills
 
     const toggleSkill = (skill: string) => {
-      const current = sk.target_skills
-      const next = current.includes(skill) ? current.filter(x => x !== skill) : [...current, skill]
-      update('skills', { target_skills: next })
+      const current = sk.target_skills || []
+      const isCurrentlyActive = sk.enabled && current.includes(skill)
+      let nextSkills: string[]
+      let nextEnabled: boolean
+
+      if (isCurrentlyActive) {
+        nextSkills = current.filter(x => x !== skill)
+        nextEnabled = nextSkills.length > 0
+      } else {
+        nextSkills = current.includes(skill) ? current : [...current, skill]
+        nextEnabled = true
+      }
+      update('skills', { target_skills: nextSkills, enabled: nextEnabled })
     }
 
     const skillDefs = [
-      { key: 'harvest',   img: '/images/development/hasatet.png',     labelKey: 'tasks.harvestBonus' },
-      { key: 'gather',    img: '/images/development/hizlitopla.png',  labelKey: 'tasks.rapidGatherBonus' },
-      { key: 'warehouse', img: '/images/development/tamponhasat.png', labelKey: 'tasks.warehouseHarvestBonus' },
+      { key: 'harvest',   img: '/images/development/hasatet.png',         labelKey: 'tasks.harvestBonus' },
+      { key: 'gather',    img: '/images/development/hizlitopla.png',      labelKey: 'tasks.rapidGatherBonus' },
+      { key: 'warehouse', img: '/images/development/tamponhasat.png',     labelKey: 'tasks.warehouseHarvestBonus' },
+      { key: 'stamina',   img: '/images/development/ikincil_ruzgar.png', labelKey: 'tasks.abundantStamina' },
+      { key: 'fast_dig',  img: '/images/development/hizlikazi.png',       labelKey: 'tasks.fastDig' },
     ]
 
     const targetBuildings = bld.target_buildings ?? {
@@ -2984,31 +3051,10 @@ export function TaskTabContent({
             key={s.key}
             img={s.img}
             label={t(s.labelKey)}
-            enabled={sk.enabled && sk.target_skills.includes(s.key)}
-            onToggle={v => {
-              if (!sk.enabled) update('skills', { enabled: true })
-              toggleSkill(s.key)
-            }}
+            enabled={sk.enabled && (sk.target_skills || []).includes(s.key)}
+            onToggle={() => toggleSkill(s.key)}
           />
         ))}
-
-        {/* الريح الثانوية — coming soon */}
-        <TaskRow
-          img="/images/development/ikincil_ruzgar.png"
-          label={t('tasks.secondaryWind')}
-          enabled={false}
-          onToggle={() => {}}
-          comingSoon
-        />
-
-        {/* حفر سريع — coming soon */}
-        <TaskRow
-          img="/images/development/hizlikazi.png"
-          label={t('tasks.fastDig')}
-          enabled={false}
-          onToggle={() => {}}
-          comingSoon
-        />
       </div>
     )
   }
