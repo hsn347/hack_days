@@ -21,7 +21,7 @@ tasks/train.py — مهمة تدريب الجنود والفخاخ في الثك
   - ضبط تكيفي تلقائي ذكي (Adaptive Auto-Tuning) لتدريب الحد الأقصى المتاح بالضبط دون أخطاء.
 
 الاستخدام كملف مستقل:
-    python tasks/train.py --email "burcudemr@gmail.com" --types all --level 10
+    python tasks/train.py --email "shook124@gmail.com" --types all --level 4
     python tasks/train.py --email "ossso5040@gmail.com" --types "حصن الحرب" --level 2
     python tasks/train.py --email "king7moe1990@gmail.com" --types "الخيالة"
 """
@@ -473,6 +473,7 @@ class TrainTask(BaseTask):
         return harvested
 
     async def run(self) -> TaskResult:
+
         # مزامنة سريعة لبيانات الجيش والثكنات لضمان أحدث حالة قبل بدء أي فحص
         try:
             r_sync = await self.conn.query("1005", "1", {}, timeout=4)
@@ -610,6 +611,7 @@ class TrainTask(BaseTask):
 
         msg = " | ".join(parts) if parts else "لم يتم اتخاذ أي إجراء (كافة المباني مشغولة أو لا توجد قوات جاهزة)."
         self.log.info(f"🏁 {msg}")
+
 
         return TaskResult.ok(
             msg,

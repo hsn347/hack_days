@@ -1,21 +1,10 @@
-# -*- coding: utf-8 -*-
+
 """
 tasks/stronghold.py — مهمة الهجوم على المعقل / الملجأ (Stronghold Attack)
 ═══════════════════════════════════════════════════════════════════════
 
-تُرسِل مسيرات للهجوم على المعاقل / الملاجئ على الخريطة (Stronghold / Shelter Attack).
-
-البحث:
-    • "mapType": 26 , "subType": 0
-
-أمر المسير (1007/2):
-    • "moveLineType": 3
-    • "matrixType": 1
-    • "judianState": 1
-    • الحيوانات والرونات والجيش والأبطال من التشكيلة المحفوظة (1005/7)
-
 الاستخدام:
-    python tasks/stronghold.py --email "mohamedfarg6233@gmil.com" --minlv 1 --maxlv 30 --marches 2
+    python tasks/stronghold.py --email "jzarco.all@gmail.com" --minlv 15 --maxlv 30 --marches 2
 """
 
 from __future__ import annotations
@@ -46,214 +35,17 @@ from tasks.march_capacity import get_castle_march_capacity, enforce_safe_march_t
 
 DEFAULT_MIN_LV             = 1                # أدنى مستوى للمعقل
 DEFAULT_MAX_LV             = 35               # أقصى مستوى للمعقل
-DEFAULT_MAX_MARCHES        = 6                # الحد الأقصى للمسيرات
+DEFAULT_MAX_MARCHES        = 2                # الحد الأقصى للمسيرات
 DEFAULT_SEARCH_RANGE       = 100              # نطاق البحث
 DEFAULT_FORMATION_ID       = 1                # رقم التشكيلة المفضلة (1..5) [0 = تلقائي ذكي بدون تشكيلة ثابتة]
 DEFAULT_TROOPS_COUNT       = 30000            # عدد الجنود الافتراضي / المناسب للمسيرة
-
-
-# ════════════════════════════════════════════════════════════════════
-#  إدارة استبعاد الأهداف المكررة (مدير مركزي موحد)
-#  → تم نقلها إلى tasks/exclude_manager.py
-# ════════════════════════════════════════════════════════════════════
-
-
-# ════════════════════════════════════════════════════════════════════
-#  اختيار أبطال الحرب والقتال (Combat Heroes Selection)
-# ════════════════════════════════════════════════════════════════════
-
-def _pick_combat_heroes(heroes: list, max_count: int = 2, busy: Set[int] = None) -> List[int]:
-    """
-    يختار أفضل أبطال قتال وحرب (5501xxx) وفق هرمية المهارات القتالية والمستوى:
-    1. أبطال حرب 5501xxx يمتلكون مهارات هجومية/قتالية (5610xxx / 5640xxx).
-    2. أبطال حرب 5501xxx متاحين.
-    ملاحظة: يتم استبعاد أبطال الجمع (5502xxx) والدعم (5503xxx) تماماً.
-    في حال عدم توفر أبطال حرب، يتم اختيار أي أبطال متاحين كخطة احتياطية.
-    """
-    busy = busy or set()
-    tier1, tier2, tier3 = [], [], []
-
-    for hero in heroes:
-        if not isinstance(hero, dict):
-            continue
-        hid = hero.get('id')
-        if not hid or hid in busy:
-            continue
-        if hero.get('status', {}).get('state', 0) != 0:
-            continue
-
-        hid_str = str(hid)
-        if hid_str.startswith('5502') or hid_str.startswith('5503'):
-            continue
-
-        skills = hero.get('skillList', {})
-        has_combat_skills = False
-        if isinstance(skills, dict):
-            has_combat_skills = any(
-                str(s.get('id', '')).startswith('5610') or str(s.get('id', '')).startswith('5640')
-                for s in skills.values() if isinstance(s, dict)
-            )
-
-        lv = int(hero.get('lv', 1))
-        star = int(hero.get('star', 1))
-        score = lv * 10 + star * 50
-
-        if hid_str.startswith('5501'):
-            if has_combat_skills:
-                tier1.append((int(hid), score))
-            else:
-                tier2.append((int(hid), score))
-        else:
-            tier3.append((int(hid), score))
-
-    tier1.sort(key=lambda x: x[1], reverse=True)
-    tier2.sort(key=lambda x: x[1], reverse=True)
-    tier3.sort(key=lambda x: x[1], reverse=True)
-
-    chosen = [h[0] for h in tier1] + [h[0] for h in tier2] + [h[0] for h in tier3]
-
-    # خطة احتياطية: أي بطل متاح في حال عدم وجود أبطال حرب مخصصين
-    if not chosen:
-        for hero in heroes:
-            if isinstance(hero, dict):
-                hid = hero.get('id')
-                if hid and hid not in busy and hero.get('status', {}).get('state', 0) == 0:
-                    chosen.append(int(hid))
-                    if len(chosen) >= (max_count or 2):
-                        break
-
-    return chosen[:max_count] if max_count else chosen
-
-
-# ════════════════════════════════════════════════════════════════════
-#  اختيار جيش القتال التلقائي المتوازن (Balanced Combat Army Selection)
-# ════════════════════════════════════════════════════════════════════
-
-def select_combat_army(available: Dict[int, int], needed_count: int = DEFAULT_TROOPS_COUNT) -> List[Dict[str, int]]:
-    """
-    اختيار تشكيلة جيش قتالية متوازنة بالعدد المناسب:
-    توزيع متوازن بين المشاة، الفرسان، والرماة بحسب المتاح في القلعة من الرتب الأعلى.
-    1. المشاة (401..414)
-    2. الفرسان (501..514)
-    3. الرماة (601..614)
-    4. القوات الخاصة (800+)
-    5. عربات الحصار (701..714) كاحتياط
-    """
-    infantry = []   # 401..414
-    cavalry  = []   # 501..514
-    archers  = []   # 601..614
-    carts    = []   # 701..714 كاحتياط
-
-    for tid, count in available.items():
-        if count <= 0:
-            continue
-        # يُمنع بتاتاً تضمين أسلحة الدفاع وفخاخ الجدار (800 فما فوق) لأنها تسبب خطأ 8062
-        if 800 <= tid < 900:
-            continue
-        if 400 <= tid < 500:
-            infantry.append((tid, count))
-        elif 500 <= tid < 600:
-            cavalry.append((tid, count))
-        elif 600 <= tid < 700:
-            archers.append((tid, count))
-        elif 700 <= tid < 800:
-            carts.append((tid, count))
-
-    infantry.sort(key=lambda x: x[0], reverse=True)
-    cavalry.sort(key=lambda x: x[0], reverse=True)
-    archers.sort(key=lambda x: x[0], reverse=True)
-    carts.sort(key=lambda x: x[0], reverse=True)
-
-    combat_branches = [b for b in [infantry, cavalry, archers] if b]
-    if not combat_branches:
-        combat_branches = [carts] if carts else []
-
-    if not combat_branches:
-        return []
-
-    army_map: Dict[int, int] = {}
-    remaining_needed = needed_count
-
-    # جولة 1: توزيع متوازن متساوٍ بين الأصناف القتالية المتوفرة
-    branch_quota = max(1, remaining_needed // len(combat_branches))
-    for branch in combat_branches:
-        quota = min(branch_quota, remaining_needed)
-        branch_taken = 0
-        for tid, count in branch:
-            avail = available.get(tid, 0)
-            if avail <= 0:
-                continue
-            take = min(avail, quota - branch_taken)
-            if take > 0:
-                army_map[tid] = army_map.get(tid, 0) + take
-                available[tid] -= take
-                branch_taken += take
-                remaining_needed -= take
-                if branch_taken >= quota or remaining_needed <= 0:
-                    break
-        if remaining_needed <= 0:
-            break
-
-    # جولة 2: استكمال العدد المتبقي من أي قوات قتالية متاحة (بالترتيب من الأعلى للأدنى)
-    if remaining_needed > 0:
-        all_branches = combat_branches + ([carts] if carts and carts not in combat_branches else [])
-        for branch in all_branches:
-            for tid, count in branch:
-                avail = available.get(tid, 0)
-                if avail <= 0:
-                    continue
-                take = min(avail, remaining_needed)
-                if take > 0:
-                    army_map[tid] = army_map.get(tid, 0) + take
-                    available[tid] -= take
-                    remaining_needed -= take
-                    if remaining_needed <= 0:
-                        break
-            if remaining_needed <= 0:
-                break
-
-    return [{"id": tid, "num": num} for tid, num in army_map.items() if num > 0]
-
-
-# ════════════════════════════════════════════════════════════════════
-#  اختيار الحيوان الأليف للقتال (Combat Pet Selection)
-# ════════════════════════════════════════════════════════════════════
-
-def select_combat_pet(conn: GameConnection, used_pets: Set[int]) -> List[int]:
-    """
-    اختيار أعلى حيوان قتالي متاح في القلعة.
-    """
-    pets_data = conn.init_data.get('petCtrl', {}).get('pets', {})
-    if not pets_data:
-        return []
-
-    available_pets = []
-    for pid_str, pinfo in pets_data.items():
-        try:
-            pid = int(pid_str)
-            if pid not in used_pets:
-                lv = int(pinfo.get('lv', 1))
-                available_pets.append((pid, lv))
-        except Exception:
-            continue
-
-    if not available_pets:
-        return []
-
-    available_pets.sort(key=lambda x: x[1], reverse=True)
-    chosen_pet = available_pets[0][0]
-    used_pets.add(chosen_pet)
-    return [chosen_pet]
-
 
 # ════════════════════════════════════════════════════════════════════
 #  مهمة الهجوم على المعقل (StrongholdTask)
 # ════════════════════════════════════════════════════════════════════
 
 class StrongholdTask(BaseTask):
-    """
-    مهمة الهجوم على المعقل / الملجأ (Stronghold / Shelter Attack).
-    """
+
     name = "stronghold"
 
     def __init__(self, conn: GameConnection, config: dict = None):
@@ -290,7 +82,6 @@ class StrongholdTask(BaseTask):
                         int_hid = int(hid)
                         if not any(h.get('id') == int_hid for h in self._heroes):
                             self._heroes.append({'id': int_hid, 'status': {'state': 0}, 'skillList': {}})
-
 
     # ── المهمة الرئيسية ───────────────────────────────────────────
 
@@ -451,46 +242,14 @@ class StrongholdTask(BaseTask):
     # ── إرسال مسيرة معقل واحدة ────────────────────────────────────
 
     async def _send_one_stronghold(self, min_lv: int, max_lv: int, search_range: int, formation_id: int, troops_cfg: int) -> str:
-        uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
+        # 1. جلب إحداثيات القلعة عبر الدالة المركزية في BaseTask (Zero-Request)
+        cx, cy = await self.get_castle_coords()
+        if not cx or not cy:
+            self.log.warning("⚠️ تعذر تحديد إحداثيات القلعة للهجوم على المعقل!")
+            return "ERROR"
 
-        # 1. جلب إحداثيات البحث من الذاكرة الحية cityCtrl (Zero-Request)
-        cx = self.config.get('center_x') or self.config.get('x')
-        cy = self.config.get('center_y') or self.config.get('y')
-        if cx is None or cy is None:
-            pos = self.conn.init_data.get('cityCtrl', {}).get('cinfo', {}).get('pos', {}) if hasattr(self.conn, 'init_data') else {}
-            if pos and 'x' in pos and 'y' in pos:
-                cx, cy = int(pos['x']), int(pos['y'])
-            else:
-                try:
-                    self.log.warning("🛑🛑🛑🛑🛑🛑")
-                    r_castle = await self.conn.query('1006', '25', {"uid": uid_int})
-                    if not r_castle or not r_castle.get('retData'):
-                        return "ERROR"
-                    cx = r_castle['retData'].get('x')
-                    cy = r_castle['retData'].get('y')
-                except Exception:
-                    return "ERROR"
-        else:
-            cx = int(cx)
-            cy = int(cy)
-
-        # 2. جلب معرف المملكة من الذاكرة الحية (Zero-Request)
-        kingdom_id = 0
-        if getattr(self.conn, 'kingdom_id', None):
-            try: kingdom_id = int(self.conn.kingdom_id)
-            except: pass
-        if not kingdom_id and hasattr(self.conn, 'init_data'):
-            kingdom_id = self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}).get('partition', 0)
-        if not kingdom_id:
-            try:
-                self.log.warning("🛑🛑🛑🛑🛑🛑")
-                r_map = await self.conn.query('1002', '7', {"uid": uid_int})
-                if r_map and 'data' in r_map:
-                    kingdom_id = r_map['data'].get('base', {}).get('partition', 0)
-            except Exception:
-                pass
-        if not kingdom_id:
-            kingdom_id = 4
+        # 2. جلب معرف المملكة عبر الدالة المركزية في BaseTask (Zero-Request)
+        kingdom_id = await self.get_kingdom_id()
 
 
         # 3. البحث عن المعاقل (mapType: 26, subType: 0)
@@ -515,228 +274,40 @@ class StrongholdTask(BaseTask):
             self.log.warning(f"⚠️ لا توجد معاقل متاحة في نطاق {search_range}!")
             return "NO_TARGET"
 
+        # 4. جلب القوات المتوفرة وغير المشغولة بالقلعة عبر الدالة المركزية في BaseTask (Zero-Request)
+        available = await self.get_available_troops()
+
+        # 5. جلب بيانات التشكيلة المحفوظة عبر الدالة المركزية في BaseTask (Zero-Request)
+        form_heroes, form_pets, form_rune_pages, form_army_dict = await self.get_formation(formation_id)
 
 
-        # 4. جلب القوات المتوفرة بالقلعة من الذاكرة الحية مباشرة (Zero-Request)
-        available: Dict[int, int] = {}
-        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
-        if isinstance(army_ctrl, dict):
-            for k, v in army_ctrl.get('totalArmy', {}).items():
-                if str(k).isdigit() and str(v).isdigit():
-                    available[int(k)] = int(v)
-
-        if not available:
-            try:
-                self.log.warning("🛑🛑🛑🛑🛑🛑")
-                r_army = await self.conn.query('1005', '1', {})
-                if r_army and 'data' in r_army:
-                    for k, v in r_army['data'].get('totalArmy', {}).items():
-                        if str(k).isdigit() and str(v).isdigit():
-                            available[int(k)] = int(v)
-            except Exception:
-                pass
-
-        for tid, used in self._used_army.items():
-            if tid in available:
-                available[tid] = max(0, available[tid] - used)
-
-        # 5. جلب بيانات التشكيلة المحفوظة من الذاكرة الحية مباشرة (Zero-Request)
-        form_heroes     = []
-        form_pets       = []
-        form_rune_pages = []
-        form_army_dict  = {}
-        if formation_id and formation_id > 0:
-            army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
-            if isinstance(army_ctrl, dict):
-                fid_str = str(formation_id)
-                c_heroes = army_ctrl.get('compileHeros', {})
-                if isinstance(c_heroes, dict) and fid_str in c_heroes:
-                    form_heroes = c_heroes[fid_str]
-
-                c_pets = army_ctrl.get('compilePets', {})
-                if isinstance(c_pets, dict) and fid_str in c_pets:
-                    form_pets = c_pets[fid_str]
-
-                c_runes = army_ctrl.get('compileRunePages', {})
-                if isinstance(c_runes, dict) and fid_str in c_runes:
-                    form_rune_pages = c_runes[fid_str]
-
-                c_army = army_ctrl.get('compileArmy', {})
-                if isinstance(c_army, dict) and fid_str in c_army:
-                    form_army_dict = c_army[fid_str]
-
-            if not form_heroes and not form_army_dict:
-                try:
-                    self.log.warning("🛑🛑🛑🛑🛑🛑")
-                    r_form = await self.conn.query('1005', '7', {"compiletype": formation_id})
-                    if r_form and 'data' in r_form:
-                        form_heroes     = r_form['data'].get('compileHeros', [])
-                        form_pets       = r_form['data'].get('compilePets', [])
-                        form_rune_pages = r_form['data'].get('compileRunePages', [1])
-                        form_army_dict  = r_form['data'].get('compileArmy', {})
-                except Exception:
-                    pass
-
-
-        # 6. اختيار الأبطال
-        chosen_heroes = []
-        if not self._heroes:
-            await self._load_heroes()
-
-        if form_heroes:
-            flat_heroes = []
-            if isinstance(form_heroes, list):
-                flat_heroes = form_heroes
-            elif isinstance(form_heroes, dict):
-                for sub in form_heroes.values():
-                    if isinstance(sub, list): flat_heroes.extend(sub)
-                    elif sub: flat_heroes.append(sub)
-
-            available_form_heroes = []
-            for h in flat_heroes:
-                if h and str(h).isdigit():
-                    hid = int(h)
-                    if hid not in self._busy:
-                        hero_data = next((x for x in self._heroes if x.get('id') == hid), None)
-                        if hero_data and hero_data.get('status', {}).get('state', 0) == 0:
-                            available_form_heroes.append(hid)
-
-            if len(available_form_heroes) >= 2:
-                chosen_heroes = available_form_heroes[:2]
-                self.log.debug(f"🎖️ أبطال التشكيلة: {chosen_heroes}")
-            elif len(available_form_heroes) == 1:
-                hero1 = available_form_heroes[0]
-                extra_busy = set(self._busy) | {hero1}
-                filler = _pick_combat_heroes(self._heroes, max_count=1, busy=extra_busy)
-                if filler:
-                    chosen_heroes = [hero1, filler[0]]
-                else:
-                    chosen_heroes = [hero1]
-                self.log.debug(f"⚔️ تشكيلة الأبطال: {chosen_heroes}")
-
+        # 6. اختيار وفحص أبطال المسيرة عبر الدالة المركزية (فحص التشكيلة أو استبدالهم بأبطال هجوم وقتال)
+        chosen_heroes = await self.get_combat_heroes(form_heroes=form_heroes, max_count=2, exclude_busy=self._busy)
         if not chosen_heroes:
-            chosen_heroes = _pick_combat_heroes(self._heroes, max_count=2, busy=self._busy)
-            if len(chosen_heroes) == 2:
-                self.log.debug(f"⚔️ أبطال الحرب البدلاء: {chosen_heroes}")
-            elif len(chosen_heroes) == 1:
-                self.log.debug(f"⚔️ بطل حرب واحد متاح: {chosen_heroes}")
-            else:
-                any_cands = [int(h['id']) for h in self._heroes if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy and h.get('status', {}).get('state', 0) == 0]
-                if any_cands:
-                    chosen_heroes = any_cands[:2]
-                    self.log.debug(f"⚠️ بديل اضطراري: {chosen_heroes}")
-                else:
-                    self.log.warning("⚠️ لا يوجد أي بطل متاح بالقلعة نهائياً!")
-                    return "NO_HEROES"
+            self.log.warning("⚠️ لا يوجد أي بطل متاح بالقلعة نهائياً!")
+            return "NO_HEROES"
+        self.log.debug(f"⚔️ أبطال المسيرة المعتمدون: {chosen_heroes}")
 
-        # 7. تكوين جيش المسيرة الذكي (التشكيلة مع الإكمال التلقائي للنقص بالجنود المناسبين)
-        # جلب قوة القلعة الإجمالية من بيانات الجلسة لفحص القوة الموصى بها
-        castle_power = 0
-        try:
-            fc_info = self.conn.init_data.get("lordInfoCtrl", {}).get("fcInfo", {})
-            castle_power = int(fc_info.get("totalFc", 0))
-            if not castle_power:
-                castle_power = int(self.conn.init_data.get("charInfo", {}).get("power", 0))
-        except Exception:
-            pass
-
-        target_lv = int(candidates[0].get('level', max_lv)) if candidates else max_lv
-        smart_troops, rec_power, power_status = calculate_smart_combat_troops(
-            target_type="stronghold",
-            target_level=target_lv,
-            castle_power=castle_power,
-            user_troops_cfg=troops_cfg
-        )
-
-        army_list = []
-        # احتساب سعة مسيرة اللورد الحقيقية مع الأبطال المختارين ديناميكياً بدلاً من رقم ثابت
+        # 7. تجهيز جيش المسيرة بدقة وفق التشكيلة المحددة دون أي زيادة فوقها
         max_safe_capacity = get_castle_march_capacity(self.conn, chosen_heroes=chosen_heroes)
-
-        if form_army_dict and formation_id > 0:
-            # حساب إجمالي القوات المطلوبة في التشكيلة المحفوظة باللعبة (مع استبعاد فخاخ الجدار 800-899)
-            total_form_req = sum(
-                int(v) for k, v in form_army_dict.items()
-                if str(k).isdigit() and str(v).isdigit() and not (800 <= int(k) < 900)
+        try:
+            army_list = await self.get_march_army(
+                form_army_dict=form_army_dict,
+                formation_id=formation_id,
+                available_troops=available,
+                fallback_count=troops_cfg,
+                max_capacity=max_safe_capacity
             )
-
-            # اعتماد التشكيلة المحفوظة بالكامل بما لا يتجاوز سعة مسيرة اللورد الحقيقية
-            scale = 1.0
-            if total_form_req > max_safe_capacity:
-                scale = float(max_safe_capacity) / float(total_form_req)
-                needed_target = max_safe_capacity
-                self.log.info(
-                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] إجمالي جنودها ({total_form_req:,}) يتجاوز سعة مسيرة القلعة ({max_safe_capacity:,}) — "
-                    f"تم ضبطها لـ {needed_target:,} جندي بأعلى نسبة أمان لمنع خطأ 8035"
-                )
-            else:
-                needed_target = total_form_req
-                self.log.info(
-                    f"🎖️ [التشكيلة المحفوظة #{formation_id}] اعتماد كامل جنود التشكيلة ({needed_target:,} جندي) ضمن سعة القلعة ({max_safe_capacity:,})"
-                )
-
-            for k, v in form_army_dict.items():
-                if str(k).isdigit() and str(v).isdigit():
-                    tid = int(k)
-                    if 800 <= tid < 900:
-                        continue
-                    req = int(v)
-                    scaled_req = max(1, int(req * scale)) if scale < 1.0 else req
-                    avail = available.get(tid, 0)
-                    take = min(scaled_req, avail)
-                    if take > 0:
-                        army_list.append({"id": tid, "num": take})
-                        available[tid] -= take
-        else:
-            needed_target = min(smart_troops, max_safe_capacity)
-            if rec_power > 0:
-                self.log.info(
-                    f"🎯 [فحص القوة الذكي] الهدف: معقل (لفل {target_lv}) | "
-                    f"القوة الموصى بها: {rec_power:,} | قوة قلعتك: {castle_power:,} | الحالة: {power_status}"
-                )
-                self.log.info(
-                    f"⚔️ [حساب الجيش الذكي] تم احتساب سعة المسيرة ديناميكياً: {needed_target:,} جندي (سعة اللورد القصوى: {max_safe_capacity:,})"
-                )
-
-        form_troops_count = sum(item['num'] for item in army_list)
-
-        if form_troops_count == 0:
-            if formation_id > 0:
-                self.log.info(f"⚠️ التشكيلة المحفوظة ({formation_id}) فارغة أو لا تتوفر أي من قواتها بالقلعة — جاري اختيار جيش قتالي متوازن بالكامل ({needed_target:,} جندي)...")
-            army_list = select_combat_army(available, needed_count=needed_target)
-        elif form_troops_count < needed_target:
-            deficit = needed_target - form_troops_count
-            self.log.info(
-                f"ℹ️ جنود التشكيلة ({formation_id}) غير كافيين بالقلعة ({form_troops_count:,}/{needed_target:,} جندي) — "
-                f"جاري إكمال النقص ({deficit:,} جندي) تلقائياً بأفضل قوات قتالية متوازنة..."
-            )
-            extra_army = select_combat_army(available, needed_count=deficit)
-            if extra_army:
-                army_dict_combined: Dict[int, int] = {}
-                for item in army_list:
-                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
-                for item in extra_army:
-                    army_dict_combined[item['id']] = army_dict_combined.get(item['id'], 0) + item['num']
-                army_list = [{"id": tid, "num": cnt} for tid, cnt in army_dict_combined.items() if cnt > 0]
-        elif form_troops_count > needed_target:
-            # ضبط الزيادة الناتجة عن التقريب لضمان عدم تجاوز الحد الأقصى للمسيرة
-            excess = form_troops_count - needed_target
-            for item in sorted(army_list, key=lambda x: x['num'], reverse=True):
-                if excess <= 0:
-                    break
-                trim = min(excess, item['num'] - 1)
-                if trim > 0:
-                    item['num'] -= trim
-                    available[item['id']] = available.get(item['id'], 0) + trim
-                    excess -= trim
-
-        # تطبيق صمام الأمان الصارم لمنع تجاوز سعة مسيرة اللورد برمجياً
-        army_list = enforce_safe_march_troops(army_list, max_safe_capacity)
+        except RuntimeError as e:
+            self.log.warning(f"🛑 {e}")
+            return "WEAK_ARMY"
 
         if not army_list:
             self.log.warning("⚠️ لا توجد قوات متوفرة بالقلعة لإرسال المسيرة!")
             return "NO_ARMY"
 
         total_troops = sum(item['num'] for item in army_list)
+        self.log.info(f"⚔️ [جيش المسيرة] تم تجهيز {total_troops:,} جندي وفق التشكيلة بدقة دون أي زيادة.")
 
         # 8. اختيار الحيوان الأليف والرونات
         pets_list = []
@@ -755,21 +326,9 @@ class StrongholdTask(BaseTask):
                     break
 
         if not pets_list:
-            pets_list = select_combat_pet(self.conn, self._used_pets)
+            pets_list = await self.select_combat_pet()
 
-        rune_pages_list = [1]
-        if isinstance(form_rune_pages, list) and form_rune_pages:
-            rune_pages_list = [int(x) for x in form_rune_pages if str(x).isdigit()]
-        elif isinstance(form_rune_pages, dict) and form_rune_pages:
-            for v in form_rune_pages.values():
-                if isinstance(v, list) and v:
-                    rune_pages_list = [int(x) for x in v if str(x).isdigit()]
-                    break
-                elif str(v).isdigit():
-                    rune_pages_list = [int(v)]
-                    break
-        if not rune_pages_list:
-            rune_pages_list = [1]
+        rune_pages_list = self.get_rune_pages(form_rune_pages)
 
         self.log.debug(f"🛡️ تشكيلة المعقل: إجمالي جنود: {total_troops:,}")
 
@@ -781,19 +340,6 @@ class StrongholdTask(BaseTask):
             self.log.debug(f"🎯 محاولة استهداف معقل: ID={target_id} عند ({tx}, {ty}) لفل={t_lv}")
             # حجز مؤقت في الذاكرة فقط — لن يُثبت في الملف إلا بعد نجاح الهجوم
             await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
-
-            # ── فحص مسبق شامل (1006/22 + 1006/1000): هل المعقل مشغول بمعركة أو مسيرة متجهة له حالياً؟ ──
-            is_busy, busy_reason, _ = await self.check_target_busy_or_marched(
-                target_id=target_id,
-                tx=tx,
-                ty=ty,
-                kingdom_id=kingdom_id,
-                is_stronghold=True
-            )
-            if is_busy:
-                self.log.warning(f"⚠️ المعقل {target_id} مستبعد: {busy_reason} — تخطي للبديل...")
-                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
-                continue
 
             attack_payload = {
                 "needSend": False,
@@ -888,7 +434,6 @@ class StrongholdTask(BaseTask):
                 return "ERROR"
 
         return "TARGET_OCCUPIED"
-
 
 # ════════════════════════════════════════════════════════════════════
 #  التشغيل المباشر كملف مستقل (Standalone Testing)

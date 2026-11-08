@@ -495,13 +495,7 @@ export function AdminLiveProcessesView({ isActive = true }: { isActive?: boolean
                           {proc.category_label || proc.state}
                         </span>
 
-                        {/* Current Task Execution Badge */}
-                        {proc.current_step && (
-                          <span className="bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold text-[11px] inline-flex items-center gap-1">
-                            <span>⚡</span>
-                            <span>{proc.current_step}</span>
-                          </span>
-                        )}
+
 
                         {/* Next Run Time Badge */}
                         {proc.next_run_time && isWaiting && (

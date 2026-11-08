@@ -19,7 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple ,Set
 
 if TYPE_CHECKING:
     from game_client import GameConnection
@@ -183,6 +183,740 @@ class BaseTask(ABC):
                     else:
                         active += 1
         return active
+
+    async def get_max_marches_capacity(self, allow_network: bool = True) -> int:
+        """
+        حساب سعة الفيالق والمسيرات القصوى المسموح بها للقلعة بدقة:
+        1. السقف الأساسي لجميع القلاع = 1 (DEFAULT_EXP_ARMY_QUEUE).
+        2. أبحاث معهد العلوم (technologyCtrl):
+           - #24011 (فيلق البعثة I): +1
+           - #24017 (فيلق البعثة II): +1
+           - #24033 (فيلق البعثة III): +1
+        3. ميزة الـ VIP (vipCtrl / buffCtrl):
+           - مستوى VIP 10 فما فوق يمنح +1 طابور مسيرة إضافي.
+        4. مراعاة السقف اليدوي المخصص في إعدادات المهمة config.max_queues إن وُجد.
+        """
+        capacity = 1
+
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            # فحص تقنيات فيالق البعثة العسكرية في المعهد
+            tech_ctrl = init_data.get('technologyCtrl', {})
+            if isinstance(tech_ctrl, dict):
+                for tid in ('24011', '24017', '24033'):
+                    if tid in tech_ctrl:
+                        val = tech_ctrl[tid]
+                        if isinstance(val, (list, tuple)) and len(val) > 1:
+                            if int(val[1] or 0) > 0:
+                                capacity += 1
+                        elif str(val).isdigit() and int(val) > 0:
+                            capacity += 1
+
+            # فحص مستوى الـ VIP (مستوى 10 فما فوق يضيف طابور مسيرة)
+            vip_ctrl = init_data.get('vipCtrl', {})
+            if isinstance(vip_ctrl, dict):
+                try:
+                    vip_lv = int(vip_ctrl.get('vipLv', 0) or 0)
+                    if vip_lv >= 10:
+                        capacity += 1
+                except (ValueError, TypeError):
+                    pass
+
+        return max(1, capacity)
+
+    async def get_available_marches_count(self, force_sync: bool = False, allow_network: bool = True) -> int:
+        """
+        حساب عدد الفيالق المتاحة والشاغرة للإرسال حالياً:
+        الفارق بين سعة الفيالق القصوى للقلعة (get_max_marches_capacity)
+        وعدد الفيالق النشطة بالخارج حالياً (get_active_marches_count).
+        """
+        max_cap = await self.get_max_marches_capacity(allow_network=allow_network)
+        active = await self.get_active_marches_count(force_sync=force_sync)
+        return max(0, max_cap - active)
+
+    async def get_castle_coords(self, allow_network: bool = True) -> Tuple[int, int]:
+        """
+        جلب إحداثيات القلعة (x, y) المركزية بأعلى سرعة وأمان:
+        1. من إعدادات المهمة config (center_x/center_y أو x/y) إن حُددت.
+        2. من الذاكرة الحية (cityCtrl -> cinfo -> pos) بسرعة 0ms (Zero-Request).
+        3. مسار احتياطي عبر استعلام 1006/25 (REQ_GET_CASTLE_MAP_INFO) في حال عدم توفرها بالذاكرة.
+        """
+        # 1. فحص الإعدادات المباشرة للمهمة
+        if isinstance(getattr(self, 'config', None), dict):
+            cx = self.config.get('center_x') if self.config.get('center_x') is not None else self.config.get('x')
+            cy = self.config.get('center_y') if self.config.get('center_y') is not None else self.config.get('y')
+            if cx is not None and cy is not None:
+                try:
+                    return int(cx), int(cy)
+                except (ValueError, TypeError):
+                    pass
+
+        # 2. فحص الذاكرة الحية (0ms)
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            pos = init_data.get('cityCtrl', {}).get('cinfo', {}).get('pos', {})
+            if isinstance(pos, dict) and 'x' in pos and 'y' in pos:
+                try:
+                    return int(pos['x']), int(pos['y'])
+                except (ValueError, TypeError):
+                    pass
+
+        # 3. مسار احتياطي شبكي عبر استعلام 1006/25
+        if allow_network and self.conn and getattr(self.conn, 'is_connected', False):
+            try:
+                uid_val = getattr(self, 'uid', 0)
+                uid_int = int(uid_val) if str(uid_val).isdigit() else uid_val
+                r_castle = await self.conn.query('1006', '25', {"uid": uid_int}, timeout=3.0)
+                if r_castle and isinstance(r_castle, dict):
+                    ret_data = r_castle.get('retData', {})
+                    if isinstance(ret_data, dict) and 'x' in ret_data and 'y' in ret_data:
+                        cx, cy = int(ret_data['x']), int(ret_data['y'])
+                        # حفظها بالذاكرة الحية لتجنب تكرار الطلب مستقبلاً
+                        if isinstance(init_data, dict):
+                            init_data.setdefault('cityCtrl', {}).setdefault('cinfo', {})['pos'] = {"x": cx, "y": cy}
+                        return cx, cy
+            except Exception as e:
+                self.log.debug(f"استعلام إحداثيات القلعة 1006/25: {e}")
+
+        return 0, 0
+
+    async def get_kingdom_id(self, allow_network: bool = True) -> int:
+        """
+        جلب معرف المملكة (kingdom_id / partition) بدقة وسرعة:
+        1. من كائن الاتصال self.conn.kingdom_id إذا تم تعيينه مسبقاً (0ms).
+        2. من الذاكرة الحية (lordInfoCtrl -> base -> partition) بسرعة 0ms (Zero-Request).
+        3. مسار احتياطي عبر استعلام 1002/7 (REQ_USER_INFO) في حال عدم توفره بالذاكرة.
+        """
+        # 1. فحص كائن الاتصال
+        kid = getattr(self.conn, 'kingdom_id', None)
+        if kid and str(kid).isdigit() and int(kid) > 0:
+            return int(kid)
+
+        # 2. فحص الذاكرة الحية lordInfoCtrl (0ms)
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            lord_ctrl = init_data.get('lordInfoCtrl', {})
+            if isinstance(lord_ctrl, dict):
+                part = (
+                    lord_ctrl.get('base', {}).get('partition')
+                    or lord_ctrl.get('partition')
+                    or lord_ctrl.get('kingdomId')
+                )
+                if part and str(part).isdigit() and int(part) > 0:
+                    kid_val = int(part)
+                    if hasattr(self.conn, 'kingdom_id'):
+                        try:
+                            self.conn.kingdom_id = kid_val
+                        except Exception:
+                            pass
+                    return kid_val
+
+        # 3. مسار احتياطي شبكي عبر استعلام 1002/7
+        if allow_network and self.conn and getattr(self.conn, 'is_connected', False):
+            try:
+                uid_val = getattr(self, 'uid', 0)
+                uid_int = int(uid_val) if str(uid_val).isdigit() else uid_val
+                r_player = await self.conn.query('1002', '7', {"uid": uid_int}, timeout=3.0)
+                if r_player and isinstance(r_player, dict):
+                    part = r_player.get('data', {}).get('base', {}).get('partition')
+                    if part and str(part).isdigit() and int(part) > 0:
+                        kid_val = int(part)
+                        if hasattr(self.conn, 'kingdom_id'):
+                            try:
+                                self.conn.kingdom_id = kid_val
+                            except Exception:
+                                pass
+                        return kid_val
+            except Exception as e:
+                self.log.debug(f"استعلام معرف المملكة 1002/7: {e}")
+
+        return int(kid) if (kid and str(kid).isdigit()) else 0
+
+    async def get_available_troops(
+        self,
+        exclude_used: Optional[Dict[int, int]] = None,
+        allow_network: bool = True
+    ) -> Dict[int, int]:
+        """
+        جلب القوات المتوفرة بالقلعة والجاهزة للمسيرات (غير المشغولة):
+        1. قراءة totalArmy من الذاكرة الحية (armyCtrl -> totalArmy) بسرعة 0ms (Zero-Request).
+        2. استبعاد فخاخ الجدار (800-899) تلقائياً والإبقاء على القوات القتالية فقط.
+        3. مسار احتياطي عبر استعلام 1005/1 (REQ_GET_ARMY_INFO) في حال عدم توفر القوات بالذاكرة.
+        4. خصم القوات المحجوزة تلقائياً من self._used_army أو المعطاة في exclude_used.
+        """
+        available: Dict[int, int] = {}
+
+        # 1. القراءة من الذاكرة الحية (0ms)
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            army_ctrl = init_data.get('armyCtrl', {})
+            if isinstance(army_ctrl, dict):
+                for k, v in army_ctrl.get('totalArmy', {}).items():
+                    if str(k).isdigit() and str(v).isdigit():
+                        tid, cnt = int(k), int(v)
+                        # استبعاد فخاخ الجدار (800-899)
+                        if not (800 <= tid < 900) and cnt > 0:
+                            available[tid] = cnt
+
+        # 2. مسار احتياطي شبكي عبر استعلام 1005/1
+        if not available and allow_network and self.conn and getattr(self.conn, 'is_connected', False):
+            try:
+                r_army = await self.conn.query('1005', '1', {}, timeout=3.0)
+                if r_army and isinstance(r_army, dict):
+                    data = r_army.get('data', {})
+                    if isinstance(data, dict):
+                        raw_total = data.get('totalArmy', {})
+                        if isinstance(raw_total, dict):
+                            if isinstance(init_data, dict):
+                                init_data.setdefault('armyCtrl', {})['totalArmy'] = raw_total
+                            for k, v in raw_total.items():
+                                if str(k).isdigit() and str(v).isdigit():
+                                    tid, cnt = int(k), int(v)
+                                    if not (800 <= tid < 900) and cnt > 0:
+                                        available[tid] = cnt
+            except Exception as e:
+                self.log.debug(f"استعلام قوات القلعة 1005/1: {e}")
+
+        # 3. خصم القوات المشغولة في المسيرات
+        used_map: Dict[int, int] = {}
+        if isinstance(exclude_used, dict):
+            used_map.update(exclude_used)
+        elif hasattr(self, '_used_army') and isinstance(self._used_army, dict):
+            used_map.update(self._used_army)
+
+        for tid, used_cnt in used_map.items():
+            if tid in available:
+                available[tid] = max(0, available[tid] - used_cnt)
+
+        return available
+
+    async def get_formation(
+        self,
+        formation_id: int = 1,
+        allow_network: bool = True
+    ) -> Tuple[List[Any], List[Any], List[Any], Dict[str, Any]]:
+        """
+        جلب بيانات التشكيلة المحفوظة (أبطال، حيوانات، رونات، جيش) بدقة وسرعة:
+        1. من الذاكرة الحية armyCtrl (compileHeros, compilePets, compileRunePages, compileArmy) بسرعة 0ms (Zero-Request).
+        2. مسار احتياطي عبر استعلام 1005/7 في حال عدم توفر التشكيلة بالذاكرة الحية.
+        """
+        form_heroes: List[Any] = []
+        form_pets: List[Any] = []
+        form_rune_pages: List[Any] = []
+        form_army_dict: Dict[str, Any] = {}
+
+        if not formation_id or formation_id <= 0:
+            return form_heroes, form_pets, form_rune_pages, form_army_dict
+
+        fid_str = str(formation_id)
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            army_ctrl = init_data.get('armyCtrl', {})
+            if isinstance(army_ctrl, dict):
+                c_heroes = army_ctrl.get('compileHeros', {})
+                if isinstance(c_heroes, dict) and fid_str in c_heroes:
+                    form_heroes = c_heroes[fid_str]
+
+                c_pets = army_ctrl.get('compilePets', {})
+                if isinstance(c_pets, dict) and fid_str in c_pets:
+                    form_pets = c_pets[fid_str]
+
+                c_runes = army_ctrl.get('compileRunePages', {})
+                if isinstance(c_runes, dict) and fid_str in c_runes:
+                    form_rune_pages = c_runes[fid_str]
+
+                c_army = army_ctrl.get('compileArmy', {})
+                if isinstance(c_army, dict) and fid_str in c_army:
+                    form_army_dict = c_army[fid_str]
+
+        # مسار احتياطي عبر استعلام 1005/7 إذا كانت فارغة بالذاكرة
+        if not form_heroes and not form_army_dict and allow_network and self.conn and getattr(self.conn, 'is_connected', False):
+            try:
+                r_form = await self.conn.query('1005', '7', {"compiletype": formation_id}, timeout=3.0)
+                if r_form and isinstance(r_form, dict) and 'data' in r_form:
+                    f_data = r_form['data']
+                    form_heroes     = f_data.get('compileHeros', [])
+                    form_pets       = f_data.get('compilePets', [])
+                    form_rune_pages = f_data.get('compileRunePages', [1])
+                    form_army_dict  = f_data.get('compileArmy', {})
+            except Exception as e:
+                self.log.debug(f"استعلام التشكيلة 1005/7: {e}")
+
+        clean_runes = self.get_rune_pages(form_rune_pages)
+        return form_heroes, form_pets, clean_runes, form_army_dict
+
+    def get_rune_pages(self, form_rune_pages: Optional[Any] = None) -> List[int]:
+        """
+        استخراج وتنظيف صفحات الرونات (Rune Pages) المطلوبة لأمر المسير (1007/2):
+        1. إذا كانت قائمة: استخراج الأرقام الصالحة منها.
+        2. إذا كانت قاموساً: استخراج أول قيمة عددية صالحة منه.
+        3. إذا كانت رقماً منفرداً: تحويله إلى قائمة [int].
+        4. في حال خلوها أو فشل الاستخراج: إعادة القيمة الافتراضية القياسية [1] لمنع رفض السيرفر.
+        """
+        if isinstance(form_rune_pages, list) and form_rune_pages:
+            res = [int(x) for x in form_rune_pages if str(x).isdigit() and int(x) > 0]
+            if res:
+                return res
+
+        if isinstance(form_rune_pages, dict) and form_rune_pages:
+            for v in form_rune_pages.values():
+                if isinstance(v, list) and v:
+                    res = [int(x) for x in v if str(x).isdigit() and int(x) > 0]
+                    if res:
+                        return res
+                elif str(v).isdigit() and int(v) > 0:
+                    return [int(v)]
+
+        if form_rune_pages is not None and str(form_rune_pages).isdigit() and int(form_rune_pages) > 0:
+            return [int(form_rune_pages)]
+
+        return [1]
+
+    async def get_combat_heroes(
+        self,
+        form_heroes: Optional[Any] = None,
+        max_count: int = 2,
+        exclude_busy: Optional[Set[int]] = None
+    ) -> List[int]:
+        """
+        فحص أبطال التشكيلة واستبدال المشغولين منهم بأفضل أبطال قتال وهجوم متاحين:
+        1. فحص أبطال التشكيلة (form_heroes): هل هم متوفرون بالقلعة (state == 0) وغير محجوزين؟
+        2. إذا كان أي منهم مشغولاً أو ناقصاً:
+           - اختيار أفضل أبطال قتال وحرب (5501xxx) يمتلكون مهارات قتالية وهجومية نشطة (5610xxx / 5640xxx).
+           - الأولوية للأعلى مستوى ونجوماً (lv * 10 + star * 50).
+           - استبعاد أبطال الجمع (5502xxx) وأبطال الدعم (5503xxx) تماماً من القتال.
+        """
+        # 1. تجميع قائمة المشغولين
+        busy: Set[int] = set()
+        if isinstance(exclude_busy, (set, list, tuple)):
+            busy.update(int(x) for x in exclude_busy if str(x).isdigit())
+        if hasattr(self, '_busy') and isinstance(self._busy, (set, list)):
+            busy.update(int(x) for x in self._busy if str(x).isdigit())
+
+        # 2. جلب بيانات أبطال الحساب
+        account_heroes: List[Dict[str, Any]] = []
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        if isinstance(init_data, dict):
+            h_ctrl = init_data.get('heroCtrl')
+            if isinstance(h_ctrl, list):
+                account_heroes = h_ctrl
+            elif isinstance(h_ctrl, dict):
+                account_heroes = list(h_ctrl.values())
+
+        if not account_heroes and hasattr(self, '_heroes') and isinstance(self._heroes, list):
+            account_heroes = self._heroes
+
+        # في حال لم تكن محملة بالذاكرة بعد، محاولة جلبها من GateClient
+        if not account_heroes and self.conn and hasattr(self.conn, '_gate') and self.conn._gate:
+            gate_heroes = getattr(self.conn._gate, 'heroes', None)
+            if isinstance(gate_heroes, list) and gate_heroes:
+                account_heroes = gate_heroes
+
+        # خريطة سريعة للأبطال لتسهيل الفحص بالـ ID (0ms)
+        hero_map: Dict[int, Dict[str, Any]] = {}
+        for h in account_heroes:
+            if isinstance(h, dict) and h.get('id') and str(h['id']).isdigit():
+                hero_map[int(h['id'])] = h
+
+        chosen_heroes: List[int] = []
+
+        # 3. فحص أبطال التشكيلة المعطاة (form_heroes)
+        if form_heroes:
+            flat_form: List[int] = []
+            if isinstance(form_heroes, list):
+                for item in form_heroes:
+                    if isinstance(item, list):
+                        flat_form.extend([int(x) for x in item if str(x).isdigit()])
+                    elif str(item).isdigit():
+                        flat_form.append(int(item))
+            elif isinstance(form_heroes, dict):
+                for val in form_heroes.values():
+                    if isinstance(val, list):
+                        flat_form.extend([int(x) for x in val if str(x).isdigit()])
+                    elif str(val).isdigit():
+                        flat_form.append(int(val))
+
+            for hid in flat_form:
+                if hid in busy or hid in chosen_heroes:
+                    continue
+                h_data = hero_map.get(hid)
+                # فحص حالة البطل: state == 0 تعني متاح وغير مشغول بمسيرة أو تكليف
+                if h_data:
+                    state = h_data.get('status', {}).get('state', 0)
+                    if state == 0:
+                        chosen_heroes.append(hid)
+                        busy.add(hid)
+                else:
+                    # إذا لم يتوفر كائن البطل بالذاكرة، اعتماده إذا لم يكن مشغولاً
+                    chosen_heroes.append(hid)
+                    busy.add(hid)
+
+                if len(chosen_heroes) >= max_count:
+                    break
+
+        # 4. إذا اكتمل العدد من التشكيلة، إرجاعهم مباشرة
+        if len(chosen_heroes) >= max_count:
+            return chosen_heroes[:max_count]
+
+        # 5. استبدال المشغولين أو إكمال النقص بأبطال قتال وهجوم يمتلكون مهارات حربية
+        tier1: List[Tuple[int, int]] = []  # 5501 حرب + مهارات قتال وهجوم (5610 / 5640)
+        tier2: List[Tuple[int, int]] = []  # 5501 حرب متاح
+        tier3: List[Tuple[int, int]] = []  # أبطال آخرون متاحون
+
+        for h in account_heroes:
+            if not isinstance(h, dict):
+                continue
+            hid_raw = h.get('id')
+            if not hid_raw or not str(hid_raw).isdigit():
+                continue
+            hid = int(hid_raw)
+            if hid in busy or hid in chosen_heroes:
+                continue
+
+            # استبعاد المشغولين حتماً
+            state = h.get('status', {}).get('state', 0)
+            if state != 0:
+                continue
+
+            hid_str = str(hid)
+            # استبعاد أبطال الجمع 5502 والدعم 5503 من مسيرات القتال
+            if hid_str.startswith('5502') or hid_str.startswith('5503'):
+                continue
+
+            # فحص مهارات القتال والهجوم (5610xxx / 5640xxx)
+            skills = h.get('skillList', {})
+            has_combat_skills = False
+            if isinstance(skills, dict):
+                has_combat_skills = any(
+                    str(s.get('id', '')).startswith('5610') or str(s.get('id', '')).startswith('5640')
+                    for s in skills.values() if isinstance(s, dict)
+                )
+
+            lv = int(h.get('lv', 1) or 1)
+            star = int(h.get('star', 1) or 1)
+            score = lv * 10 + star * 50
+
+            if hid_str.startswith('5501'):
+                if has_combat_skills:
+                    tier1.append((hid, score))
+                else:
+                    tier2.append((hid, score))
+            else:
+                tier3.append((hid, score))
+
+        tier1.sort(key=lambda x: x[1], reverse=True)
+        tier2.sort(key=lambda x: x[1], reverse=True)
+        tier3.sort(key=lambda x: x[1], reverse=True)
+
+        for hid, _ in tier1 + tier2 + tier3:
+            chosen_heroes.append(hid)
+            busy.add(hid)
+            if len(chosen_heroes) >= max_count:
+                break
+
+        # خطة طوارئ أخيرة: أي بطل متاح في القلعة في حال خلو الحساب من أبطال حرب
+        if len(chosen_heroes) < max_count:
+            for h in account_heroes:
+                if isinstance(h, dict):
+                    hid_raw = h.get('id')
+                    if hid_raw and str(hid_raw).isdigit():
+                        hid = int(hid_raw)
+                        if hid not in busy and hid not in chosen_heroes:
+                            if h.get('status', {}).get('state', 0) == 0:
+                                chosen_heroes.append(hid)
+                                busy.add(hid)
+                                if len(chosen_heroes) >= max_count:
+                                    break
+
+        return chosen_heroes[:max_count]
+
+    async def select_combat_pet(self, exclude_busy: Optional[Set[int]] = None) -> List[int]:
+        """
+        اختيار أفضل حيوان قتالي متاح في القلعة عند عدم وجود حيوان في التشكيلة:
+        1. قراءة بيانات الحيوانات من الذاكرة الحية petCtrl.pets بسرعة 0ms (Zero-Request).
+        2. استبعاد الحيوانات المشغولة أو المحجوزة في exclude_busy أو self._used_pets.
+        3. ترتيب الحيوانات تنازلياً وفق:
+           - الرتبة والتطور (step) أولاً
+           - المستوى (lv) ثانياً
+           - نقاط الخبرة (exp) ثالثاً
+        4. تسجيل الحيوان المختار في self._used_pets لمنع تكرار إرساله بالفيالق المتتالية.
+        5. إرجاع قائمة [chosen_pet_id] أو [] إذا لم يتوفر أي حيوان.
+        """
+        busy: Set[int] = set()
+        if isinstance(exclude_busy, (set, list, tuple)):
+            busy.update(int(x) for x in exclude_busy if str(x).isdigit())
+        if hasattr(self, '_used_pets') and isinstance(self._used_pets, (set, list)):
+            busy.update(int(x) for x in self._used_pets if str(x).isdigit())
+
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        pets_data = init_data.get('petCtrl', {}).get('pets', {}) if isinstance(init_data, dict) else {}
+        if not isinstance(pets_data, dict) or not pets_data:
+            return []
+
+        available_pets = []
+        for pid_raw, pinfo in pets_data.items():
+            if not isinstance(pinfo, dict):
+                continue
+            try:
+                pid = int(pinfo.get('id', pid_raw))
+                if pid <= 0 or pid in busy:
+                    continue
+                step = int(pinfo.get('step', 1) or 1)
+                lv   = int(pinfo.get('lv', 1) or 1)
+                exp  = int(pinfo.get('exp', 0) or 0)
+                available_pets.append((pid, step, lv, exp))
+            except Exception:
+                continue
+
+        if not available_pets:
+            return []
+
+        # الترتيب: الرتبة (step) ثم المستوى (lv) ثم الخبرة (exp) تنازلياً
+        available_pets.sort(key=lambda x: (x[1], x[2], x[3]), reverse=True)
+        chosen_pet = available_pets[0][0]
+
+        # تحديث قائمة الحيوانات المحجوزة للمهمة
+        if hasattr(self, '_used_pets') and isinstance(self._used_pets, set):
+            self._used_pets.add(chosen_pet)
+        elif hasattr(self, '_used_pets') and isinstance(self._used_pets, list):
+            self._used_pets.append(chosen_pet)
+
+        best_step = available_pets[0][1]
+        best_lv = available_pets[0][2]
+        self.log.info(f"🐾 [حيوان بديل] تم اختيار الحيوان #{chosen_pet} (رتبة {best_step} | لفل {best_lv}) لغيابه عن التشكيلة.")
+        return [chosen_pet]
+
+    async def get_march_army(
+        self,
+        form_army_dict: Optional[Dict[str, Any]] = None,
+        formation_id: int = 1,
+        available_troops: Optional[Dict[int, int]] = None,
+        fallback_count: int = 0,
+        max_capacity: Optional[int] = None
+    ) -> List[Dict[str, int]]:
+        """
+        تجهيز جيش المسيرة بدقة صارمة وفق التشكيلة المحددة:
+        1. الالتزام الصارم بعدد جنود التشكيلة وعدم زيادة أي جندي من تلقاء النفس.
+        2. جلب كل صنف من أصناف التشكيلة وفق رقمه المحدد بالضبط.
+        3. في حال وجود نقص في أي صنف، يتم تعويض النقص بما يعادل القوة القتالية المفقودة
+           (لا بالعدد الحرفي) من أفضل القوات القتالية المتوفرة، دون أي زيادة فوق السقف.
+        4. استبعاد فخاخ الجدار (800-899) تلقائياً لمنع خطأ 8062.
+        """
+        # 1. القوات المتاحة بالقلعة
+        available: Dict[int, int] = {}
+        if isinstance(available_troops, dict):
+            available = {int(k): int(v) for k, v in available_troops.items() if not (800 <= int(k) < 900) and int(v) > 0}
+        else:
+            available = await self.get_available_troops()
+
+        # 2. جلب تشكيلة الجيش إن لم تُمرر مباشرة
+        target_form: Dict[int, int] = {}
+        raw_form = form_army_dict
+        if (not raw_form or not isinstance(raw_form, dict)) and formation_id > 0:
+            _, _, _, raw_form = await self.get_formation(formation_id)
+
+        if isinstance(raw_form, dict):
+            for k, v in raw_form.items():
+                if str(k).isdigit() and str(v).isdigit():
+                    tid = int(k)
+                    cnt = int(v)
+                    # استبعاد فخاخ الجدار 800-899
+                    if not (800 <= tid < 900) and cnt > 0:
+                        target_form[tid] = cnt
+
+        # في حال عدم وجود تشكيلة نهائياً، استخدام خطة الاحتياط المحددة بـ fallback_count
+        if not target_form:
+            if fallback_count > 0:
+                needed = fallback_count
+                if max_capacity and max_capacity > 0:
+                    needed = min(needed, max_capacity)
+                return self._pick_balanced_combat_troops(available, needed_power=float(needed), cap=needed)
+            return []
+
+        # 3. حساب إجمالي جنود التشكيلة المطلوب (سقف صارم لا يمكن تجاوزه)
+        target_total = sum(target_form.values())
+
+        # صمام أمان السقف الأقصى لسعة مسيرة اللورد (إن حُددت وكانت التشكيلة أكبر منها)
+        scale = 1.0
+        if max_capacity and max_capacity > 0 and target_total > max_capacity:
+            scale = float(max_capacity) / float(target_total)
+            target_total = max_capacity
+            self.log.info(
+                f"🛡️ جنود التشكيلة ({sum(target_form.values()):,}) يتجاوزون سعة مسيرة اللورد ({max_capacity:,}) — "
+                f"تم ضبط السقف لـ {target_total:,} جندي لمنع خطأ 8035"
+            )
+
+        # 4. جلب جنود التشكيلة المطلوبين بالضبط وحساب القوة القتالية المفقودة
+        army_map: Dict[int, int] = {}
+        lost_power = 0.0
+
+        for tid, req_raw in target_form.items():
+            req = max(1, int(req_raw * scale)) if scale < 1.0 else req_raw
+            avail = available.get(tid, 0)
+            take = min(req, avail)
+            if take > 0:
+                army_map[tid] = army_map.get(tid, 0) + take
+                available[tid] -= take
+
+            if take < req:
+                lost_power += (req - take) * self._get_unit_combat_power(tid)
+
+        # 5. تعويض النقص بما يعادل القوة القتالية المفقودة (لا العدد الحرفي)
+        if lost_power > 0.5:
+            army_so_far  = sum(army_map.values())
+            comp_cap     = target_total - army_so_far   # لا تتجاوز السقف الكلي
+            self.log.info(
+                f"ℹ️ قوة قتالية مفقودة من التشكيلة ≈ {lost_power:.1f} — "
+                f"جاري التعويض بقوات مكافئة (سقف {comp_cap:,} جندي، موجود قبل التعويض: {army_so_far:,})..."
+            )
+            compensation = self._pick_balanced_combat_troops(available, needed_power=lost_power, cap=comp_cap)
+            for item in compensation:
+                c_tid = item['id']
+                c_num = item['num']
+                if c_num > 0:
+                    army_map[c_tid] = army_map.get(c_tid, 0) + c_num
+
+        # 6. صمام أمان رياضي نهائي: ضمان ألا يتجاوز المجموع النهائي target_total تحت أي ظرف
+        final_total = sum(army_map.values())
+        if final_total > target_total:
+            excess = final_total - target_total
+            for tid in sorted(army_map.keys(), reverse=True):
+                if excess <= 0:
+                    break
+                trim = min(excess, army_map[tid])
+                if trim > 0:
+                    army_map[tid] -= trim
+                    available[tid] = available.get(tid, 0) + trim
+                    excess -= trim
+
+        # 7. فحص القوة القتالية الفعلية مقابل 50% من قوة التشكيلة المطلوبة
+        target_power = sum(
+            (max(1, int(req * scale)) if scale < 1.0 else req) * self._get_unit_combat_power(tid)
+            for tid, req in target_form.items()
+        )
+        actual_power = sum(
+            count * self._get_unit_combat_power(tid)
+            for tid, count in army_map.items() if count > 0
+        )
+        actual_pct = (actual_power / target_power * 100) if target_power > 0 else 0
+        if target_power > 0 and actual_power < target_power * 0.5:
+            self.log.warning(
+                f"⚠️ [ضعيف_الجيش] نفدت القوات — الجيش المتاح ({actual_power:.0f} قوة = {actual_pct:.0f}%) "
+                f"أقل من 50% من قوة التشكيلة ({target_power:.0f}) — رفض الإرسال."
+            )
+            raise RuntimeError(
+                f"WEAK_ARMY: قوة الجيش ({actual_power:.0f} = {actual_pct:.0f}%) دون 50% من التشكيلة ({target_power:.0f})"
+            )
+
+        # تحديث القوات المحجوزة في self._used_army لتتبع المسيرات المتتالية
+        if hasattr(self, '_used_army') and isinstance(self._used_army, dict):
+            for tid, count in army_map.items():
+                if count > 0:
+                    self._used_army[tid] = self._used_army.get(tid, 0) + count
+
+        return [{"id": tid, "num": num} for tid, num in army_map.items() if num > 0]
+
+    def _get_unit_combat_power(self, tid: int) -> float:
+        """قوة القتال لكل جندي حسب نوعه ورتبته (tid % 100 = الرتبة)."""
+        rank = (tid % 100) * 0.05
+        if 400 <= tid < 500:
+            return 1.00 + rank   # مشاة
+        if 500 <= tid < 600:
+            return 1.10 + rank   # فرسان (أقوى بطبيعتهم)
+        if 600 <= tid < 700:
+            return 1.00 + rank   # رماة
+        if 700 <= tid < 800:
+            return 0.50 + rank   # عربات حصار
+        return 0.50
+
+    def _pick_balanced_combat_troops(
+        self,
+        available: Dict[int, int],
+        needed_power: float,
+        cap: int = 0,
+    ) -> List[Dict[str, int]]:
+        """
+        اختيار قوات قتالية متوازنة بما يعادل needed_power قوة قتالية بالضبط.
+        cap: سقف اختياري لعدد الجنود الكلي (0 = لا سقف).
+        الأولوية: مشاة ← فرسان ← رماة ← عربات (بالرتبة الأعلى أولاً).
+        """
+        if needed_power <= 0 or not available:
+            return []
+
+        infantry, cavalry, archers, carts = [], [], [], []
+        for tid, count in available.items():
+            if count <= 0 or (800 <= tid < 900):
+                continue
+            if 400 <= tid < 500:
+                infantry.append((tid, count))
+            elif 500 <= tid < 600:
+                cavalry.append((tid, count))
+            elif 600 <= tid < 700:
+                archers.append((tid, count))
+            elif 700 <= tid < 800:
+                carts.append((tid, count))
+
+        for lst in (infantry, cavalry, archers, carts):
+            lst.sort(key=lambda x: x[0], reverse=True)
+
+        combat_branches = [b for b in [infantry, cavalry, archers] if b]
+        if not combat_branches:
+            combat_branches = [carts] if carts else []
+        if not combat_branches:
+            return []
+
+        army_map: Dict[int, int] = {}
+        remaining_power = needed_power
+
+        # جولة 1: توزيع متساوٍ بالقوة بين الأصناف
+        branch_power = remaining_power / len(combat_branches)
+        for branch in combat_branches:
+            bp_left = branch_power
+            for tid, _count in branch:
+                if bp_left <= 0 or remaining_power <= 0:
+                    break
+                avail = available.get(tid, 0)
+                if avail <= 0:
+                    continue
+                unit_pow = self._get_unit_combat_power(tid)
+                max_take_by_power = int(min(bp_left, remaining_power) / unit_pow)
+                if cap > 0:
+                    taken_so_far = sum(army_map.values())
+                    max_take_by_power = min(max_take_by_power, cap - taken_so_far)
+                take = min(avail, max_take_by_power)
+                if take <= 0:
+                    continue
+                army_map[tid] = army_map.get(tid, 0) + take
+                available[tid] -= take
+                power_taken = take * unit_pow
+                bp_left        -= power_taken
+                remaining_power -= power_taken
+
+        # جولة 2: استكمال أي فجوة قوة متبقية
+        if remaining_power > 0.5:
+            all_branches = combat_branches + ([carts] if carts else [])
+            for branch in all_branches:
+                for tid, _count in branch:
+                    if remaining_power <= 0:
+                        break
+                    avail = available.get(tid, 0)
+                    if avail <= 0:
+                        continue
+                    unit_pow = self._get_unit_combat_power(tid)
+                    max_take = int(remaining_power / unit_pow)
+                    if cap > 0:
+                        taken_so_far = sum(army_map.values())
+                        max_take = min(max_take, cap - taken_so_far)
+                    take = min(avail, max_take)
+                    if take <= 0:
+                        continue
+                    army_map[tid] = army_map.get(tid, 0) + take
+                    available[tid] -= take
+                    remaining_power -= take * unit_pow
+                if remaining_power <= 0:
+                    break
+
+        return [{"id": tid, "num": num} for tid, num in army_map.items() if num > 0]
 
     async def check_target_busy_or_marched(
         self,

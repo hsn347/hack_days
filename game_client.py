@@ -244,6 +244,21 @@ CMD_REGISTRY: Dict[Tuple[str, str], str] = {
     ('6023', '2'):    "استعلام ودائع دار الادخار",
 }
 
+
+def _deep_merge(source: dict, destination: dict) -> dict:
+    """
+    دمج عميق متداخل (Deep Merge) يمنع استبدال الكائنات الكاملة أو مسح المفاتيح القديمة.
+    - إذا كان الحقل في المصدر dict والهدف dict → يدمج بشكل متداخل.
+    - في أي حالة أخرى → يستبدل قيمة الهدف بقيمة المصدر مباشرة.
+    """
+    for key, value in source.items():
+        if key in destination and isinstance(destination[key], dict) and isinstance(value, dict):
+            _deep_merge(value, destination[key])
+        else:
+            destination[key] = value
+    return destination
+
+
 def _summarize_payload(data: Any) -> str:
     """استخلاص ملخص بشري ذكي وموجز من حمولة الطلب لمنع حشو السجلات."""
     if not isinstance(data, dict) or not data:
@@ -775,6 +790,50 @@ class GateClient:
         if listener in self._packet_listeners:
             self._packet_listeners.remove(listener)
 
+    def check_and_merge_controller(self, ctrl_name: str) -> Tuple[bool, dict]:
+        """
+        يفحص الحزم الواردة (cached_packets) عن أي تحديث للمتحكم المحدد،
+        ويدمجه في init_data بشكل عميق (Deep Merge) دون مسح البيانات الموجودة.
+
+        Args:
+            ctrl_name: اسم المتحكم المطلوب فحصه (مثل "cityCtrl", "heroCtrl").
+
+        Returns:
+            (merged: bool, data: dict)
+            - True  → تم العثور على تحديث في الحزم الواردة ودمجه.
+            - False → لا يوجد تحديث جديد، البيانات كما هي.
+        """
+        merged = False
+
+        for pkt in self.cached_packets.values():
+            if not isinstance(pkt, dict):
+                continue
+
+            c_data = pkt.get('data', {})
+
+            # البحث في retdata (الغلاف الشائع لردود أوامر السيرفر)
+            retdata = c_data.get('retdata', {}) if isinstance(c_data, dict) else {}
+            if isinstance(retdata, dict) and ctrl_name in retdata:
+                new_val = retdata[ctrl_name]
+                if ctrl_name not in self.init_data:
+                    self.init_data[ctrl_name] = {}
+                if isinstance(self.init_data[ctrl_name], dict) and isinstance(new_val, dict):
+                    _deep_merge(new_val, self.init_data[ctrl_name])
+                else:
+                    self.init_data[ctrl_name] = new_val
+                merged = True
+
+            # البحث في data مباشرة (بعض الردود تضع البيانات هنا مباشرة)
+            if isinstance(c_data, dict) and ctrl_name in c_data:
+                new_val = c_data[ctrl_name]
+                if ctrl_name not in self.init_data:
+                    self.init_data[ctrl_name] = {}
+                if isinstance(self.init_data[ctrl_name], dict) and isinstance(new_val, dict):
+                    _deep_merge(new_val, self.init_data[ctrl_name])
+                    merged = True
+
+        return merged, self.init_data.get(ctrl_name, {})
+
     def _log_network_action(self, cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False):
         """توثيق آمن ومعزول تماماً لأحداث الشبكة دون التأثير على عمل المقابس."""
         try:
@@ -1024,6 +1083,12 @@ class GameConnection:
             self._packet_listeners.remove(listener)
         if self._gate:
             self._gate.remove_packet_listener(listener)
+
+    def check_and_merge_controller(self, ctrl_name: str) -> Tuple[bool, dict]:
+        """تفويض مباشر لـ GateClient.check_and_merge_controller."""
+        if self._gate:
+            return self._gate.check_and_merge_controller(ctrl_name)
+        return False, {}
 
     async def close(self):
         if self._gate: await self._gate.close()

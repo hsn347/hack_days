@@ -5,6 +5,9 @@ tools/test_monitor_stress.py — Empirical Stress & Resilience Test Harness
 Milestone 1 Challenger Suite (challenger_p2_m1_1)
 Compliant with AGENTS_CONSTITUTION.md and GEMINI.md Rule 5.
 
+
+python tools/test_task_method.py shook123 get_max_marches_capacity
+
 Challenges SystemResourceMonitor in tools/measure_baseline.py:
 1. Invariant & Non-Zero Metric Validation (Physical RSS, Private MB, Handles, Threads, DB, Globals).
 2. Repeated Snapshotting Stress (200 consecutive snapshots in tight loop, memory leak check).
@@ -43,7 +46,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 # Strictly NEVER import forbidden files: game_client, core.onemt_auth, core.onemt_bot
-from tools.measure_baseline import SystemResourceMonitor
+from scratch.measure_baseline import SystemResourceMonitor
 import api_server
 
 

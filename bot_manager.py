@@ -1051,13 +1051,9 @@ class BotManager:
         last_hb = getattr(self, "last_heartbeat", getattr(self, "last_activity_time", start_ts))
 
         # فحص عزل الخيوط المتعطلة (Stalled detection)
-        is_stalled = False
-        if is_stopped and uptime_sec > 15:
-            is_stalled = True
-        elif (now - last_hb) > 300:  # أكثر من 5 دقائق بدون أي نبض
-            is_stalled = True
-        elif state == "starting" and (now - start_ts) > 45:  # أكثر من 45 ثانية في مرحلة البدء
-            is_stalled = True
+        # القاعدة: أي خيط حي يظهر في العمليات الحية بغض النظر عن حالة البوت.
+        # is_stalled = True فقط إذا تلقّى الخيط إشارة إيقاف ولم يمت بعد (خيط عالق فعلاً).
+        is_stalled = is_stopped and uptime_sec > 15
 
         # تصنيف دقيق للحالات الست المعتمدة:
         if state == "reconnecting" or (reconn_att > 0 and state != "connected" and not conn_alive):
