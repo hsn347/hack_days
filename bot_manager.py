@@ -898,9 +898,6 @@ def disable_elf_task(identifier: Optional[str] = None) -> bool:
         log.error(f"❌ خطأ أثناء تعطيل مهمة العفريت للقلعة {clean_id}: {e}")
         return False
 
-
-
-
 # ════════════════════════════════════════════════════════════════════
 #  كلاس مدير البوت الرئيسي (BotManager)
 # ════════════════════════════════════════════════════════════════════
@@ -1205,9 +1202,8 @@ class BotManager:
 
             cinfo_data = {
                 "lord_name":    str(base_info.get("nickName", self.email.split("@")[0])),
-                "lord_power":   int(fc_info.get("totalFc", getattr(self.context, "total_power", 0))),
-                "castle_level": max(1, getattr(self.context, "castle_level", 1)),
-                "walls_level":  getattr(self.context, "walls_level", 0),
+                "lord_power":   int(fc_info.get("totalFc", 0)),
+                "castle_level": int(fc_info.get("level", 0)),
                 "server_id":    int(base_info.get("partition", 1)) if str(base_info.get("partition", "")).isdigit() else 1,
                 "coordinates":  coords,
                 "uid":          str(base_info.get("uid", getattr(self.account, "user_id", ""))),
@@ -1593,253 +1589,6 @@ class BotManager:
         self._update_bot_conn_state("connected", "تم الاتصال بالقلعة بنجاح 100%")
         return True
 
-    def _print_account_dashboard(self):
-        """طباعة تقرير شامل وواضح لحالة الحساب قبل بدء تنفيذ المهام."""
-        # في Thread Pool mode: لا طباعة — تكلفة I/O عالية بدون فائدة
-        if self._log_callback:
-            return
-        ctx = self.context
-        print("\n" + "═" * 72)
-        print(f"🏰 لوحة معلومات الحساب: {ctx.lord_name} ({self.email})")
-        print("═" * 72)
-        print(f"👑 اللورد: {ctx.lord_name} | المستوى: {ctx.lord_level} | المملكة: #{ctx.kingdom_id}")
-        print(f"⚡ القوة القتالية (Power): {ctx.total_power:,} | 🪙 الذهب: {ctx.gold:,}")
-        print(f"🏰 مستوى القلعة: {ctx.castle_level} | 🧱 مستوى الأسوار: {ctx.walls_level}")
-        print("─" * 72)
-        print("⚔️ جاهزية الثكنات العسكرية:")
-        icons = {"infantry": "🛡️", "cavalry": "🐎", "archers": "🏹", "chariots": "🚜"}
-        for b_key, b_val in ctx.barracks_info.items():
-            status_text = "⏳ قيد التدريب حالياً" if b_val["training"] else "✅ شاغرة وجاهزة للتدريب"
-            print(f"   • {icons.get(b_key, '')} {b_val['name']}: المستوى {b_val['level']} ➔ {status_text}")
-        print("─" * 72)
-        print(f"🌾 مزارع ومناجم المدينة: {ctx.city_farms_count} مبنى (🌾 {ctx.city_farms_breakdown['food']} قمح | 🪵 {ctx.city_farms_breakdown['wood']} خشب | ⛏️ {ctx.city_farms_breakdown['iron']} حديد | 🪙 {ctx.city_farms_breakdown['silver']} فضة)")
-        print("─" * 72)
-        if ctx.research_status["is_busy"]:
-            rem_m = ctx.research_status["remain_seconds"] // 60
-            print(f"🔬 أبحاث الأكاديمية: ⏳ قيد البحث حالياً ({ctx.research_status['tech_name']} | متبقي {rem_m} دقيقة)")
-        else:
-            print("🔬 أبحاث الأكاديمية: ✅ طابور الأبحاث شاغر وجاهز لإجراء بحث جديد")
-        print("─" * 72)
-        if ctx.alliance_id > 0:
-            tag_str = f"[{ctx.alliance_tag}] " if ctx.alliance_tag else ""
-            print(f"🤝 التحالف: {tag_str}{ctx.alliance_name} (ID: {ctx.alliance_id}) | رصيد التبرع: {ctx.alliance_available_donations}/20 مجاني")
-        else:
-            print("🤝 التحالف: ⚠️ الحساب غير منضم إلى أي تحالف حالياً")
-        print("─" * 72)
-        print(f"🚢 سفن الميناء المتاحة للإرسال: {ctx.available_ships} سفينة")
-        print("─" * 72)
-        print("🐾 الحيوانات الأليفة في الحساب:")
-        if ctx.unlocked_pets:
-            pets_str = " | ".join([f"{p['name']} (مستوى {p['lv']})" for p in ctx.unlocked_pets.values()])
-            print(f"   • الحيوانات المتاحة: {pets_str}")
-        else:
-            print("   • الحيوانات المتاحة: 🦌 الغزال (افتراضي)")
-        if ctx.pet_patrol_status["active"]:
-            rem_m = ctx.pet_patrol_status["remain_seconds"] // 60
-            print(f"   • حالة الدورية: ⏳ {ctx.pet_patrol_status['pet_name']} في دورية حالياً (متبقي {rem_m} دقيقة)")
-        else:
-            print("   • حالة الدورية: ✅ شاغرة وجاهزة لبدء دورية جديدة")
-        print("─" * 72)
-        if ctx.territory_ready_rewards > 0:
-            print(f"🚩 جوائز التوسع الإقليمي: 🎁 {ctx.territory_ready_rewards} مكافأة جاهزة للاستلام فوراً!")
-        else:
-            print("🚩 جوائز التوسع الإقليمي: لا توجد مكافآت جديدة جاهزة للاستلام")
-        print("─" * 72)
-        s_8h = ctx.shield_backpack_counts.get("8h", 0)
-        s_24h = ctx.shield_backpack_counts.get("24h", 0)
-        s_3d = ctx.shield_backpack_counts.get("3d", 0)
-        total_shields = s_8h + s_24h + s_3d
-        shield_st = "🛡️ محمي بدرع سلام نشط" if ctx.shield_active else "⚠️ غير محمي (مكشوف بدون درع)"
-        print(f"🛡️ دروع السلام في الحقيبة: {total_shields} درع (🛡️ {s_8h} درع 8س | 🛡️ {s_24h} درع 24س | 🛡️ {s_3d} درع 3أيام) | الحالة: {shield_st}")
-        print("─" * 72)
-        p10 = ctx.stamina_potions.get(300401, 0)
-        p50 = ctx.stamina_potions.get(300402, 0)
-        p100 = ctx.stamina_potions.get(300403, 0)
-        total_pots = p10 + p50 + p100
-        gold_cost_str = f" | 🪙 التبديل بالذهب القادم: {ctx.stamina_gold_cost} ذهب (تم {ctx.stamina_buy_times}/{ctx.stamina_limit_times} اليوم)" if ctx.stamina_gold_cost > 0 else ""
-        print(f"⚡ جرعات الطاقة في الحقيبة: {total_pots} جرعة (🧪 {p10} جرعة +10 | 🧪 {p50} جرعة +50 | 🧪 {p100} جرعة +100){gold_cost_str}")
-        print("─" * 72)
-        print("🎯 حالة المهارات التلقائية (Skills):")
-        if ctx.skills_status:
-            for sk in ctx.skills_status:
-                if sk["is_ready"]:
-                    st_str = "✅ جاهزة للتفعيل فوراً"
-                elif sk["is_unlocked"]:
-                    st_str = f"⏳ في فترة تبريد (متبقي {sk['remain_formatted']})"
-                else:
-                    st_str = "🔒 غير مفتوحة في القلعة"
-                print(f"   • {sk['icon']} {sk['name']}: {st_str}")
-        else:
-            print("   • لم يتم العثور على بيانات المهارات")
-        print("─" * 72)
-        if ctx.hero_draw_ready_count > 0:
-            print(f"🦸 سحوبات الأبطال اليومية: 🎁 {ctx.hero_draw_ready_count} سحوبات مجانية جاهزة للسحب فوراً!")
-        else:
-            print("🦸 سحوبات الأبطال اليومية: لا توجد سحبات مجانية جاهزة حالياً")
-        print("─" * 72)
-        if ctx.treasure_pavilion_ready:
-            print(f"💎 جناح الكنز (Treasure Pavilion): 🎁 استكشاف مجاني جاهز فوراً! (متبقي {ctx.treasure_pavilion_left_times} اليوم)")
-        elif ctx.treasure_pavilion_left_times > 0:
-            print(f"💎 جناح الكنز (Treasure Pavilion): ⏳ قيد التهدئة الفاصلة (متبقي {ctx.treasure_pavilion_left_times} سحبة اليوم)")
-        else:
-            print("💎 جناح الكنز (Treasure Pavilion): لا توجد سحبات مجانية متاحة اليوم")
-        print("─" * 72)
-        if ctx.blacksmith_forge_ready:
-            print(f"🔨 معمل الحدادة (Blacksmith Forge): 🎁 صقل مجاني جاهز فوراً! (متبقي {ctx.blacksmith_forge_left_times} اليوم)")
-        elif ctx.blacksmith_forge_left_times > 0:
-            print(f"🔨 معمل الحدادة (Blacksmith Forge): ⏳ قيد التهدئة الفاصلة (متبقي {ctx.blacksmith_forge_left_times} صقل اليوم)")
-        else:
-            print("🔨 معمل الحدادة (Blacksmith Forge): لا يوجد صقل مجاني متاح اليوم")
-        print("─" * 72)
-        if ctx.imperial_mausoleum_has_award:
-            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): 🎁 جائزة معلقة أو نرد إضافي جاهز للاستلام/الرمي! (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
-        elif ctx.imperial_mausoleum_free_throw:
-            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): 🎁 رمي مجاني جاهز فوراً! (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
-        else:
-            print(f"🏛️ الضريح الإمبراطوري (Imperial Mausoleum): لا توجد رميات مجانية متاحة اليوم (🪙 عملات النحاس: {ctx.imperial_mausoleum_copper:,} | 🎲 رصيد النرد: {ctx.imperial_mausoleum_dice_count})")
-        print("─" * 72)
-        if not ctx.alliance_treasure_in_alliance:
-            print("📦 صندوق التحالف (Alliance Treasure): ⚠️ غير متاح (الحساب غير منضم إلى أي تحالف)")
-        elif ctx.alliance_treasure_can_receive:
-            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 صندوق مكتمل جاهز للاستلام فوراً! (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
-        elif ctx.alliance_treasure_free_dig_ready:
-            print(f"📦 صندوق التحالف (Alliance Treasure): 🎁 حفر صندوق مجاني جاهز فوراً! (متبقي {ctx.alliance_treasure_left_free_today}/{ctx.alliance_treasure_max_dig} اليوم)")
-        elif ctx.alliance_treasure_is_digging:
-            rem_m = max(1, ctx.alliance_treasure_dig_remain // 60)
-            print(f"📦 صندوق التحالف (Alliance Treasure): ⏳ قيد الحفر حالياً (متبقي {rem_m} دقيقة | تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
-        elif ctx.alliance_treasure_left_free_today <= 0:
-            print(f"📦 صندوق التحالف (Alliance Treasure): ✅ تم استهلاك كافة المحاولات اليوم ({ctx.alliance_treasure_max_dig}/{ctx.alliance_treasure_max_dig})")
-        else:
-            print(f"📦 صندوق التحالف (Alliance Treasure): ⏳ في فترة انتظار فاصلة (تم {ctx.alliance_treasure_dig_count}/{ctx.alliance_treasure_max_dig} اليوم)")
-        print("─" * 72)
-        if ctx.daily_luxury_gift_count > 0:
-            print(f"🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): 🎁 {ctx.daily_luxury_gift_count} هدية فاخرة جاهزة للاستلام فوراً! (حتى اليوم {ctx.daily_luxury_gift_max_day})")
-        elif ctx.daily_luxury_gift_max_day > 0:
-            print(f"🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): ✅ تم استلام كافة الهدايا المتاحة حتى اليوم {ctx.daily_luxury_gift_max_day}")
-        else:
-            print("🎁 الهدية الفاخرة اليومية (Daily Luxury Gift): لا توجد هدايا فاخرة متاحة حالياً")
-        print("─" * 72)
-        if ctx.vip_gift_ready:
-            print(f"👑 صندوق الـ VIP اليومي (VIP Daily Gift): 🎁 صندوق مجاني جاهز للاستلام فوراً! (VIP مستوى {ctx.vip_lv} | نقاط: {ctx.vip_point:,})")
-        else:
-            print(f"👑 صندوق الـ VIP اليومي (VIP Daily Gift): ✅ تم استلام الصندوق اليوم مسبقاً (VIP مستوى {ctx.vip_lv} | نقاط: {ctx.vip_point:,})")
-        print("─" * 72)
-        free_t_info = " | 🎁 سحبة مجانية جاهزة!" if ctx.tactics_hall_free_draw_ready else (f" | سحبات باقية: {ctx.tactics_hall_free_draw_left}" if ctx.tactics_hall_free_draw_left > 0 else "")
-        if ctx.tactics_hall_status["active"]:
-            rem_m = ctx.tactics_hall_status["remain_seconds"] // 60
-            print(f"🏛️ قاعة الاستراتيجيات: ⏳ قيد البحث حالياً ({ctx.tactics_hall_status['icon']} {ctx.tactics_hall_status['tactic_name']} | متبقي {rem_m} دقيقة{free_t_info})")
-        else:
-            ready_txt = " | 🎁 سحبة كتب التكتيكات جاهزة!" if ctx.tactics_hall_free_draw_ready else ""
-            print(f"🏛️ قاعة الاستراتيجيات: ✅ طابور التكتيكات شاغر وجاهز لتطوير بحث جديد{ready_txt}")
-        print("─" * 72)
-        if ctx.city_farms_count > 0:
-            print(f"💧 طاحونة الماء (تعزيز الإنتاج): ⚡ {ctx.watermill_boosted_count}/{ctx.city_farms_count} مبنى موارد معزز حالياً")
-        else:
-            print("💧 طاحونة الماء (تعزيز الإنتاج): لم يتم رصد مباني موارد بالمدينة")
-        print("─" * 72)
-        if ctx.fountain_free_wishes > 0:
-            print(f"⛲ نافورة الأمنيات الملكية: 🎁 {ctx.fountain_free_wishes} أمنية مجانية متاحة اليوم!")
-        else:
-            print("⛲ نافورة الأمنيات الملكية: لا توجد أمنيات مجانية متاحة حالياً")
-        print("─" * 72)
-        if ctx.workshop_status["active_name"]:
-            rem_m = ctx.workshop_status["remain_seconds"] // 60
-            print(f"🔨 ورشة المواد (خامات العتاد): ⏳ {ctx.workshop_status['occupied']}/5 قيد الإنتاج ({ctx.workshop_status['active_icon']} {ctx.workshop_status['active_name']} | متبقي {rem_m} دقيقة)")
-        elif ctx.workshop_status["occupied"] > 0:
-            print(f"🔨 ورشة المواد (خامات العتاد): ⏳ {ctx.workshop_status['occupied']}/5 في خط الإنتاج")
-        else:
-            print("🔨 ورشة المواد (خامات العتاد): ✅ خط الإنتاج شاغر بالكامل (0/5) وجاهز لتصنيع الخامات")
-        print("─" * 72)
-        if ctx.caravan_status["marching"]:
-            rem_m = ctx.caravan_status["remain_seconds"] // 60
-            print(f"🐪 القافلة وحراسة الكنز: ⏳ تسير في الطريق حالياً (حمولة: {ctx.caravan_status['cargo_amount']:,} | متبقي للوصول: {rem_m} دقيقة)")
-        else:
-            print("🐪 القافلة وحراسة الكنز: 🚀 جاهزة للإرسال أو استلام الجوائز ومعالجة أحداث الطريق")
-        print("─" * 72)
-        if ctx.merchant_status["is_open"]:
-            print(f"🛒 التاجر المتجول: 🏪 الكشك مفتوح ({ctx.merchant_status['items_count']} سلع معروضة | {ctx.merchant_status['resource_items_count']} متاحة بالموارد)")
-        else:
-            print("🛒 التاجر المتجول: 🚪 الكشك مغلق حالياً")
-        print("─" * 72)
-        pd = ctx.port_delegate_status
-        print(f"⚓ الميناء العسكري وتفويض السفن: 🟢 {pd['ready_tasks']} جاهزة للتعيين | ⏳ {pd['running_tasks']} جارية | 🎁 {pd['claimable_tasks']} للاستلام | 💰 نقاط الجزيرة: {pd['island_points']:,}")
-        print("─" * 72)
-        sb = ctx.savings_bank_status
-        if sb["has_slip"]:
-            if sb["is_claimable"]:
-                print(f"🏦 دار الادخار (بنك التوفير): 🎁 الوديعة مكتملة الاستحقاق ({sb['deposit']:,} ذهب لمدة {sb['days']} يوم) — جاهزة لسحب الأرباح فوراً!")
-            else:
-                rem_d = sb["remain_seconds"] // 86400
-                rem_h = (sb["remain_seconds"] % 86400) // 3600
-                print(f"🏦 دار الادخار (بنك التوفير): ⏳ قيد الاستثمار ({sb['deposit']:,} ذهب لمدة {sb['days']} يوم | متبقي: {rem_d} يوم و {rem_h} ساعة)")
-        else:
-            print("🏦 دار الادخار (بنك التوفير): 🟢 لا توجد وديعة نشطة — جاهز لإيداع الذهب واستثماره")
-        print("─" * 72)
-        bs = ctx.building_status
-        if bs["active_queues"] > 0:
-            q_desc = []
-            for q in bs["queues_info"]:
-                b_name = "🏰 القلعة" if q['bid'] == '101' else ("🧱 الأسوار" if q['bid'] == '102' else BUILDING_INFO.get(q['bid'], {}).get("name", f"مبنى #{q['bid']}"))
-                rem_m = int(q['remain'] // 60)
-                q_desc.append(f"{b_name} (مستوى {q['lv']} | ⏳ متبقي {rem_m} د)")
-            print(f"🏗️ طوابير البناء: ⏳ {bs['active_queues']}/2 قيد العمل ({' | '.join(q_desc)})")
-        else:
-            print("🏗️ طوابير البناء: 🟢 متاحة بالكامل (0/2) | جاهزة لبدء ترقية جديدة فوراً")
-        print("─" * 72)
-        fs = ctx.fortress_status
-        if fs["level"] > 0:
-            if fs["is_training"]:
-                rem_m = fs["remain_seconds"] // 60
-                print(f"🏰 حصن الحرب (فخاخ السور): ⏳ قيد التدريب (مستوى {fs['level']} | فخاخ السور: {fs['standing_traps']:,}/{fs['wall_capacity']:,} | متبقي {rem_m} دقيقة)")
-            else:
-                print(f"🏰 حصن الحرب (فخاخ السور): 🟢 متاح للتدريب (مستوى {fs['level']} | فخاخ السور: {fs['standing_traps']:,}/{fs['wall_capacity']:,})")
-        else:
-            print("🏰 حصن الحرب (فخاخ السور): ⚠️ مبنى حصن الحرب غير مشيد في القلعة")
-        if ctx.merit_level > 0 or ctx.merit_daily_points > 0:
-            print("─" * 72)
-            claimed_str = f"{len(ctx.merit_chests_claimed)}/6 مستلمة"
-            if ctx.merit_chests_ready:
-                ready_boxes_desc = ", ".join(f"صندوق {g}ن" for _, g in ctx.merit_chests_ready)
-                ready_str = f"🎁 {len(ctx.merit_chests_ready)} صندوق جاهز للاستلام! ({ready_boxes_desc})"
-            else:
-                ready_str = "0 جاهز للاستلام"
-            if ctx.merit_next_chest_goal > 0:
-                next_str = f"⏳ القادم عند {ctx.merit_next_chest_goal} نقطة (متبقي {ctx.merit_next_chest_remain} نقطة)"
-            else:
-                next_str = "🎉 تم فتح جميع صناديق اليوم بالكامل"
-            print(f"🎖️ مهام المجد والنشاط اليومي (Daily Glory & Prestige):")
-            print(f"   • 👑 مستوى المجد: {ctx.merit_level} | نقاط المجد: {ctx.merit_exp:,}")
-            print(f"   • ⚡ نقاط النشاط اليومي الحالية: {ctx.merit_daily_points} نقطة")
-            print(f"   • 🎁 صناديق النشاط اليومي (6 صناديق): {claimed_str} | {ready_str} | {next_str}")
-            print(f"   • 📋 إحصائيات المهام اليومية ({ctx.merit_tasks_total} مهمة): 🎁 {ctx.merit_tasks_ready} جاهزة للاستلام | ⏳ {ctx.merit_tasks_in_progress} قيد الإنجاز | ✅ {ctx.merit_tasks_claimed} مستلمة")
-            ready_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "ready"]
-            if ready_tasks:
-                print(f"   • 🎁 أبرز المهام المكتملة الجاهزة للاستلام فوراً ({len(ready_tasks)} مهمة):")
-                for t in ready_tasks[:7]:
-                    print(f"      - {t['icon']} {t['name']}: مكتملة ({t['c_num']:,}/{t['l_num']:,}) ✅")
-                if len(ready_tasks) > 7:
-                    print(f"      - ... و {len(ready_tasks) - 7} مهمة أخرى جاهزة")
-            started_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "in_progress" and t["c_num"] > 0]
-            unstarted_tasks = [t for t in ctx.merit_tasks_details if t["status_type"] == "in_progress" and t["c_num"] == 0]
-            if started_tasks:
-                print(f"   • ⏳ المهام قيد الإنجاز حالياً ({len(started_tasks)} مهمة):")
-                for t in started_tasks[:6]:
-                    print(f"      - {t['icon']} {t['name']}: {t['c_num']:,}/{t['l_num']:,} (متبقي {t['remaining']:,})")
-            elif unstarted_tasks:
-                print(f"   • 📌 نماذج من المهام غير المنجزة اليوم:")
-                for t in unstarted_tasks[:4]:
-                    print(f"      - {t['icon']} {t['name']} (مطلوب {t['l_num']:,})")
-        print("═" * 72 + "\n")
-
-
-    # ════════════════════════════════════════════════════════════════════════════════════════
-    # 🌟🌟🌟 [منطقة قائمة المهام الرئيسية — TASK EXECUTION PIPELINE] 🌟🌟🌟
-    # ════════════════════════════════════════════════════════════════════════════════════════
-    # هنا يمكنك التدخل والتعديل بحرية وسهولة تامة:
-    #   1. تغيير الترتيب: قدم أو أخر أي سطر في القائمة أدناه لتغيير تسلسل التنفيذ فوراً.
-    #   2. تعطيل مهمة: ضع علامة # قبل السطر لتعطيلها بالكامل.
-    #   3. إضافة مهمة جديدة: أضف سطراً جديداً: ("اسم المهمة", self.step_X_...)
-    # ════════════════════════════════════════════════════════════════════════════════════════
 
     async def _wait_for_stop_signal(self) -> None:
         """مراقب غير متزامن فائق السرعة يستيقظ فوراً عند طلب إيقاف البوت من خارج الـ Thread."""
@@ -2120,7 +1869,13 @@ class BotManager:
             log.info(msg)
             return {"skipped": True, "message": msg}
 
-        if self.context.alliance_id == 0:
+        # فحص معرف التحالف من السياق أو مباشرة من الذاكرة الحية (Zero-Request)
+
+        alliance_ctrl = self.conn.init_data.get('allianceCtrl', {})
+        minfo = alliance_ctrl.get('memberinfo', {}).get('minfo', {})
+        alliance_id = int(minfo.get('aid', 0))
+
+        if alliance_id == 0:
             msg = "⏭️ تم تخطي مهمة التحالف لأن الحساب غير منضم لأي تحالف."
             log.info(msg)
             return {"skipped": True, "message": msg}
@@ -2129,7 +1884,7 @@ class BotManager:
         if bool(all_cfg.get("auto_help", True)):
             try:
                 helplist = self.conn.init_data.get("allianceCtrl", {}).get("helplist", [])
-                my_uid = int(self.conn.uid or self.context.uid or 0)
+                my_uid = int(self.conn.uid or 0)
                 
                 # فحص الذاكرة الحية: هل يوجد طلب متاح للمساعدة؟
                 has_pending_help = any(
@@ -2151,7 +1906,7 @@ class BotManager:
             except Exception as e:
                 log.warning(f"⚠️ خطأ غير حرج أثناء فحص/إرسال مساعدة التحالف (1010/47): {e}")
 
-        log.info(f"🤝 بدء تنفيذ مهمة التحالف (المساعدة والتبرع لعلوم التحالف ID: {self.context.alliance_id})...")
+        log.info(f"🤝 بدء تنفيذ مهمة التحالف (المساعدة والتبرع لعلوم التحالف")
         task_cfg = {
             "enabled": True,
             "auto_help": False,  # تم إرسال مساعدة الكل مسبقاً وفورياً عبر 1010/47
