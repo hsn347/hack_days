@@ -1931,12 +1931,6 @@ class BotManager:
 
     # [4] مهمة الميناء
     async def step_4_port_task_1(self) -> Dict[str, Any]:
-        """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
-        port_cfg = self.config.get("port", {})
-        if not bool(port_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
 
         # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
         tr = self.conn.init_data.get("timeRewardCtrl", {})
@@ -1952,7 +1946,6 @@ class BotManager:
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
             "enabled": True,
-            "ship_type": int(port_cfg.get("ship_type", 0))
         }
         port_task = PortTask(self.conn, task_cfg)
         res_port = await port_task.run()
@@ -2503,12 +2496,6 @@ class BotManager:
 
     # [4] مهمة الميناء
     async def step_4_port_task_2(self) -> Dict[str, Any]:
-        """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
-        port_cfg = self.config.get("port", {})
-        if not bool(port_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
 
         # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
         tr = self.conn.init_data.get("timeRewardCtrl", {})
@@ -2524,7 +2511,6 @@ class BotManager:
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
             "enabled": True,
-            "ship_type": int(port_cfg.get("ship_type", 0))
         }
         port_task = PortTask(self.conn, task_cfg)
         res_port = await port_task.run()
@@ -3006,12 +2992,6 @@ class BotManager:
 
     # [4] مهمة الميناء
     async def step_4_port_task_3(self) -> Dict[str, Any]:
-        """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
-        port_cfg = self.config.get("port", {})
-        if not bool(port_cfg.get("enabled", True)):
-            msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
-            log.info(msg)
-            return {"skipped": True, "message": msg}
 
         # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
         tr = self.conn.init_data.get("timeRewardCtrl", {})
@@ -3027,7 +3007,6 @@ class BotManager:
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
             "enabled": True,
-            "ship_type": int(port_cfg.get("ship_type", 0))
         }
         port_task = PortTask(self.conn, task_cfg)
         res_port = await port_task.run()
