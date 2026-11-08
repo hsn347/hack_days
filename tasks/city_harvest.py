@@ -108,15 +108,12 @@ class CityHarvestTask(BaseTask):
         blist = []
 
         # 1. القراءة الفورية المباشرة من الذاكرة الحية (Zero-Request)
-        if hasattr(self.conn, "init_data") and isinstance(self.conn.init_data, dict):
-            city_ctrl = self.conn.init_data.get("cityCtrl", {})
-            if isinstance(city_ctrl, dict):
-                blist = city_ctrl.get("blist", [])
+        blist = (self.conn.init_data.get("cityCtrl") or {}).get("blist") or []
 
         # 2. خطة احتياطية فقط إذا لم تكن البيانات متوفرة بالذاكرة الحية
         if not blist:
             try:
-                self.log.info("🛑🛑🛑🛑🛑🛑🛑")
+                self.log.info("🛑⚠️🛑⚠️🛑⚠️🛑⚠️🛑⚠️🛑")
                 r = await self.conn.query("1001", "1", {}, timeout=8)
                 if r and isinstance(r.get("data"), dict):
                     blist = r["data"].get("blist", [])
