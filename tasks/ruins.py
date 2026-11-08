@@ -287,6 +287,8 @@ class RuinsTask(BaseTask):
         self._used_army = {}
         cur_range       = search_range
         cmd_opting_retries = 0
+        last_result = None
+        result_code = None
 
         while sent_count < max_marches and attempts < max_attempts:
             # فحص أمان سريع للتأكد من عدم انطلاق مسيرة أطلال أثناء المحاولات
@@ -295,9 +297,19 @@ class RuinsTask(BaseTask):
                     self.log.info("🛑 تم رصد مسيرة أطلال نشطة بالخارج — إنهاء المحاولات بنجاح.")
                     break
 
+            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
+            before_avail = await self.get_available_marches_count(force_sync=True)
+            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
+            if before_avail == 0:
+                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
+                last_result = "QUEUE_FULL"
+                result_code = "QUEUE_FULL"
+                break
+
             attempts += 1
             self.log.debug(f"🚀 محاولة استكشاف الأطلال ({sent_count + 1}/{max_marches})...")
             result_code = await self._send_one_ruins(cur_range, formation_id, explore_time, troops_cfg)
+            last_result = result_code
 
             if result_code == "SUCCESS":
                 sent_count += 1
@@ -354,8 +366,10 @@ class RuinsTask(BaseTask):
         self.log.info(f"🏁 [الأطلال] تم إرسال {sent_count}/{max_marches} مسيرة بنجاح")
         if sent_count > 0:
             return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة استكشاف أطلال", sent=sent_count)
-        if result_code in ("ALREADY_ACTIVE", "8037"):
+        if result_code in ("ALREADY_ACTIVE", "8037") or last_result in ("ALREADY_ACTIVE", "8037"):
             return TaskResult.ok("مسيرة استكشاف أطلال نشطة بالخارج بالفعل", sent=0, already_active=True)
+        if result_code == "QUEUE_FULL" or last_result == "QUEUE_FULL":
+            return TaskResult.queue_full()
         return TaskResult.fail("لم يتم إرسال أي مسيرة استكشاف أطلال", retry_after=120)
 
     # ── إرسال مسيرة استكشاف واحدة ─────────────────────────────────
@@ -728,8 +742,13 @@ class RuinsTask(BaseTask):
 
         # 🛑 الركيزة الرابعة: صمام أمان الانتصار الحاسم (Victory Assurance)
         if total_troops <= 0:
-            self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة لإرسال مسيرة الأطلال!")
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] لا تتوفر قوات بالقلعة لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة ولا توجد مسيرات بالخارج!")
+                return "NO_ARMY"
 
         if target_form_fc > 0:
             fc_ratio = actual_march_fc / target_form_fc
@@ -818,7 +837,13 @@ class RuinsTask(BaseTask):
         elif err == '8009':
             self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
             await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ نقص حقيقي في القوات ولا توجد مسيرات نشطة بالخارج!")
+                return "NO_ARMY"
         elif err == '9007020':
             for hid in chosen_heroes:
                 self._busy.add(hid)

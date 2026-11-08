@@ -1761,13 +1761,6 @@ class BotManager:
         ctx.fortress_status["standing_traps"] = st_count
         ctx.fortress_status["wall_capacity"] = ctx.walls_level * 1000
 
-        # 4. فحص سفن الميناء 1033/2
-        r_port = await self.conn.query("1033", "2", {}, timeout=6)
-        if r_port and "data" in r_port:
-            ships = r_port["data"].get("shipList", [])
-            available = sum(1 for s in ships if s.get("status", 0) == 0)
-            ctx.available_ships = available
-
         # 5. فحص حالة طابور الأبحاث في مبنى الأكاديمية 1017/3
         r_tech = await self.conn.query("1017", "3", {}, timeout=6)
         if r_tech and r_tech.get("err") == "0":
@@ -2547,7 +2540,7 @@ class BotManager:
             ("🌾 حصد مزارع المدينة (City Harvest)",              self.step_1_city_harvest_task,        "city_harvest"),
             ("🔬 أبحاث الأكاديمية والعلوم (Academy Research)",   self.step_2_research_task,             "research"),
             ("🤝 مهام وتبرعات التحالف (Alliance Task)",          self.step_3_alliance_task,             "alliance"),
-            ("🚢 مهمة الميناء (Port Task)",                     self.step_4_port_task,                 "port"),
+            ("🚢 مهمة الميناء (Port Task)",                     self.step_4_port_task_1,                 "port"),
             ("⚔️ مهمة تدريب الجنود (Train Troops)",             self.step_5_train_task,                "train"),
             ("🐾 مهمة دورية الحيوان الأليف (Pet Patrol)",        self.step_6_pet_patrol_task,           "pet_patrol"),
             ("🚩 جوائز التوسع الإقليمي (Territory Expansion)",   self.step_7_territory_expansion_task,  "territory_expansion"),
@@ -2565,6 +2558,7 @@ class BotManager:
             ("🏛️ قاعة الاستراتيجيات (Tactics Hall)",             self.step_12_tactics_hall_task,        "tactics_hall"),
             ("💧 طاحونة الماء (Watermill Boost)",                self.step_13_watermill_task,           "watermill"),
             ("⛲ نافورة الأمنيات (Trevi Fountain)",              self.step_14_fountain_task,            "fountain"),
+            ("🚢 مهمة الميناء (Port Task)",                     self.step_4_port_task_2,                 "port"),
             ("🔨 ورشة المواد (Material Workshop)",               self.step_15_material_workshop_task,   "material_workshop"),
             ("🐪 القافلة وحراسة الكنز (Caravan Task)",           self.step_16_caravan_task,             "caravan"),
             ("⚓ الميناء العسكري (Port Delegate)",               self.step_18_port_delegate_task,       "port_delegate"),
@@ -2579,6 +2573,7 @@ class BotManager:
             ("🛒 استبدال متجر المحارب (Warrior Exchange)",      self.step_22f_warrior_exchange_task,   "warrior_exchange"),
             ("🕊️ المزايدة على الحمام الزاجل (Auction Bid)",     self.step_22h_auction_task,            "auction"),
             ("🎖️ منسق الفيالق والمسيرات (March Orchestrator)", self.step_23_march_manager_task,     "march_manager"),
+            ("🚢 مهمة الميناء - منتصف الدورة (Port Task - Mid)", self.step_4_port_task_3,           "port"),
             # ──────────────────────────────────────────────────────────────────────────────
             # لإضافة مهمة جديدة أضف سطراً: ("📌 اسم المهمة", self.step_N_..., "config_key")
             # ──────────────────────────────────────────────────────────────────────────────
@@ -2853,13 +2848,24 @@ class BotManager:
         return {"success": res.success, "message": res.message, "data": res.data}
 
     # [4] مهمة الميناء
-    async def step_4_port_task(self) -> Dict[str, Any]:
+    async def step_4_port_task_1(self) -> Dict[str, Any]:
         """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
         port_cfg = self.config.get("port", {})
         if not bool(port_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
+
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        tr = self.conn.init_data.get("timeRewardCtrl", {})
+        tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
+        if tr_data.get("isAllReceive") == 1:
+            return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
+        now_ts = time.time()
+        rec_time = float(tr_data.get("receiveTime", 0))
+        if rec_time > now_ts:
+            rem = int(rec_time - now_ts)
+            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
 
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
@@ -2933,6 +2939,14 @@ class BotManager:
             msg = "⏭️ تم تخطي دورية الحيوان الأليف بناءً على رغبة المستخدم (pet_patrol.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
+
+        # فحص حالة دورية الحيوان في الذاكرة الحية وتخطيها فوراً إذا كانت جارية
+        patrol_info = (self.conn.init_data.get("petCtrl") or {}).get("petPatrolInfo") or {}
+        if int(patrol_info.get("endTime", 0)) > time.time():
+            remaining_min = (int(patrol_info["endTime"]) - int(time.time())) // 60
+            log.info(f"⏭️ تم تخطي مهمة الحيوان: لا يزال في دورية نشطة (متبقي {remaining_min} دقيقة).")
+            return {"skipped": True, "message": f"الحيوان في دورية حالياً (متبقي {remaining_min} دقيقة)"}
+
 
         # الحيوان القائم بالدورية: الغزال (1261) دائماً بدون الرجوع للمستخدم
         target_pet_id = 1261
@@ -3415,6 +3429,39 @@ class BotManager:
 
         return {"success": res.success, "message": res.message, "data": res.data}
 
+    # [4] مهمة الميناء
+    async def step_4_port_task_2(self) -> Dict[str, Any]:
+        """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
+        port_cfg = self.config.get("port", {})
+        if not bool(port_cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        tr = self.conn.init_data.get("timeRewardCtrl", {})
+        tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
+        if tr_data.get("isAllReceive") == 1:
+            return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
+        now_ts = time.time()
+        rec_time = float(tr_data.get("receiveTime", 0))
+        if rec_time > now_ts:
+            rem = int(rec_time - now_ts)
+            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
+
+        log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
+        task_cfg = {
+            "enabled": True,
+            "ship_type": int(port_cfg.get("ship_type", 0))
+        }
+        port_task = PortTask(self.conn, task_cfg)
+        res_port = await port_task.run()
+        if res_port.success:
+            log.info(f"🎉 نتيجة الميناء: {res_port.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة الميناء: {res_port.message}")
+        return {"success": res_port.success, "message": res_port.message, "data": res_port.data}
+
     # [15] مهمة ورشة المواد وصناعة خامات العتاد
     async def step_15_material_workshop_task(self) -> Dict[str, Any]:
         """فحص خط إنتاج ورشة المواد وملء الفراغات المتاحة بالخامات المحددة من المستخدم بالتوازن التام."""
@@ -3884,6 +3931,39 @@ class BotManager:
             self._log_callback(f"🎖️ {res.message}")
 
         return {"success": res.success, "message": res.message, "data": res.data}
+
+    # [4] مهمة الميناء
+    async def step_4_port_task_3(self) -> Dict[str, Any]:
+        """فحص وتنفيذ مهمة الميناء التجارية لكافة السفن المتاحة."""
+        port_cfg = self.config.get("port", {})
+        if not bool(port_cfg.get("enabled", True)):
+            msg = "⏭️ تم تخطي مهمة الميناء بناءً على رغبة المستخدم (port.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        tr = self.conn.init_data.get("timeRewardCtrl", {})
+        tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
+        if tr_data.get("isAllReceive") == 1:
+            return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
+        now_ts = time.time()
+        rec_time = float(tr_data.get("receiveTime", 0))
+        if rec_time > now_ts:
+            rem = int(rec_time - now_ts)
+            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
+
+        log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
+        task_cfg = {
+            "enabled": True,
+            "ship_type": int(port_cfg.get("ship_type", 0))
+        }
+        port_task = PortTask(self.conn, task_cfg)
+        res_port = await port_task.run()
+        if res_port.success:
+            log.info(f"🎉 نتيجة الميناء: {res_port.message}")
+        else:
+            log.warning(f"⚠️ تنبيه في مهمة الميناء: {res_port.message}")
+        return {"success": res_port.success, "message": res_port.message, "data": res_port.data}
 
 
 

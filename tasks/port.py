@@ -21,9 +21,11 @@ class PortTask(BaseTask):
 
     async def run(self) -> TaskResult:
         # إرسال طلب استلام جائزة سفينة الميناء مباشرة
+        self.log.info("🚀 بدء استلام جوائز سفن الميناء التجارية...")
         r = await self.conn.query('1033', '2', {})
         if not r or str(r.get('err', '-1')) != '0':
             err_msg = r.get('msg') if r else 'لا يوجد رد'
+            self.log.warning(f"⚠️ تعذر استلام جائزة الميناء: {err_msg}")
             return TaskResult.fail(f" تعذر استلام جائزة الميناء: {err_msg}")
 
         # تحديث بيانات الميناء في الذاكرة الحية فوراً بالعداد والبيانات الجديدة
@@ -31,4 +33,5 @@ class PortTask(BaseTask):
         if isinstance(new_data, dict):
             self.conn.init_data['timeRewardCtrl'] = new_data
 
+        self.log.info("🎉 تم استلام جائزة سفينة الميناء بنجاح!")
         return TaskResult.ok("تم استلام جائزة سفينة الميناء بنجاح")

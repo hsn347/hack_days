@@ -2,14 +2,21 @@
   "residential": {
     "users": {
       "HCKiyTOxamexBEZxlEZyoUmIWmj1": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
-      "VwqQvK0eAEeTTOwkwLT2v61mglP2": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023"
+      "VwqQvK0eAEeTTOwkwLT2v61mglP2": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023",
+      "Lq1Ma7t9Stb8EVHimfd8pNEv49w2": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+      "XKDxCFVmEFZSyyyQugrLXI30DkN2": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
+      "FOWkFyqWdmXHMqQI4Di8FmqcODm2": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
     },
     "castles": {
       "jzarco.all@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
       "shook123@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
       "shook124@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
       "kingarlong.ahmed@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023",
-      "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204"
+      "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
+      "hogsgigkigwh@hoo.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+      "watarosy@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+      "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
+      "burcudemr@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
     }
   },
   "free": {
@@ -18,15 +25,22 @@
   },
   "users": {
     "HCKiyTOxamexBEZxlEZyoUmIWmj1": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
-    "VwqQvK0eAEeTTOwkwLT2v61mglP2": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023"
+    "VwqQvK0eAEeTTOwkwLT2v61mglP2": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023",
+    "Lq1Ma7t9Stb8EVHimfd8pNEv49w2": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+    "XKDxCFVmEFZSyyyQugrLXI30DkN2": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
+    "FOWkFyqWdmXHMqQI4Di8FmqcODm2": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
   },
   "castles": {
     "jzarco.all@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
     "shook123@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
     "shook124@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
     "kingarlong.ahmed@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@208.66.76.99:6023",
-    "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204"
+    "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
+    "hogsgigkigwh@hoo.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+    "watarosy@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
+    "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
+    "burcudemr@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
   },
   "active_mode": "residential",
-  "updated_at": 1794044747.687013
+  "updated_at": 1794141901.076409
 }

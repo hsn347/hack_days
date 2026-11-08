@@ -51,15 +51,22 @@ class TaskResult:
     data:         Dict[str, Any] = field(default_factory=dict)
     should_retry: bool = False
     retry_after:  int  = 0    # ثواني قبل إعادة المحاولة
+    action:       Optional[str] = None
 
     @classmethod
-    def ok(cls, message: str = "✅ تم بنجاح", **data) -> "TaskResult":
-        return cls(success=True, message=message, data=data)
+    def ok(cls, message: str = "✅ تم بنجاح", action: Optional[str] = None, **data) -> "TaskResult":
+        act = action or data.get("action")
+        if act:
+            data["action"] = act
+        return cls(success=True, message=message, data=data, action=act)
 
     @classmethod
-    def fail(cls, message: str, retry_after: int = 0, **data) -> "TaskResult":
+    def fail(cls, message: str, retry_after: int = 0, action: Optional[str] = None, **data) -> "TaskResult":
+        act = action or data.get("action")
+        if act:
+            data["action"] = act
         return cls(success=False, message=message, data=data,
-                   should_retry=retry_after > 0, retry_after=retry_after)
+                   should_retry=retry_after > 0, retry_after=retry_after, action=act)
 
     @property
     def error(self) -> str:
@@ -76,6 +83,21 @@ class TaskResult:
 
     def __bool__(self):
         return self.success
+
+
+# ── المعرفات الرسمية لمهام الهيبة اليومية (meritoriousTaskCtrl) ──────
+PRESTIGE_QUEST_IDS: Dict[str, int] = {
+    # مهام المسيرات الخارجية
+    "invaders":        4112004,  # قتل غزاة الهيبة (5 هجمات)
+    "stronghold":      4112019,  # الهجوم على معقل الهيبة (3 هجمات)
+    "gather":          4112006,  # جمع موارد الهيبة (25 ألف مورد)
+    # مهام داخل المدينة
+    "smuggler":        4112022,  # متجر المهربين (10 مشتريات)
+    "watermill":       4112027,  # تعزيز إنتاج الساقية (مرة واحدة)
+    "badge_exchange":  4112024,  # استبدال وسام الحرب (مرة واحدة)
+    "train":           4112001,  # تدريب الجنود
+    "fortress":        4112015,  # تدريب الفخاخ
+}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -148,7 +170,10 @@ class BaseTask(ABC):
     async def get_active_marches_count(self, force_sync: bool = False) -> int:
         """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة بالاعتماد على الذاكرة الحية (Zero-Request)."""
         has_local = bool(getattr(self.conn, 'local_queues', None))
-        if force_sync or not has_local:
+        if force_sync and not has_local:
+            self.log.info("😋😋😋😋😋😋")
+            sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
+            self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
             try:
                 await self.conn.query('1007', '1000', {}, timeout=2)
                 await asyncio.sleep(0.3)
@@ -171,17 +196,30 @@ class BaseTask(ABC):
                             all_queue_data.extend(nd)
             all_queue_data.extend(self.conn.cached_packets.get(202, []))
 
+        queues_to_check = []
         for item in all_queue_data:
-            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
-            for q in q_list:
-                if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
-                    qid = q.get('id') or q.get('queueId')
-                    if qid:
-                        if qid not in seen_ids:
-                            seen_ids.add(qid)
-                            active += 1
-                    else:
+            if not isinstance(item, dict):
+                if isinstance(item, list):
+                    queues_to_check.extend(item)
+                continue
+            if 'status' in item or 'queueId' in item:
+                queues_to_check.append(item)
+            elif 'data' in item:
+                d = item['data']
+                if isinstance(d, list):
+                    queues_to_check.extend(d)
+                elif isinstance(d, dict):
+                    queues_to_check.append(d)
+
+        for q in queues_to_check:
+            if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
+                qid = q.get('id') or q.get('queueId')
+                if qid:
+                    if qid not in seen_ids:
+                        seen_ids.add(qid)
                         active += 1
+                else:
+                    active += 1
         return active
 
     async def get_max_marches_capacity(self, allow_network: bool = True) -> int:
@@ -233,6 +271,190 @@ class BaseTask(ABC):
         max_cap = await self.get_max_marches_capacity(allow_network=allow_network)
         active = await self.get_active_marches_count(force_sync=force_sync)
         return max(0, max_cap - active)
+
+    async def get_active_gather_resource_types(self, force_sync: bool = False) -> Set[int]:
+        """
+        فحص أنواع الموارد التي تجمعها مسيرات نشطة بالخارج حالياً (2=قمح, 3=خشب, 4=حديد, 5=فضة, 1=ذهب):
+        - قراءة فورية من الذاكرة الحية (Zero-Request) إذا كانت local_queues محملة.
+        - استعلام 1007/1000 مشروط فقط إذا كانت الذاكرة خالية تماماً (not has_local).
+        """
+        has_local = bool(getattr(self.conn, 'local_queues', None))
+        if not has_local:
+            try:
+                await self.conn.query('1007', '1000', {}, timeout=2)
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
+        active: Set[int] = set()
+        queues = list(getattr(self.conn, "local_queues", []) or [])
+        for q in queues:
+            if not isinstance(q, dict) or q.get("status") not in (0, 1, 2, 3, 4, 7):
+                continue
+            res_sub = None
+            for loc_key in ("to", "from"):
+                info = q.get(loc_key, {})
+                if isinstance(info, dict) and info.get("mapType") == 5:
+                    res_sub = info.get("subMapType")
+                    if not res_sub:
+                        parts = str(info.get("id", "")).split("-")
+                        if len(parts) >= 4 and parts[2] == "5" and parts[3].isdigit():
+                            res_sub = int(parts[3])
+                if res_sub:
+                    break
+            if not res_sub:
+                data_obj = q.get("data", {})
+                if isinstance(data_obj, dict):
+                    code = data_obj.get("resourceType")
+                    if code:
+                        res_sub = {1001: 1, 1002: 2, 1003: 3, 1004: 4, 1005: 5}.get(int(code))
+            if res_sub and int(res_sub) in (1, 2, 3, 4, 5):
+                active.add(int(res_sub))
+        return active
+
+    async def _get_active_gather_types(self, force_sync: bool = False) -> Set[int]:
+        """اسم بديل للتوافق مع المهام القائمة."""
+        return await self.get_active_gather_resource_types(force_sync=force_sync)
+
+    def get_lord_stamina(self) -> int:
+        """
+        جلب رصيد طاقة اللورد الحالي من بيانات القلعة المحملة بالذاكرة الحية (Zero-Request / 0ms):
+        lordInfoCtrl -> base -> health
+        أو loginDataInitCtrl -> base -> health
+        """
+        try:
+            if not hasattr(self, 'conn') or not self.conn or not getattr(self.conn, 'init_data', None):
+                return 100
+            init = self.conn.init_data
+            base = (
+                init.get('lordInfoCtrl', {}).get('base', {})
+                or init.get('loginDataInitCtrl', {}).get('base', {})
+            )
+            val = base.get('health')
+            if val is not None:
+                return int(float(val))
+            return 100
+        except Exception:
+            return 100
+
+    def _get_lord_stamina(self) -> int:
+        """اسم بديل للتوافق مع المهام القائمة."""
+        return self.get_lord_stamina()
+
+    def get_castle_level(self) -> int:
+        """
+        استخراج المستوى الحقيقي للقلعة (Castle Level - bid 101) من بيانات الذاكرة الحية (Zero-Request / 0ms):
+        cityCtrl -> blist -> bid == 101 -> lv
+        """
+        init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
+        city_ctrl = init_data.get("cityCtrl", {}) if isinstance(init_data, dict) else {}
+        blist = city_ctrl.get("blist", []) if isinstance(city_ctrl, dict) else []
+        castle_lv = 1
+        for b in blist:
+            if isinstance(b, dict):
+                binfo = b.get("binfo", b)
+                if isinstance(binfo, dict) and str(binfo.get("bid", "")) == "101":
+                    try:
+                        castle_lv = max(castle_lv, int(binfo.get("lv", 1)))
+                    except Exception:
+                        pass
+        return castle_lv
+
+    def _get_castle_level(self) -> int:
+        """اسم بديل للتوافق مع المهام القائمة."""
+        return self.get_castle_level()
+
+    def get_prestige_quest_info(self, quest_key_or_id: str | int) -> Dict[str, Any]:
+        """
+        جلب تفاصيل وحالة مهمة الهيبة اليومية من الذاكرة الحية (Zero-Request / 0ms):
+        - يبحث في meritoriousTaskCtrl -> taskData أو tasks أو daily_task
+        - يعيد dict موحد:
+          {"found": bool, "task_id": int, "c_num": int, "l_num": int, "status": int, "is_done": bool, "remaining": int}
+        """
+        qid = quest_key_or_id if isinstance(quest_key_or_id, int) else PRESTIGE_QUEST_IDS.get(str(quest_key_or_id).strip().lower(), 0)
+        merit_ctrl = getattr(self.conn, 'init_data', {}).get("meritoriousTaskCtrl", {}) if hasattr(self, 'conn') and self.conn else {}
+        if not isinstance(merit_ctrl, dict):
+            return {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "status": 0, "is_done": False, "remaining": 0}
+
+        # 1. فحص taskData (القاموس الأساسي لمهام الهيبة اليومية)
+        task_data = merit_ctrl.get("taskData", {})
+        if isinstance(task_data, dict) and str(qid) in task_data:
+            t = task_data[str(qid)]
+            if isinstance(t, dict):
+                c = int(t.get("cNum", t.get("c_num", 0)))
+                l = int(t.get("lNum", t.get("l_num", 0)))
+                s = int(t.get("status", 0))
+                is_done = (s == 4) or (l > 0 and c >= l)
+                remaining = max(0, l - c) if l > 0 else 0
+                return {"found": True, "task_id": qid, "c_num": c, "l_num": l, "status": s,
+                        "is_done": is_done, "remaining": remaining}
+
+        # 2. فحص قائمة tasks
+        tasks = merit_ctrl.get("tasks", [])
+        if isinstance(tasks, dict):
+            tasks = list(tasks.values())
+        if isinstance(tasks, list):
+            for t in tasks:
+                if isinstance(t, dict):
+                    t_id = t.get("id") or t.get("taskId")
+                    if t_id and int(t_id) == qid:
+                        c = int(t.get("cNum", t.get("c_num", 0)))
+                        l = int(t.get("lNum", t.get("l_num", 0)))
+                        s = int(t.get("status", t.get("is_finish", 0)))
+                        is_done = (s in (1, 4)) or (l > 0 and c >= l)
+                        remaining = max(0, l - c) if l > 0 else 0
+                        return {"found": True, "task_id": qid, "c_num": c, "l_num": l, "status": s,
+                                "is_done": is_done, "remaining": remaining}
+
+        # 3. فحص daily_task (العدادات اليومية)
+        daily_task = merit_ctrl.get("daily_task", {})
+        if isinstance(daily_task, dict) and str(qid) in daily_task:
+            c = int(daily_task[str(qid)])
+            return {"found": True, "task_id": qid, "c_num": c, "l_num": 1, "status": 4 if c >= 1 else 0,
+                    "is_done": c >= 1, "remaining": 0 if c >= 1 else 1}
+
+        return {"found": False, "task_id": qid, "c_num": 0, "l_num": 0, "status": 0, "is_done": False, "remaining": 0}
+
+    def _get_quest_info(self, quest_key_or_id: str | int) -> Dict[str, Any]:
+        """اسم بديل للتوافق مع المهام القائمة."""
+        return self.get_prestige_quest_info(quest_key_or_id)
+
+    async def refresh_prestige_data(self, force: bool = False, min_interval: float = 30.0) -> bool:
+        """
+        تحديث بيانات مهام الهيبة اليومية (meritoriousTaskCtrl) من السيرفر:
+        - قراءة فورية من الذاكرة الحية إذا كانت البيانات حديثة (Zero-Request).
+        - استعلام 1000/1 (CMD_LOGIN_DATA_INIT) المعتمد بروتوكولياً إذا طُلب force=True أو انقضت min_interval ثانية.
+        """
+        if not hasattr(self, 'conn') or not self.conn or not getattr(self.conn, 'is_connected', False):
+            return False
+
+        now = time.time()
+        last_sync = getattr(self.conn, '_last_merit_sync_time', 0.0)
+        has_merit = "meritoriousTaskCtrl" in getattr(self.conn, 'init_data', {})
+
+        if not force and has_merit and (now - last_sync < min_interval):
+            return True
+
+        try:
+            r = await self.conn.query("1000", "1", {}, timeout=6)
+            if r and isinstance(r, dict):
+                data_obj = r.get("data", {})
+                retdata = data_obj.get("retdata", {}) if isinstance(data_obj, dict) else (r.get("retdata", {}) if isinstance(r.get("retdata"), dict) else {})
+                if isinstance(retdata, dict) and "meritoriousTaskCtrl" in retdata:
+                    merit = retdata["meritoriousTaskCtrl"]
+                    if isinstance(merit, dict):
+                        self.conn.init_data["meritoriousTaskCtrl"] = merit
+                        setattr(self.conn, '_last_merit_sync_time', now)
+                        return True
+        except Exception as e:
+            if hasattr(self, 'log'):
+                self.log.debug(f"استعلام 1000/1 لتجديد مهام الهيبة: {e}")
+
+        return has_merit
+
+    async def _refresh_merit_data(self, force: bool = False) -> bool:
+        """اسم بديل للتوافق مع المهام القائمة."""
+        return await self.refresh_prestige_data(force=force)
 
     async def get_castle_coords(self, allow_network: bool = True) -> Tuple[int, int]:
         """

@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather.py --email "hmzawyha44@gmail.com" --res 2 --level 5 --range 100
+python tasks/gather.py --email "shook123@gmail.com" --res 2 --level 5 --range 100
 
 الميزات المطورة:
   1. لا تعتمد على أي تشكيلة مسبقة من المستخدم (تحديد ذاتي كامل 100%).
@@ -796,6 +796,15 @@ class GatherTask(BaseTask):
         while sent_count < target_marches and attempts < max_attempts:
             self.log.debug(f"🏹 محاولة إرسال مسيرة الفيلق ({sent_count + 1}/{target_marches})...")
 
+            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
+            before_avail = await self.get_available_marches_count(force_sync=True)
+            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
+
+            if before_avail == 0:
+                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
+                last_status = "QUEUE_FULL"
+                break
+
             status = await self._send_one_march(
                 res_info=res_info,
                 target_lv=target_lv,
@@ -810,6 +819,12 @@ class GatherTask(BaseTask):
                 sent_count += 1
                 consecutive_errors = 0
                 cmd_opting_retries = 0
+                # ── 🧪 اختبار: قراءة الفيالق المتاحة بعد الإرسال الناجح ──
+                after_avail = await self.get_available_marches_count(force_sync=True)
+                self.log.info(
+                    f"🔬 [MARCH_TEST] بعد الإرسال #{sent_count}: الفيالق المتاحة = {after_avail}"
+                    f" (قبل={before_avail} → بعد={after_avail} | فرق={before_avail - after_avail})"
+                )
                 if sent_count < target_marches:
                     # مهلة أمان مدمجة في الكود بين إطلاق المسيرات لمكافحة الحظر وتشتيت النمط
                     wait_time = round(random.uniform(9.0, 14.0), 2)
@@ -1060,8 +1075,13 @@ class GatherTask(BaseTask):
             max_march_troops=max_march_troops
         )
         if not army_list:
-            self.log.warning(f"⚠️ لا توجد أي قوات متاحة بالقلعة حالياً لإرسال مسيرة جمع.")
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] لا تتوفر قوات بالقلعة لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة ولا توجد مسيرات بالخارج!")
+                return "NO_ARMY"
 
         # صمام أمان صارم: فرض سقف سعة المسيرة لمنع تجاوز طاقة الفيلق أو خطأ 8035
         from tasks.march_capacity import enforce_safe_march_troops
@@ -1126,7 +1146,13 @@ class GatherTask(BaseTask):
         elif err == '8009':
             self.log.warning(f"   ⚠️ نقص في القوات المتاحة بالقلعة (كود {err})")
             await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ نقص حقيقي في القوات ولا توجد مسيرات نشطة بالخارج!")
+                return "NO_ARMY"
         elif err in ('9007020', '8014', '9007014'):
             for hid in chosen_heroes_list:
                 self._busy_heroes.add(hid)

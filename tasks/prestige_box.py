@@ -61,18 +61,8 @@ class PrestigeBoxTask(BaseTask):
         super().__init__(conn, config or {})
 
     async def _refresh_merit_data(self) -> Dict[str, Any]:
-        """تجديد بيانات مهام الهيبة ونقاط النشاط اليومي من السيرفر مباشرة."""
-        try:
-            r = await self.conn.query("1013", "1", {}, timeout=6)
-            if r and isinstance(r, dict) and "data" in r:
-                merit_data = r["data"].get("meritoriousTaskCtrl")
-                if merit_data and isinstance(merit_data, dict):
-                    self.conn.init_data["meritoriousTaskCtrl"] = merit_data
-                    return merit_data
-        except Exception as e:
-            self.log.debug(f"استعلام 1013/1 لم يكتمل: {e}")
-
-        # استخدام الكاش المتوفر كبديل احتياطي
+        """تجديد بيانات مهام الهيبة ونقاط النشاط اليومي من السيرفر مباشرة عبر BaseTask."""
+        await self.refresh_prestige_data(force=True)
         return self.conn.init_data.get("meritoriousTaskCtrl", {})
 
     def get_ready_boxes(self, merit_data: Dict[str, Any]) -> Tuple[int, List[int], List[int]]:

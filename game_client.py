@@ -444,6 +444,7 @@ class GateClient:
         self._buf = b""
         self.cached_packets: dict = {}
         self.local_queues: list = []
+        self.local_queues_map: dict = {}
         self.kick_reason: str = ""
         self._lock    = asyncio.Lock()
         self._alive   = False
@@ -649,7 +650,35 @@ class GateClient:
                     notify_id = str(data_obj.get('notifyID', ''))
                     notify_data = data_obj.get('notifyData', [])
                     if notify_id == 'NOTIFY_LOCAL_QUEUE_SYNC' and isinstance(notify_data, list):
-                        self.local_queues = notify_data
+                        for item in notify_data:
+                            if not isinstance(item, dict):
+                                continue
+                            msg_type = item.get('msgType')
+                            d = item.get('data')
+                            if msg_type in (1, 3):  # ADD or UPDATE
+                                if isinstance(d, dict) and d.get('id'):
+                                    self.local_queues_map[d['id']] = d
+                            elif msg_type == 2:  # REMOVE (عودة الفيلق للقلعة)
+                                q_id = d.get('id') if isinstance(d, dict) else d
+                                if q_id:
+                                    self.local_queues_map.pop(q_id, None)
+                            elif msg_type == 4:  # ADD_ALL (المزامنة الكاملة من 1007/1000)
+                                if isinstance(d, list):
+                                    for q in d:
+                                        if isinstance(q, dict) and q.get('id'):
+                                            self.local_queues_map[q['id']] = q
+                                elif isinstance(d, dict) and d.get('id'):
+                                    self.local_queues_map[d['id']] = d
+                            elif msg_type == 5:  # REMOVE_ALL (مسح شامل)
+                                self.local_queues_map.clear()
+                            else:
+                                if isinstance(d, dict) and d.get('id'):
+                                    self.local_queues_map[d['id']] = d
+                                elif isinstance(d, list):
+                                    for q in d:
+                                        if isinstance(q, dict) and q.get('id'):
+                                            self.local_queues_map[q['id']] = q
+                        self.local_queues = list(self.local_queues_map.values())
                     elif notify_id == 'NOTIFY_ARMY' and isinstance(notify_data, list):
                         for item in notify_data:
                             if isinstance(item, dict) and item.get('armyInfo'):
@@ -726,6 +755,23 @@ class GateClient:
                         for item in notify_data:
                             if isinstance(item, dict) and item.get('notifyType') == 'points':
                                 pve['points'] = int(item.get('points', pve.get('points', 0)))
+                    elif notify_id in ('NOTIFY_MERITORIOUS_TASK', '1070'):
+                        merit = self.init_data.setdefault('meritoriousTaskCtrl', {})
+                        if isinstance(notify_data, dict):
+                            if 'taskData' in notify_data and isinstance(notify_data['taskData'], dict):
+                                merit.setdefault('taskData', {}).update(notify_data['taskData'])
+                            if 'tasks' in notify_data and isinstance(notify_data['tasks'], (list, dict)):
+                                merit['tasks'] = notify_data['tasks']
+                            for k, v in notify_data.items():
+                                if k not in ('taskData', 'tasks'):
+                                    merit[k] = v
+                        elif isinstance(notify_data, list):
+                            task_data = merit.setdefault('taskData', {})
+                            for item in notify_data:
+                                if isinstance(item, dict):
+                                    tid = item.get('id') or item.get('taskId') or item.get('dynamicId')
+                                    if tid:
+                                        task_data[str(tid)] = item
                     if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
                         if isinstance(notify_data, list):
                             for item in notify_data:

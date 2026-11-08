@@ -114,6 +114,15 @@ class StrongholdTask(BaseTask):
 
         while sent_count < max_marches:
             current_target_idx = sent_count + 1
+
+            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
+            before_avail = await self.get_available_marches_count(force_sync=True)
+            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
+            if before_avail == 0:
+                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
+                last_result = "QUEUE_FULL"
+                break
+
             self.log.debug(f"🚀 محاولة إرسال مسيرة المعقل رقم ({current_target_idx}/{max_marches})...")
             result_code = await self._send_one_stronghold(min_lv, max_lv, search_range, formation_id, troops_cfg)
             last_result = result_code
@@ -384,7 +393,13 @@ class StrongholdTask(BaseTask):
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
                 await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
-                return "NO_ARMY"
+                active_marches = await self.get_active_marches_count(force_sync=True)
+                if active_marches >= 1:
+                    self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
+                    return "QUEUE_FULL"
+                else:
+                    self.log.warning("⚠️ نقص حقيقي في القوات ولا توجد مسيرات نشطة بالخارج!")
+                    return "NO_ARMY"
             elif err in ('8032', '10002', '10003'):
                 self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
                 await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)

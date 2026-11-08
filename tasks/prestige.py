@@ -169,30 +169,8 @@ class PrestigeTask(BaseTask):
             await asyncio.sleep(0.3)
 
     async def _refresh_merit_data(self) -> bool:
-        """
-        تجديد بيانات مهام الهيبة من السيرفر مباشرة.
-        """
-        try:
-            r = await self.conn.query("1013", "1", {}, timeout=5)
-            if r and isinstance(r, dict) and "data" in r:
-                merit_data = r["data"].get("meritoriousTaskCtrl")
-                if merit_data and isinstance(merit_data, dict):
-                    self.conn.init_data["meritoriousTaskCtrl"] = merit_data
-                    return True
-        except Exception as e:
-            self.log.debug(f"استعلام 1013/1 لتجديد مهام الهيبة لم يكتمل: {e}")
-
-        try:
-            r_all = await self.conn.query("1001", "1", {}, timeout=6)
-            if r_all and isinstance(r_all, dict) and "data" in r_all:
-                merit_data = r_all["data"].get("meritoriousTaskCtrl")
-                if merit_data and isinstance(merit_data, dict):
-                    self.conn.init_data["meritoriousTaskCtrl"] = merit_data
-                    return True
-        except Exception as e:
-            self.log.debug(f"استعلام 1001/1 لتجديد مهام الهيبة لم يكتمل: {e}")
-
-        return False
+        """تجديد بيانات مهام الهيبة من السيرفر مباشرة عبر BaseTask."""
+        return await self.refresh_prestige_data(force=True)
 
     def get_quest_info(self, quest_key_or_id: str | int) -> Dict[str, Any]:
         """

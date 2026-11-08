@@ -139,65 +139,151 @@ def upload_frontend(client):
     return True
 
 
+# ─────────────────────────────────────────────────────────────
+# قواعد الاستثناء والفلترة لنشر الباك إند
+# ─────────────────────────────────────────────────────────────
+EXCLUDE_DIRS = {
+    # مستثناة بناءً على طلبك الصريح:
+    "game file",
+    "game files",
+    "game_files",
+    "scratch",
+    "tests",
+    "test",
+    # مجلدات الواجهة والتطوير والتوثيق المحلي:
+    "dashboard",
+    "docs",
+    "node_modules",
+    ".git",
+    ".github",
+    ".idea",
+    ".vscode",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "dumps",
+    "apk_libs",
+    "lua_src",
+    ".agents",
+}
+
+EXCLUDE_EXTENSIONS = {
+    ".pyc",
+    ".pyo",
+    ".pyd",
+    ".log",
+    ".tmp",
+    ".bak",
+    ".apk",
+    ".zip",
+    ".tar",
+    ".gz",
+}
+
+EXCLUDE_EXACT_FILES = {
+    # حماية قصوى لقواعد بيانات الإنتاج الحية وجلسات الحسابات الحقيقية
+    "castles.db",
+    "castles.db-wal",
+    "castles.db-shm",
+    "session_cache.json",
+    ".env",
+    "auto_resume.json",
+    "sniffer_log.txt",
+    "exclude_history.json",
+    "shared_gather_history.json",
+    "backend_dist.tar.gz",
+    "dist.tar.gz",
+}
+
+
+def _should_exclude_dir(dir_name: str) -> bool:
+    d = dir_name.lower().strip()
+    return d in EXCLUDE_DIRS or d.startswith(".git") or d.startswith("__pycache__")
+
+
+def _should_exclude_file(file_name: str) -> bool:
+    fn = file_name.lower().strip()
+    if fn in EXCLUDE_EXACT_FILES:
+        return True
+    if any(fn.endswith(ext) for ext in EXCLUDE_EXTENSIONS):
+        return True
+    if fn.endswith(".sqlite3") or fn.endswith(".db"):
+        return True
+    return False
+
+
+def create_backend_bundle() -> tuple[str, int]:
+    """
+    تجميع ذري مضغوط (tar.gz) لكامل ملفات ومجلدات الباك إند الجديدة
+    مع استثناء صارم وتلقائي للمجلدات والملفات غير المطلوبة.
+    """
+    tar_path = os.path.join(DEPLOY_DIR, "backend_dist.tar.gz")
+    if os.path.exists(tar_path):
+        try:
+            os.remove(tar_path)
+        except Exception:
+            pass
+
+    packed_count = 0
+    with tarfile.open(tar_path, "w:gz") as tar:
+        for root, dirs, files in os.walk(LOCAL_DIR):
+            # تصفية المجلدات مباشرة لمنع الدخول فيها لتسريع الفحص
+            dirs[:] = [d for d in dirs if not _should_exclude_dir(d)]
+
+            rel_root = os.path.relpath(root, LOCAL_DIR)
+            if rel_root != "." and any(_should_exclude_dir(part) for part in rel_root.replace("\\", "/").split("/")):
+                continue
+
+            for f in files:
+                if _should_exclude_file(f):
+                    continue
+
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, LOCAL_DIR).replace("\\", "/")
+
+                # تحقق مضاعف لضمان عدم تمرير أي ملف يقع تحت مسار مستثنى
+                path_parts = rel_path.split("/")
+                if any(_should_exclude_dir(p) for p in path_parts[:-1]):
+                    continue
+
+                tar.add(full_path, arcname=rel_path)
+                packed_count += 1
+
+    return tar_path, packed_count
+
+
 def upload_backend_files(client):
-    print("\n🐍 رفع ملفات الباك إند المحدثة إلى السيرفر...")
+    print("\n📦 [1/3] تجميع وضغط حزمة الباك إند الذرية (مع تطبيق الاستثناءات)...")
+    tar_path, packed_count = create_backend_bundle()
+    file_size_mb = os.path.getsize(tar_path) / (1024 * 1024)
+    print(f"   ✅ تم حزم {packed_count} ملفاً بنجاح في أرشيف مضغوط بحجم ({file_size_mb:.2f} MB)")
+    print("   🚫 تم استثناء: game file و scratch و tests وقواعد البيانات وملفات الكاش بالكامل.")
+
+    print("\n🚀 [2/3] رفع الحزمة الذرية إلى السيرفر عبر SFTP...")
+    _run(client, f"mkdir -p {REMOTE_DIR}")
     sftp = client.open_sftp()
-
-    backend_files = [
-        ("api_server.py", f"{REMOTE_DIR}/api_server.py"),
-        ("game_client.py", f"{REMOTE_DIR}/game_client.py"),
-        ("bot_manager.py", f"{REMOTE_DIR}/bot_manager.py"),
-        ("reset_stuck_castles.py", f"{REMOTE_DIR}/reset_stuck_castles.py"),
-        ("firebase_runner.py", f"{REMOTE_DIR}/firebase_runner.py"),
-        ("database/castle_prereqs.json", f"{REMOTE_DIR}/database/castle_prereqs.json"),
-        ("database/castle_prereqs.json", f"{REMOTE_DIR}/castle_prereqs.json"),
-        ("check_building_upgrade.py", f"{REMOTE_DIR}/check_building_upgrade.py"),
-        ("database/tech_names.json", f"{REMOTE_DIR}/database/tech_names.json"),
-        ("database/tech_names.json", f"{REMOTE_DIR}/tech_names.json"),
-        ("get_march_capacity.py", f"{REMOTE_DIR}/get_march_capacity.py"),
-        ("check_online.py", f"{REMOTE_DIR}/check_online.py"),
-        ("check_optional_chests.py", f"{REMOTE_DIR}/check_optional_chests.py"),
-        ("requirements.txt", f"{REMOTE_DIR}/requirements.txt"),
-        ("deploy_logic/nginx-empire.conf", f"{REMOTE_DIR}/nginx-empire.conf"),
-        ("deploy_logic/empire-bot.service", "/etc/systemd/system/empire-bot.service"),
-        ("manage_bots.py", f"{REMOTE_DIR}/manage_bots.py"),
-    ]
-
-    # رفع كافة ملفات مجلد core (بما فيها tenants.py و database.py ومخطط البيانات)
-    core_dir = os.path.join(LOCAL_DIR, "core")
-    if os.path.exists(core_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/core")
-        for cf in os.listdir(core_dir):
-            if cf.endswith(".py") or cf.endswith(".json"):
-                backend_files.append((f"core/{cf}", f"{REMOTE_DIR}/core/{cf}"))
-
-    # رفع كافة ملفات مجلد tasks
-    tasks_dir = os.path.join(LOCAL_DIR, "tasks")
-    if os.path.exists(tasks_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/tasks")
-        for tf in os.listdir(tasks_dir):
-            if tf.endswith(".py"):
-                backend_files.append((f"tasks/{tf}", f"{REMOTE_DIR}/tasks/{tf}"))
-
-    # رفع كافة ملفات مجلد proxy
-    proxy_dir = os.path.join(LOCAL_DIR, "proxy")
-    if os.path.exists(proxy_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/proxy")
-        for pf in os.listdir(proxy_dir):
-            if pf.endswith(".py") or pf.endswith(".json"):
-                backend_files.append((f"proxy/{pf}", f"{REMOTE_DIR}/proxy/{pf}"))
-
-    for rel_path, remote_path in backend_files:
-        local_path = os.path.join(LOCAL_DIR, rel_path)
-        if os.path.exists(local_path):
-            sftp.put(local_path, remote_path)
-            print(f"  ⬆️  {rel_path}")
-
+    remote_tar = f"{REMOTE_DIR}/backend_dist.tar.gz"
+    sftp.put(tar_path, remote_tar)
     sftp.close()
+
+    try:
+        os.remove(tar_path)
+    except Exception:
+        pass
+
+    print("\n⚡ [3/3] فك الضغط الذري وتحديث إعدادات النظام على السيرفر...")
+    extract_cmd = (
+        f"tar -xzf {remote_tar} -C {REMOTE_DIR} && "
+        f"rm -f {remote_tar} && "
+        f"if [ -f '{REMOTE_DIR}/deploy_logic/empire-bot.service' ]; then cp -f '{REMOTE_DIR}/deploy_logic/empire-bot.service' /etc/systemd/system/empire-bot.service; fi && "
+        f"if [ -f '{REMOTE_DIR}/deploy_logic/nginx-empire.conf' ]; then cp -f '{REMOTE_DIR}/deploy_logic/nginx-empire.conf' '{REMOTE_DIR}/nginx-empire.conf'; fi"
+    )
+    _run(client, extract_cmd)
+
     print("  📦 تثبيت وتحديث مكتبات البايثون في بيئة السيرفر (pip install)...")
     _run(client, f"{REMOTE_DIR}/venv/bin/pip install -q -r {REMOTE_DIR}/requirements.txt")
     _run(client, "systemctl daemon-reload")
-    print("✅ تم رفع ملفات الباك إند وتحديث إعدادات النظام بنجاح.")
+    print("✅ تم رفع وتحديث كافة ملفات الباك إند وإعدادات النظام بنجاح تام.")
 
 
 def deploy_frontend_only():

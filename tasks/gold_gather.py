@@ -1272,8 +1272,13 @@ class GoldGatherTask(BaseTask):
             max_march_troops=max_march_troops
         )
         if not army_list:
-            self.log.warning(f"⚠️ لا توجد أي قوات متاحة بالقلعة حالياً لإرسال مسيرة جمع.")
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] لا تتوفر قوات بالقلعة لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة ولا توجد مسيرات بالخارج!")
+                return "NO_ARMY"
 
         # صمام أمان صارم: فرض سقف سعة المسيرة لمنع تجاوز طاقة الفيلق أو خطأ 8035
         from tasks.march_capacity import enforce_safe_march_troops
@@ -1335,7 +1340,13 @@ class GoldGatherTask(BaseTask):
             return "QUEUE_FULL"
         elif err == '8009':
             self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ نقص حقيقي في القوات ولا توجد مسيرات نشطة بالخارج!")
+                return "NO_ARMY"
         elif err == '9007020':
             for hid in chosen_heroes:
                 self._busy.add(hid)

@@ -953,6 +953,15 @@ class MonsterTask(BaseTask):
 
         while sent_count < max_marches:
             current_target_idx = sent_count + 1
+            
+            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
+            before_avail = await self.get_available_marches_count(force_sync=True)
+            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
+            if before_avail == 0:
+                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
+                last_result = "QUEUE_FULL"
+                break
+
             self.log.debug(f"🚀 محاولة إرسال مسيرة الهجوم رقم ({current_target_idx}/{max_marches})...")
             result_code = await self._send_one_attack(map_type, sub_type, min_lv, max_lv, search_range, formation_id, troops_cfg)
             last_result = result_code
@@ -1112,37 +1121,14 @@ class MonsterTask(BaseTask):
         type_name = target_info.get("name", "متمردين" if map_type == 35 else "غزاة")
 
         # 1. جلب إحداثيات البحث (من الإعدادات أو من الذاكرة الحية cityCtrl)
-        cx = self.config.get('center_x') or self.config.get('x')
-        cy = self.config.get('center_y') or self.config.get('y')
-        if cx is None or cy is None:
-            pos = self.conn.init_data.get('cityCtrl', {}).get('cinfo', {}).get('pos', {}) if hasattr(self.conn, 'init_data') else {}
-            if pos and 'x' in pos and 'y' in pos:
-                cx = int(pos['x'])
-                cy = int(pos['y'])
-            else:
-                try:
-                    r_castle = await self.conn.query('1006', '25', {"uid": uid_int})
-                    if r_castle and r_castle.get('retData'):
-                        cx = int(r_castle['retData'].get('x'))
-                        cy = int(r_castle['retData'].get('y'))
-                except Exception:
-                    pass
-        if cx is None or cy is None:
+        cx, cy = await self.get_castle_coords()
+        if not cx or not cy:
+            self.log.warning("⚠️ تعذر تحديد إحداثيات القلعة للهجوم على المعقل!")
             return "ERROR"
-        cx, cy = int(cx), int(cy)
 
 
         # 2. جلب معرف المملكة من الذاكرة الحية
-        kingdom_id = 0
-        if getattr(self.conn, 'kingdom_id', None):
-            try: kingdom_id = int(self.conn.kingdom_id)
-            except Exception: pass
-        if not kingdom_id:
-            lord_base = self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}) if hasattr(self.conn, 'init_data') else {}
-            if isinstance(lord_base, dict):
-                kingdom_id = int(lord_base.get('partition', 0))
-        if not kingdom_id:
-            kingdom_id = 4
+        kingdom_id = await self.get_kingdom_id()
 
 
         # 3. البحث عن الأهداف (متمردين 35 أو غزاة 6)
@@ -1158,6 +1144,7 @@ class MonsterTask(BaseTask):
             "maxLv": max_lv,
             "range": search_range
         })
+
         raw_candidates = r_search.get('result', []) if r_search else []
         candidates = [c for c in raw_candidates if str(c.get('id', '')) not in exclude_map]
         if not candidates:
@@ -1165,64 +1152,10 @@ class MonsterTask(BaseTask):
             return "NO_TARGET"
 
         # 4. جلب القوات المتوفرة بالقلعة من الذاكرة الحية مباشرة
-        available: Dict[int, int] = {}
-        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
-        if isinstance(army_ctrl, dict):
-            for k, v in army_ctrl.get('totalArmy', {}).items():
-                if str(k).isdigit() and str(v).isdigit():
-                    available[int(k)] = int(v)
-
-        if not available:
-            try:
-                self.conn.debug_log("🛑🛑🛑🛑🛑🛑🛑")
-                r_army = await self.conn.query('1005', '1', {})
-                if r_army and 'data' in r_army:
-                    for k, v in r_army['data'].get('totalArmy', {}).items():
-                        if str(k).isdigit() and str(v).isdigit():
-                            available[int(k)] = int(v)
-            except Exception:
-                pass
-
-
-        for tid, used in self._used_army.items():
-            if tid in available:
-                available[tid] = max(0, available[tid] - used)
+        available = await self.get_available_troops()
 
         # 5. جلب بيانات التشكيلة المحفوظة من الذاكرة الحية مباشرة
-        form_heroes = []
-        form_pets = []
-        form_rune_pages = []
-        form_army_dict = {}
-        if formation_id and formation_id > 0:
-            army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
-            if isinstance(army_ctrl, dict):
-                fid_str = str(formation_id)
-                c_heroes = army_ctrl.get('compileHeros', {})
-                if isinstance(c_heroes, dict) and fid_str in c_heroes:
-                    form_heroes = c_heroes[fid_str]
-
-                c_pets = army_ctrl.get('compilePets', {})
-                if isinstance(c_pets, dict) and fid_str in c_pets:
-                    form_pets = c_pets[fid_str]
-
-                c_runes = army_ctrl.get('compileRunePages', {})
-                if isinstance(c_runes, dict) and fid_str in c_runes:
-                    form_rune_pages = c_runes[fid_str]
-
-                c_army = army_ctrl.get('compileArmy', {})
-                if isinstance(c_army, dict) and fid_str in c_army:
-                    form_army_dict = c_army[fid_str]
-
-            if not form_heroes and not form_army_dict:
-                try:
-                    r_form = await self.conn.query('1005', '7', {"compiletype": formation_id})
-                    if r_form and 'data' in r_form:
-                        form_heroes     = r_form['data'].get('compileHeros', [])
-                        form_pets       = r_form['data'].get('compilePets', [])
-                        form_rune_pages = r_form['data'].get('compileRunePages', [1])
-                        form_army_dict  = r_form['data'].get('compileArmy', {})
-                except Exception:
-                    pass
+        form_heroes, form_pets, form_rune_pages, form_army_dict = await self.get_formation(formation_id)
 
 
         # 6. فحص أبطال التشكيلة: هل هم متاحون وغير مشغولين؟
@@ -1442,8 +1375,13 @@ class MonsterTask(BaseTask):
         army_list = enforce_safe_march_troops(army_list, castle_capacity)
 
         if not army_list:
-            self.log.warning("⚠️ لا توجد قوات قتالية متوفرة بالقلعة لإرسال المسيرة!")
-            return "NO_ARMY"
+            active_marches = await self.get_active_marches_count(force_sync=True)
+            if active_marches >= 1:
+                self.log.info(f"⏳ [القوات في المسيرة] لا تتوفر قوات بالقلعة حالياً لوجود {active_marches} مسيرة نشطة بالخارج.")
+                return "QUEUE_FULL"
+            else:
+                self.log.warning("⚠️ لا توجد قوات قتالية متوفرة بالقلعة ولا توجد مسيرات بالخارج!")
+                return "NO_ARMY"
 
         total_troops = sum(item['num'] for item in army_list)
         # صمام أمان نهائي: تقليص فوري إذا تجاوز المجموع سعة مسيرة القلعة
@@ -1565,7 +1503,13 @@ class MonsterTask(BaseTask):
             elif err == '8009':
                 self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
                 await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
-                return "NO_ARMY"
+                active_marches = await self.get_active_marches_count(force_sync=True)
+                if active_marches >= 1:
+                    self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
+                    return "QUEUE_FULL"
+                else:
+                    self.log.warning("⚠️ نقص حقيقي في القوات المتاحة ولا توجد مسيرات نشطة بالخارج!")
+                    return "NO_ARMY"
             elif err in ('8032', '10002', '10003'):
                 self.log.warning(f"🛑 نفدت طاقة اللورد بالكامل (كود {err})")
                 await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)
