@@ -638,7 +638,7 @@ DAILY_MERIT_TASK_NAMES: Dict[int, Dict[str, str]] = {
 
 
 # ════════════════════════════════════════════════════════════════════
-#  كلاس سياق وبيانات الحساب (Account Context)
+#  كلاس سياق وبيانات الحساب (Account)
 # ════════════════════════════════════════════════════════════════════
 
 class AccountContext:
@@ -983,6 +983,11 @@ class BotManager:
         self.current_task: Optional[str] = None
         self.current_task_name: Optional[str] = None
 
+    def get_lord_stamina(self) -> int:
+        """جلب طاقة اللورد من الذاكرة الحية مباشرة."""
+        base = self.conn.init_data.get("lordInfoCtrl", {}).get("base", {})
+        return int(float(base.get("health", 100)))
+        
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وقاعدة البيانات المحلية بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
         # تحديث الحالة اللحظية في الذاكرة فوراً
@@ -2190,64 +2195,52 @@ class BotManager:
 
     # [9] مهمة استخدام جرعات وشراء الطاقة
     async def step_9_stamina_task(self) -> Dict[str, Any]:
-        """استهلاك جرعات الطاقة المجانية من الحقيبة وتنفيذ شراء الطاقة بالذهب بعدد المرات المحدد من المستخدم بناءً على معطيات الاستعلام الشامل."""
+        """استهلاك جرعات الطاقة المجانية من الحقيبة وتنفيذ شراء الطاقة بالذهب وفق الإعدادات والذاكرة الحية."""
         stamina_cfg = self.config.get("stamina", {})
         if not bool(stamina_cfg.get("enabled", True)):
             msg = "⏭️ تم تخطي مهمة الطاقة بناءً على رغبة المستخدم (stamina.enabled = False)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
-        ctx = self.context
-        potions = getattr(ctx, "stamina_potions", {}) or {}
-        total_potions = sum(potions.values()) if isinstance(potions, dict) else 0
-
-        # بيانات تبديل الطاقة بالذهب المستخرجة من الاستعلام الشامل
-        bs_ctrl = self.conn.init_data.get("buyStaminaCtrl", {}) if (self.conn and hasattr(self.conn, "init_data")) else {}
-        current_price = getattr(ctx, "stamina_gold_cost", 0) or int(bs_ctrl.get("price", 0))
-        buy_times = getattr(ctx, "stamina_buy_times", 0) if getattr(ctx, "stamina_buy_times", 0) > 0 else int(bs_ctrl.get("buyTimes", 0))
-        limit_times = getattr(ctx, "stamina_limit_times", 0) or int(bs_ctrl.get("limitTimes", 30))
-
+        use_free = bool(stamina_cfg.get("use_free", True))
         gold_buys = int(stamina_cfg.get("gold_buys", stamina_cfg.get("gold", 0)))
         max_price = int(stamina_cfg.get("max_price", stamina_cfg.get("price_limit", stamina_cfg.get("max_exchange_price", stamina_cfg.get("gold_limit", 0)))))
 
-        # 1. إذا كانت هناك جرعات طاقة في الحقيبة، تُنفّذ المهمة دائماً لاستهلاكها
-        if total_potions > 0:
-            remaining_buys = max(0, gold_buys - buy_times) if gold_buys > 0 else 0
-            if max_price > 0 and current_price > max_price:
-                remaining_buys = 0  # حماية: السعر الحالي بالقلعة تجاوز الحد الأقصى للمستخدم، نستهلك الجرعات فقط
-            log.info(f"⚡ بدء مهمة الطاقة: توفر {total_potions} جرعة بالحقيبة (سعر التبديل بالقلعة: {current_price} ذهب | الشراء بالذهب المتبقي: {remaining_buys} مرة [تم {buy_times}/{gold_buys}])...")
-        else:
-            # 2. الحقيبة خالية من الجرعات -> التحقق من شروط تبديل الطاقة بالذهب
-            if gold_buys <= 0 and max_price <= 0:
-                msg = "⏭️ تم تخطي مهمة الطاقة: الحقيبة خالية من الجرعات ولم يتم تفعيل الشراء بالذهب (gold_buys = 0)."
-                log.info(msg)
-                return {"skipped": True, "message": msg}
+        # قراءة بيانات تبديل الطاقة بالذهب مباشرة من الذاكرة الحية (Zero-Request)
+        bs_ctrl = self.conn.init_data.get("buyStaminaCtrl", {}) if (self.conn and getattr(self.conn, "init_data", None)) else {}
+        buy_times = int(bs_ctrl.get("buyTimes", 0))
+        limit_times = int(bs_ctrl.get("limitTimes", 30))
+        current_price = int(bs_ctrl.get("price", 0))
 
+        # حساب عدد عمليات الشراء بالذهب المتبقية
+        remaining_buys = 0
+        if gold_buys > 0:
             if limit_times > 0 and buy_times >= limit_times:
-                msg = f"⏭️ تم تخطي مهمة الطاقة: تم استنفاد الحد الأقصى اليومي لتبديل الطاقة بالذهب ({buy_times}/{limit_times} مرة) والحقيبة خالية."
-                log.iَnfo(msg)
-                return {"skipped": True, "message": msg}
+                log.info(f"ℹ️ استنفاد الحد اليومي لشراء الطاقة بالذهب ({buy_times}/{limit_times}).")
+            elif max_price > 0 and current_price > max_price:
+                log.info(f"ℹ️ سعر شراء الطاقة الحالي ({current_price} ذهب) يتجاوز الحد الأقصى ({max_price} ذهب).")
+            else:
+                remaining_buys = max(0, gold_buys - buy_times)
 
-            if max_price > 0 and current_price > max_price:
-                msg = f"⏭️ تم تخطي مهمة الطاقة: سعر تبديل الطاقة الحالي بالقلعة ({current_price} ذهب) يتجاوز الحد الأقصى المحدد ({max_price} ذهب) والحقيبة خالية."
-                log.info(msg)
-                return {"skipped": True, "message": msg}
+        # فحص رصيد جرعات الطاقة في الحقيبة من الذاكرة الحية (Zero-Request)
+        bp = self.conn.init_data.get("backpackCtrl", {}) if (self.conn and getattr(self.conn, "init_data", None)) else {}
+        potions_count = 0
+        if isinstance(bp, dict):
+            for pid in ("300401", "300402", "300403"):
+                item = bp.get(pid)
+                if isinstance(item, dict):
+                    potions_count += int(item.get("count", 0) or 0)
 
-            if gold_buys > 0 and buy_times >= gold_buys and max_price <= 0:
-                msg = f"⏭️ تم تخطي مهمة الطاقة: تم استيفاء عدد مرات الشراء بالذهب المحددة ({buy_times}/{gold_buys} مرة) وسعر التبديل الحالي {current_price} ذهب، والحقيبة خالية."
-                log.info(msg)
-                return {"skipped": True, "message": msg}
+        # إذا كانت الحقيبة خالية من الجرعات (أو استخدامها معطل) ولا توجد عمليات شراء بالذهب متبقية -> تخطي فوري
+        if (not use_free or potions_count == 0) and remaining_buys <= 0:
+            msg = f"⏭️ تم تخطي مهمة الطاقة: الحقيبة خالية من الجرعات ولا توجد عمليات شراء بالذهب مطلوبة (تم {buy_times}/{gold_buys})."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
 
-            remaining_buys = max(0, gold_buys - buy_times) if gold_buys > 0 else (1 if max_price > 0 and current_price <= max_price else 0)
-            if remaining_buys <= 0:
-                msg = f"⏭️ تم تخطي مهمة الطاقة: لا توجد عمليات شراء متبقية مطلوبة ({buy_times}/{gold_buys}) والحقيبة خالية."
-                log.info(msg)
-                return {"skipped": True, "message": msg}
-
-            log.info(f"⚡ بدء مهمة الطاقة: الحقيبة خالية، وسعر التبديل الحالي بالقلعة ({current_price} ذهب) متاح للشراء (المتبقي: {remaining_buys} مرة [تم {buy_times}/{gold_buys}])...")
+        log.info(f"⚡ بدء مهمة الطاقة (الجرعات المتوفرة بالحقيبة: {potions_count} | الشراء بالذهب المتبقي: {remaining_buys} [تم {buy_times}/{gold_buys}])...")
 
         task = StaminaTask(self.conn, {
-            "use_free": True,
+            "use_free": use_free,
             "gold_buys": remaining_buys,
             "gold": remaining_buys,
             "max_price": max_price
@@ -2476,7 +2469,9 @@ class BotManager:
         if not allow_gold:
             gold_times = 0
 
-        castle_lv = getattr(self.context, "castle_level", 0) or 0
+        lord_ctrl = self.conn.init_data.get("lordInfoCtrl", {})
+        base_info = lord_ctrl.get("base", {})
+        castle_lv = base_info.get("level", 0)
         res_display = "، ".join(res_list) if isinstance(res_list, list) else str(res_list)
         log.info(f"⛲ بدء مهمة نافورة الأمنيات (الموارد: [{res_display}] | قلعة لفل: {castle_lv} | السماح بالشراء بالذهب: {'نعم' if allow_gold else 'لا'} | عدد مرات الذهب: {gold_times})...")
 
@@ -3072,9 +3067,7 @@ class BotManager:
             return False
 
         # الشرط 3: التحقق من طاقة اللورد > 30 (Zero-Request)
-        current_stamina = getattr(self.context, "stamina", 0) or int(float(
-            self.conn.init_data.get("lordInfoCtrl", {}).get("base", {}).get("health", 0)
-        ))
+        current_stamina = self.get_lord_stamina()
         if current_stamina <= 30:
             msg = f"⚠️ [بوت العفريت] طاقة اللورد غير كافية ({current_stamina}/30) — تم تعطيل مهمة العفريت ومتابعة البوت العادي."
             log.warning(f"[{self.email}] {msg}")
