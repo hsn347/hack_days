@@ -247,6 +247,22 @@ class MarchManagerTask(BaseTask):
         except Exception:
             return 100
 
+    def get_vip_level(self) -> int:
+        """جلب مستوى المجد (VIP) من الذاكرة الحية (vipCtrl.vipLv)."""
+        try:
+            init = getattr(self.conn, 'init_data', {}) or {}
+            return int(init.get('vipCtrl', {}).get('vipLv', 0))
+        except Exception:
+            return 0
+
+    def get_merit_level(self) -> int:
+        """جلب مستوى الهيبة / الجدارة من الذاكرة الحية (meritoriousTaskCtrl.meritLv)."""
+        try:
+            init = getattr(self.conn, 'init_data', {}) or {}
+            return int(init.get('meritoriousTaskCtrl', {}).get('meritLv', 0))
+        except Exception:
+            return 0
+
     async def get_total_available_castle_army(self) -> int:
         """حساب إجمالي الجنود المتاحين بالقلعة من الذاكرة الحية (RAM) بصفر طلبات شبكية."""
         total = 0
@@ -690,6 +706,12 @@ class MarchManagerTask(BaseTask):
 
         # استعلام أحدث بيانات الهيبة
         await self._refresh_merit_data()
+
+        merit_lv = self.get_merit_level()
+        if merit_lv < 1:
+            self.log.info(f"👾 [غزاة الهيبة] تم التخطي: نظام الهيبة غير مفتوح للقلعة بعد (meritLv = {merit_lv}).")
+            return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
+
         q_info = self.get_quest_info("invaders")
 
         if q_info.get("is_done"):
@@ -794,6 +816,11 @@ class MarchManagerTask(BaseTask):
 
         # استعلام أحدث بيانات الهيبة
         await self._refresh_merit_data()
+
+        merit_lv = self.get_merit_level()
+        if merit_lv < 5:
+            self.log.info(f"🏰 [معقل الهيبة] تم التخطي: مستوى الهيبة الحالي ({merit_lv}) أقل من 5 المطلوب.")
+            return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
         q_info = self.get_quest_info("stronghold")
 
         if q_info.get("is_done"):
@@ -896,6 +923,11 @@ class MarchManagerTask(BaseTask):
 
         # استعلام أحدث بيانات الهيبة
         await self._refresh_merit_data()
+
+        merit_lv = self.get_merit_level()
+        if merit_lv < 6:
+            self.log.info(f"🌾 [جمع موارد الهيبة] تم التخطي: مستوى الهيبة الحالي ({merit_lv}) أقل من 5 المطلوب.")
+            return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
 
         # فحص الفيالق النشطة بالخارج للتأكد من عدم وجود مسيرة جمع قائمة لأي مورد
         active_gather_types = await self.get_active_gather_resource_types()
