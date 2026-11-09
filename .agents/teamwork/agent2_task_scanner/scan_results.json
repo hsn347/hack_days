@@ -1,0 +1,793 @@
+{
+  "controllers": {
+    "kingdomMapCtrl": 12,
+    "lordInfoCtrl": 86,
+    "lord": 8,
+    "loginDataInitCtrl": 3,
+    "cityCtrl": 130,
+    "heroCtrl": 53,
+    "armyCtrl": 89,
+    "godBeastCtrl": 3,
+    "allianceCtrl": 17,
+    "allianceTreasureCtrl": 3,
+    "salesRoomAgCtrl": 16,
+    "technologyCtrl": 16,
+    "vipCtrl": 30,
+    "meritoriousTaskCtrl": 65,
+    "petCtrl": 26,
+    "runeForgeAgCtrl": 7,
+    "reslist": 1,
+    "saferes": 1,
+    "backpackCtrl": 24,
+    "cumulateRewardData": 3,
+    "activityShowCtrl": 4,
+    "queueCtrl": 59,
+    "lordSkillCtrl": 52,
+    "boeAttributeCtrl": 14,
+    "playerCtrl": 6,
+    "equipmentCtrl": 2,
+    "buffCtrl": 28,
+    "heroVoyageAgCtrl": 8,
+    "heroEnlistCtrl": 14,
+    "pyramidCtrl": 11,
+    "heroEquipAgCtrl": 3,
+    "timeRewardCtrl": 28,
+    "PveBattleCtrl": 18,
+    "fieldShopCtrl": 7,
+    "badgeExchangeCtrl": 4,
+    "savingsBankAgCtrl": 6,
+    "item_sign": 2,
+    "buyStaminaCtrl": 10,
+    "heroTacticalHallAgCtrl": 5,
+    "heroTacticalHallCtrl": 5,
+    "generalAtyMgr": 29,
+    "shopItemBuyTimesMgr": 2,
+    "troyTreasureAgCtrl": 6,
+    "exchangeStoreAgCtrl": 7,
+    "itemShop": 1
+  },
+  "commands": {
+    "1002/7": 5,
+    "1006/25": 5,
+    "1006/1000": 3,
+    "1006/15": 3,
+    "1087/3": 1,
+    "1005/7": 4,
+    "1005/1": 11,
+    "1007/2": 14,
+    "1010/48": 2,
+    "2031/1": 1,
+    "2031/2": 1,
+    "2031/5": 1,
+    "1007/1000": 3,
+    "1000/1": 3,
+    "1006/22": 3,
+    "1001/1": 4,
+    "1003/1": 1,
+    "1004/1": 5,
+    "1001/8": 2,
+    "1001/3": 1,
+    "1004/2": 6,
+    "1001/2": 2,
+    "1003/2": 5,
+    "3139/14": 1,
+    "3139/7": 1,
+    "3139/6": 1,
+    "3139/1": 1,
+    "1007/16": 3,
+    "2011/4": 1,
+    "2011/3": 8,
+    "1005/5": 4,
+    "1005/2": 2,
+    "1018/1": 1,
+    "1018/2": 1,
+    "1019/6": 1,
+    "1019/1": 1,
+    "3148/1": 1,
+    "3148/3": 1,
+    "3148/5": 1,
+    "3148/4": 1,
+    "3148/7": 1,
+    "2058/1": 3,
+    "1013/1": 2,
+    "1005/4": 1,
+    "1015/1": 1,
+    "1015/19": 1,
+    "1015/18": 1,
+    "1015/4": 1,
+    "3129/4": 1,
+    "1024/1": 3,
+    "1024/2": 3,
+    "1024/3": 3,
+    "3078/1": 1,
+    "3081/1": 1,
+    "3081/5": 1,
+    "3081/4": 1,
+    "1033/2": 3,
+    "2064/11": 1,
+    "2064/10": 1,
+    "2064/9": 1,
+    "5011/1": 1,
+    "1067/1": 1,
+    "1067/2": 1,
+    "3105/2": 1,
+    "1017/3": 1,
+    "1017/1": 1,
+    "6023/2": 1,
+    "1002/1": 1,
+    "6023/1": 1,
+    "1034/2": 3,
+    "1002/23": 4,
+    "1002/22": 2,
+    "2060/1": 1,
+    "3137/2": 1,
+    "3137/1": 1,
+    "1028/5": 3,
+    "1034/1": 1,
+    "1010/75": 1,
+    "2059/36": 1,
+    "2057/1": 1,
+    "1010/39": 1,
+    "1010/40": 1,
+    "1001/9": 2,
+    "2063/2": 1,
+    "1010/47": 1,
+    "1037/1": 1,
+    "1009/36": 1
+  },
+  "tasks_summary": {
+    "__init__.py": {
+      "controllers": [],
+      "commands": []
+    },
+    "abra.py": {
+      "controllers": [
+        "armyCtrl",
+        "lord",
+        "godBeastCtrl",
+        "cityCtrl",
+        "lordInfoCtrl",
+        "kingdomMapCtrl",
+        "loginDataInitCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "1007/2",
+        "1005/7",
+        "1006/15",
+        "1087/3",
+        "1002/7",
+        "1006/1000",
+        "1006/25",
+        "1005/1"
+      ]
+    },
+    "alliance.py": {
+      "controllers": [
+        "allianceCtrl",
+        "lord"
+      ],
+      "commands": [
+        "1010/48"
+      ]
+    },
+    "alliance_treasure.py": {
+      "controllers": [
+        "allianceCtrl",
+        "allianceTreasureCtrl"
+      ],
+      "commands": []
+    },
+    "auction.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "salesRoomAgCtrl"
+      ],
+      "commands": [
+        "2031/2",
+        "2031/5",
+        "2031/1"
+      ]
+    },
+    "base_task.py": {
+      "controllers": [
+        "armyCtrl",
+        "technologyCtrl",
+        "cityCtrl",
+        "vipCtrl",
+        "lordInfoCtrl",
+        "meritoriousTaskCtrl",
+        "loginDataInitCtrl",
+        "heroCtrl",
+        "petCtrl"
+      ],
+      "commands": [
+        "1007/1000",
+        "1000/1",
+        "1005/7",
+        "1006/22",
+        "1002/7",
+        "1006/1000",
+        "1006/25",
+        "1005/1"
+      ]
+    },
+    "blacksmith_forge.py": {
+      "controllers": [
+        "runeForgeAgCtrl"
+      ],
+      "commands": []
+    },
+    "building.py": {
+      "controllers": [
+        "backpackCtrl",
+        "cityCtrl",
+        "vipCtrl",
+        "reslist",
+        "saferes"
+      ],
+      "commands": [
+        "1001/2",
+        "1001/3",
+        "1003/1",
+        "1004/1",
+        "1003/2",
+        "1004/2",
+        "1001/1",
+        "1001/8"
+      ]
+    },
+    "caravan.py": {
+      "controllers": [
+        "petCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "3139/14",
+        "3139/1",
+        "3139/7",
+        "3139/6"
+      ]
+    },
+    "city_harvest.py": {
+      "controllers": [
+        "cityCtrl"
+      ],
+      "commands": [
+        "1001/1",
+        "1001/8"
+      ]
+    },
+    "daily_luxury_gift.py": {
+      "controllers": [
+        "cumulateRewardData"
+      ],
+      "commands": []
+    },
+    "elf_boss.py": {
+      "controllers": [
+        "armyCtrl",
+        "lord",
+        "cityCtrl",
+        "activityShowCtrl",
+        "lordInfoCtrl",
+        "kingdomMapCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "1007/2",
+        "2011/3",
+        "1005/7",
+        "1007/16",
+        "2011/4",
+        "1002/7",
+        "1006/25",
+        "1005/1"
+      ]
+    },
+    "exclude_manager.py": {
+      "controllers": [],
+      "commands": []
+    },
+    "fortress.py": {
+      "controllers": [
+        "boeAttributeCtrl",
+        "armyCtrl",
+        "queueCtrl",
+        "technologyCtrl",
+        "lordSkillCtrl",
+        "cityCtrl",
+        "lordInfoCtrl"
+      ],
+      "commands": [
+        "1005/5",
+        "1005/2",
+        "1005/1"
+      ]
+    },
+    "fountain.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "playerCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "1018/1",
+        "1018/2"
+      ]
+    },
+    "gather.py": {
+      "controllers": [
+        "boeAttributeCtrl",
+        "armyCtrl",
+        "equipmentCtrl",
+        "technologyCtrl",
+        "lordSkillCtrl",
+        "cityCtrl",
+        "vipCtrl",
+        "lordInfoCtrl",
+        "buffCtrl",
+        "heroCtrl",
+        "petCtrl"
+      ],
+      "commands": [
+        "1019/6",
+        "1007/2",
+        "2011/3",
+        "1006/15",
+        "1006/25",
+        "1005/1"
+      ]
+    },
+    "gather_boost.py": {
+      "controllers": [
+        "buffCtrl"
+      ],
+      "commands": [
+        "1004/2",
+        "1004/1",
+        "1019/1"
+      ]
+    },
+    "gold_gather.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "petCtrl",
+        "armyCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "1007/2",
+        "2011/3",
+        "1006/22",
+        "1002/7",
+        "1006/1000",
+        "1005/1"
+      ]
+    },
+    "hero_consign.py": {
+      "controllers": [
+        "heroVoyageAgCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "3148/7",
+        "3148/1",
+        "3148/3",
+        "3148/4",
+        "3148/5"
+      ]
+    },
+    "hero_draw.py": {
+      "controllers": [
+        "heroEnlistCtrl"
+      ],
+      "commands": [
+        "2058/1"
+      ]
+    },
+    "hospital.py": {
+      "controllers": [
+        "meritoriousTaskCtrl",
+        "armyCtrl",
+        "cityCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "1013/1",
+        "1001/1",
+        "1005/4"
+      ]
+    },
+    "imperial_mausoleum.py": {
+      "controllers": [
+        "pyramidCtrl"
+      ],
+      "commands": []
+    },
+    "mail.py": {
+      "controllers": [],
+      "commands": [
+        "1015/18",
+        "1015/19",
+        "1015/4",
+        "1015/1"
+      ]
+    },
+    "march_capacity.py": {
+      "controllers": [
+        "technologyCtrl",
+        "boeAttributeCtrl",
+        "heroCtrl",
+        "cityCtrl"
+      ],
+      "commands": []
+    },
+    "march_coordinator.py": {
+      "controllers": [
+        "meritoriousTaskCtrl",
+        "lordInfoCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "1000/1"
+      ]
+    },
+    "march_manager.py": {
+      "controllers": [
+        "armyCtrl",
+        "vipCtrl",
+        "meritoriousTaskCtrl",
+        "lordInfoCtrl",
+        "loginDataInitCtrl"
+      ],
+      "commands": [
+        "1007/1000",
+        "1013/1",
+        "1001/1",
+        "1005/1"
+      ]
+    },
+    "material_workshop.py": {
+      "controllers": [
+        "heroEquipAgCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "3129/4"
+      ]
+    },
+    "merchant.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "1024/1",
+        "1024/2",
+        "1024/3"
+      ]
+    },
+    "monster.py": {
+      "controllers": [
+        "armyCtrl",
+        "lord",
+        "cityCtrl",
+        "lordInfoCtrl",
+        "kingdomMapCtrl",
+        "allianceCtrl",
+        "heroCtrl",
+        "petCtrl"
+      ],
+      "commands": [
+        "2011/3",
+        "1005/1",
+        "1007/2"
+      ]
+    },
+    "pet_patrol.py": {
+      "controllers": [
+        "petCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "3078/1",
+        "3081/1",
+        "3081/4",
+        "3081/5"
+      ]
+    },
+    "port.py": {
+      "controllers": [
+        "timeRewardCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "1033/2"
+      ]
+    },
+    "port_delegate.py": {
+      "controllers": [
+        "fieldShopCtrl",
+        "heroCtrl",
+        "PveBattleCtrl"
+      ],
+      "commands": [
+        "2064/11",
+        "5011/1",
+        "2064/10",
+        "2064/9"
+      ]
+    },
+    "prestige.py": {
+      "controllers": [
+        "meritoriousTaskCtrl",
+        "badgeExchangeCtrl",
+        "cityCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "1067/2",
+        "1067/1",
+        "1024/2",
+        "1024/1",
+        "1024/3"
+      ]
+    },
+    "prestige_box.py": {
+      "controllers": [
+        "meritoriousTaskCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "3105/2"
+      ]
+    },
+    "research.py": {
+      "controllers": [
+        "technologyCtrl",
+        "backpackCtrl",
+        "cityCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "1017/3",
+        "1017/1"
+      ]
+    },
+    "ruins.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "armyCtrl",
+        "heroCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "1007/2",
+        "2011/3",
+        "1005/7",
+        "1006/15",
+        "1006/25",
+        "1005/1"
+      ]
+    },
+    "savings_bank.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "savingsBankAgCtrl"
+      ],
+      "commands": [
+        "6023/2",
+        "6023/1",
+        "1002/1"
+      ]
+    },
+    "shield.py": {
+      "controllers": [
+        "buffCtrl",
+        "kingdomMapCtrl",
+        "item_sign"
+      ],
+      "commands": [
+        "1004/2",
+        "1004/1",
+        "1034/2"
+      ]
+    },
+    "show_quests.py": {
+      "controllers": [
+        "meritoriousTaskCtrl"
+      ],
+      "commands": []
+    },
+    "skill_finder.py": {
+      "controllers": [
+        "lordSkillCtrl"
+      ],
+      "commands": []
+    },
+    "skills.py": {
+      "controllers": [
+        "lordSkillCtrl",
+        "vipCtrl"
+      ],
+      "commands": [
+        "1002/22",
+        "1002/23"
+      ]
+    },
+    "stamina.py": {
+      "controllers": [
+        "buyStaminaCtrl"
+      ],
+      "commands": [
+        "2060/1",
+        "1004/2",
+        "1004/1"
+      ]
+    },
+    "stronghold.py": {
+      "controllers": [
+        "armyCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "2011/3",
+        "1007/2"
+      ]
+    },
+    "tactics_hall.py": {
+      "controllers": [
+        "heroEnlistCtrl",
+        "heroTacticalHallAgCtrl",
+        "heroTacticalHallCtrl",
+        "queueCtrl"
+      ],
+      "commands": [
+        "3137/1",
+        "3137/2",
+        "2058/1"
+      ]
+    },
+    "territory_expansion.py": {
+      "controllers": [
+        "generalAtyMgr"
+      ],
+      "commands": [
+        "1028/5"
+      ]
+    },
+    "torch_chest.py": {
+      "controllers": [
+        "shopItemBuyTimesMgr",
+        "backpackCtrl"
+      ],
+      "commands": [
+        "1034/1",
+        "1004/2",
+        "1004/1",
+        "1034/2"
+      ]
+    },
+    "train.py": {
+      "controllers": [
+        "boeAttributeCtrl",
+        "armyCtrl",
+        "queueCtrl",
+        "lordSkillCtrl",
+        "cityCtrl",
+        "lordInfoCtrl"
+      ],
+      "commands": [
+        "1005/5",
+        "1005/2",
+        "1005/1"
+      ]
+    },
+    "transport.py": {
+      "controllers": [
+        "lordInfoCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "2011/3",
+        "1010/75",
+        "1007/2"
+      ]
+    },
+    "treasure_pavilion.py": {
+      "controllers": [
+        "heroEnlistCtrl"
+      ],
+      "commands": [
+        "2058/1"
+      ]
+    },
+    "troy_treasure.py": {
+      "controllers": [
+        "troyTreasureAgCtrl"
+      ],
+      "commands": [
+        "1028/5",
+        "2059/36"
+      ]
+    },
+    "vip_gift.py": {
+      "controllers": [
+        "vipCtrl"
+      ],
+      "commands": []
+    },
+    "warrior_exchange.py": {
+      "controllers": [
+        "backpackCtrl",
+        "exchangeStoreAgCtrl"
+      ],
+      "commands": [
+        "2057/1"
+      ]
+    },
+    "watermill.py": {
+      "controllers": [
+        "buffCtrl",
+        "backpackCtrl",
+        "cityCtrl"
+      ],
+      "commands": [
+        "1010/39",
+        "1001/9",
+        "1010/40"
+      ]
+    },
+    "week_start_benefits.py": {
+      "controllers": [
+        "generalAtyMgr"
+      ],
+      "commands": [
+        "1028/5",
+        "2063/2"
+      ]
+    },
+    "bot_manager.py": {
+      "controllers": [
+        "shopItemBuyTimesMgr",
+        "armyCtrl",
+        "itemShop",
+        "queueCtrl",
+        "timeRewardCtrl",
+        "generalAtyMgr",
+        "cityCtrl",
+        "activityShowCtrl",
+        "backpackCtrl",
+        "lordInfoCtrl",
+        "buyStaminaCtrl",
+        "allianceCtrl",
+        "petCtrl"
+      ],
+      "commands": [
+        "1010/47"
+      ]
+    },
+    "game_client.py": {
+      "controllers": [
+        "armyCtrl",
+        "PveBattleCtrl",
+        "queueCtrl",
+        "timeRewardCtrl",
+        "backpackCtrl",
+        "cityCtrl",
+        "lordInfoCtrl",
+        "buffCtrl",
+        "meritoriousTaskCtrl",
+        "heroCtrl"
+      ],
+      "commands": [
+        "1000/1",
+        "1033/2",
+        "1037/1",
+        "1009/36",
+        "1005/1"
+      ]
+    }
+  }
+}

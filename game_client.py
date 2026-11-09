@@ -30,6 +30,24 @@ import zlib
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# ── استيراد محرك الذاكرة الحية الموحد وقوائم الفلترة ─────────────
+try:
+    from core.live_memory import (
+        LiveMemoryEngine,
+        ALLOWED_CONTROLLERS,
+        CRITICAL_STARTUP_CONTROLLERS,
+        FALLBACK_QUERIES,
+        smart_deep_merge,
+    )
+except ImportError as _e:
+    log_err = logging.getLogger("game_client")
+    log_err.warning(f"[WARN] core.live_memory غير متاح: {_e}")
+    LiveMemoryEngine = None
+    ALLOWED_CONTROLLERS = frozenset()
+    CRITICAL_STARTUP_CONTROLLERS = frozenset()
+    FALLBACK_QUERIES = {}
+    smart_deep_merge = None
+
 # ── استيراد الكريبتو المثبتة من onemt_bot.py ─────────────────────
 try:
     from core.onemt_bot import (
@@ -250,10 +268,11 @@ CMD_REGISTRY: Dict[Tuple[str, str], str] = {
 
 def _deep_merge(source: dict, destination: dict) -> dict:
     """
-    دمج عميق متداخل (Deep Merge) يمنع استبدال الكائنات الكاملة أو مسح المفاتيح القديمة.
-    - إذا كان الحقل في المصدر dict والهدف dict → يدمج بشكل متداخل.
-    - في أي حالة أخرى → يستبدل قيمة الهدف بقيمة المصدر مباشرة.
+    دمج ذكي عميق يمنع استبدال الكائنات الكاملة أو مسح القوائم التراكمية.
+    يفوض تلقائياً لمحرك smart_deep_merge لمنع مسح مباني المدينة أو الفيالق أو الأبطال.
     """
+    if smart_deep_merge is not None:
+        return smart_deep_merge(destination, source, in_place=True)
     for key, value in source.items():
         if key in destination and isinstance(destination[key], dict) and isinstance(value, dict):
             _deep_merge(value, destination[key])
@@ -441,13 +460,21 @@ class GateClient:
         self._writer  = None
         self._pending: Dict[int, asyncio.Future] = {}
         self._cmd_pending: Dict[Tuple[str, str], asyncio.Future] = {}
+
+        # ── محرك الذاكرة الحية المركزي وقفل التزامن ────────────────────
+        if LiveMemoryEngine is not None:
+            self.memory_engine = LiveMemoryEngine()
+        else:
+            from core.live_memory import LiveMemoryEngine as _LME
+            self.memory_engine = _LME()
+        self.init_data: dict = self.memory_engine.init_data
+
         self.heroes: list = []
-        self.init_data: dict = {}
         self.spy_mode: bool = False
         self._buf = b""
         self.cached_packets: dict = {}
         self.local_queues: list = []
-        self.local_queues_map: dict = {}
+        self.local_queues_map: dict = self.memory_engine.local_queues_map
         self.kick_reason: str = ""
         self._lock    = asyncio.Lock()
         self._alive   = False
@@ -636,233 +663,53 @@ class GateClient:
                     summary += f" | data keys: {d_keys}"
                 print(summary)
 
-            # تخزين الحزمة في الذاكرة المؤقتة
+            # ── 1. تخزين محكوم ومحدد السقف للحزم المؤقتة لمنع تراكم الذاكرة العشوائي ──
             if isinstance(c, dict) and cmd:
                 self.cached_packets[cmd_key] = c
-                c_data = c.get('data')
-                retdata = c_data.get('retdata', {}) if isinstance(c_data, dict) else (c.get('retdata', {}) if isinstance(c.get('retdata'), dict) else {})
-                if isinstance(retdata, dict) and retdata:
-                    self.init_data.update(retdata)
-                    if 'heroCtrl' in retdata:
-                        h_ctrl = retdata.get('heroCtrl', [])
-                        if isinstance(h_ctrl, list) and h_ctrl:
-                            self.heroes = list(h_ctrl)
+                if len(self.cached_packets) > 64:
+                    oldest_k = next(iter(self.cached_packets))
+                    self.cached_packets.pop(oldest_k, None)
 
-                # 🚢 المزامنة المباشرة لحزم متحكم سفن الميناء (CMD 1033) في الذاكرة الحية
-                if cmd == '1033' and isinstance(c_data, dict):
-                    err_code = str(c.get('err', '0'))
-                    if err_code == '0':
-                        if 'data' in c_data and isinstance(c_data['data'], dict):
-                            self.init_data['timeRewardCtrl'] = c_data
-                        elif 'sequence' in c_data or 'isReceive' in c_data:
-                            self.init_data['timeRewardCtrl'] = {'data': c_data}
-                    elif err_code == '17001':
-                        # الجائزة مستلمة مسبقاً (Err_RECEIVED_REWARD) ➔ تحديث الذاكرة فوراً لمنع التكرار
-                        tr = self.init_data.setdefault('timeRewardCtrl', {})
-                        if isinstance(tr, dict):
-                            tr_d = tr.setdefault('data', {})
-                            if isinstance(tr_d, dict):
-                                tr_d['isReceive'] = 1
-                    elif err_code == '17002':
-                        # استنفاد جميع سفن اليوم (Err_ALL_RECEIVED_TODAY)
-                        tr = self.init_data.setdefault('timeRewardCtrl', {})
-                        if isinstance(tr, dict):
-                            tr_d = tr.setdefault('data', {})
-                            if isinstance(tr_d, dict):
-                                tr_d['isAllReceive'] = 1
+            # ── 2. تمرير فوري للحزمة إلى محرك الذاكرة الحية المركزي ────────────
+            if isinstance(c, dict):
+                try:
+                    self.memory_engine.ingest_packet(c)
+                except Exception as _e:
+                    log.debug(f"[LiveMemory] ingest error: {_e}")
 
+            # ── 3. تحديث مراجع التوافقية السريعة (heroes, local_queues) ───────
+            h_ctrl = self.init_data.get('heroCtrl')
+            if isinstance(h_ctrl, list):
+                self.heroes = h_ctrl
+            elif isinstance(h_ctrl, dict) and 'heroes' in h_ctrl and isinstance(h_ctrl['heroes'], list):
+                self.heroes = h_ctrl['heroes']
+
+            self.local_queues = list(self.local_queues_map.values())
+
+            # ── 4. فحص حالات انقطاع أو تجميد الحساب من السيرفر ────────────────
+            if isinstance(c, dict):
                 data_obj = c.get('data', {})
                 if isinstance(data_obj, dict):
-                    notify_id = str(data_obj.get('notifyID', ''))
-                    notify_data = data_obj.get('notifyData', [])
-                    if notify_id == 'NOTIFY_LOCAL_QUEUE_SYNC' and isinstance(notify_data, list):
-                        for item in notify_data:
-                            if not isinstance(item, dict):
-                                continue
-                            msg_type = item.get('msgType')
-                            d = item.get('data')
-                            if msg_type in (1, 3):  # ADD or UPDATE
-                                if isinstance(d, dict) and d.get('id'):
-                                    self.local_queues_map[d['id']] = d
-                            elif msg_type == 2:  # REMOVE (عودة الفيلق للقلعة)
-                                q_id = d.get('id') if isinstance(d, dict) else d
-                                if q_id:
-                                    self.local_queues_map.pop(q_id, None)
-                            elif msg_type == 4:  # ADD_ALL (المزامنة الكاملة من 1007/1000)
-                                if isinstance(d, list):
-                                    for q in d:
-                                        if isinstance(q, dict) and q.get('id'):
-                                            self.local_queues_map[q['id']] = q
-                                elif isinstance(d, dict) and d.get('id'):
-                                    self.local_queues_map[d['id']] = d
-                            elif msg_type == 5:  # REMOVE_ALL (مسح شامل)
-                                self.local_queues_map.clear()
-                            else:
-                                if isinstance(d, dict) and d.get('id'):
-                                    self.local_queues_map[d['id']] = d
-                                elif isinstance(d, list):
-                                    for q in d:
-                                        if isinstance(q, dict) and q.get('id'):
-                                            self.local_queues_map[q['id']] = q
-                        self.local_queues = list(self.local_queues_map.values())
-                    elif notify_id == 'NOTIFY_ARMY' and isinstance(notify_data, list):
-                        for item in notify_data:
-                            if isinstance(item, dict) and item.get('armyInfo'):
-                                self.init_data['armyCtrl'] = item['armyInfo']
-                    elif notify_id == 'NOTIFY_CITY' and isinstance(notify_data, list):
-                        city = self.init_data.setdefault('cityCtrl', {})
-                        for item in notify_data:
-                            if isinstance(item, dict):
-                                if 'reslist' in item and isinstance(item['reslist'], dict):
-                                    city['reslist'] = item['reslist']
-                                    city['resList'] = item['reslist']
-                                elif 'res' in item and isinstance(item['res'], dict):
-                                    cur_res = city.setdefault('reslist', {})
-                                    for rid, delta in item['res'].items():
-                                        try:
-                                            cur_res[str(rid)] = max(0, int(float(cur_res.get(str(rid), 0))) + int(float(delta)))
-                                        except Exception:
-                                            pass
-                                    city['resList'] = cur_res
-                                if 'saferes' in item:
-                                    city['saferes'] = item['saferes']
-                    elif notify_id == 'NOTIFY_HERO' and isinstance(notify_data, list):
-                        for d in notify_data:
-                            h_items = d.values() if isinstance(d, dict) else (d if isinstance(d, list) else [])
-                            for h in h_items:
-                                if isinstance(h, dict) and 'id' in h:
-                                    hid = h['id']
-                                    for idx, existing in enumerate(self.heroes):
-                                        if existing.get('id') == hid:
-                                            existing.update(h)
-                                            break
-                                    else:
-                                        self.heroes.append(h)
-                        self.init_data['heroCtrl'] = self.heroes
-                    elif notify_id == 'NOTIFY_LORD' and isinstance(notify_data, list):
-                        lord = self.init_data.setdefault('lordInfoCtrl', {})
-                        for item in notify_data:
-                            if isinstance(item, dict):
-                                key = item.get('key')
-                                if key and isinstance(key, str):
-                                    target = lord.setdefault(key, {})
-                                    if isinstance(target, dict):
-                                        for k, v in item.items():
-                                            if k != 'key':
-                                                target[k] = v
-                    elif notify_id == 'NOTIFY_BACKPACK' and isinstance(notify_data, list):
-                        bp = self.init_data.setdefault('backpackCtrl', {})
-                        for item in notify_data:
-                            if isinstance(item, dict):
-                                for act in ('add', 'use'):
-                                    sub_list = item.get(act)
-                                    if isinstance(sub_list, dict):
-                                        for iid, cnt in sub_list.items():
-                                            iid_s = str(iid)
-                                            delta = int(cnt) if act == 'add' else -int(cnt)
-                                            if iid_s in bp and isinstance(bp[iid_s], dict):
-                                                bp[iid_s]['count'] = max(0, int(bp[iid_s].get('count', 0)) + delta)
-                                            elif delta > 0:
-                                                bp[iid_s] = {'id': int(iid), 'count': delta}
-                    elif notify_id == 'NOTIFY_BUFF' and isinstance(notify_data, list):
-                        buff_list = self.init_data.setdefault('buffCtrl', [])
-                        if isinstance(buff_list, list):
-                            for item in notify_data:
-                                if isinstance(item, dict) and item.get('syncType') == 'openBuff':
-                                    b_items = item.get('list', [])
-                                    if isinstance(b_items, list):
-                                        for b in b_items:
-                                            if isinstance(b, dict) and 'id' in b:
-                                                buff_list = [x for x in buff_list if x.get('id') != b.get('id')]
-                                                buff_list.append(b)
-                                        self.init_data['buffCtrl'] = buff_list
-                    elif notify_id == 'NOTIFY_PVE_BATTLE' and isinstance(notify_data, list):
-                        pve = self.init_data.setdefault('PveBattleCtrl', {})
-                        for item in notify_data:
-                            if isinstance(item, dict) and item.get('notifyType') == 'points':
-                                pve['points'] = int(item.get('points', pve.get('points', 0)))
-                    elif notify_id in ('NOTIFY_MERITORIOUS_TASK', '1070', 'NOTIFY_UNIVERSAL_TASK', '1025'):
-                        merit = self.init_data.setdefault('meritoriousTaskCtrl', {})
-                        task_data = merit.setdefault('taskData', {})
-                        daily_task = merit.setdefault('daily_task', {})
-                        if isinstance(notify_data, dict):
-                            if 'taskData' in notify_data and isinstance(notify_data['taskData'], dict):
-                                task_data.update(notify_data['taskData'])
-                            if 'daily_task' in notify_data and isinstance(notify_data['daily_task'], dict):
-                                daily_task.update(notify_data['daily_task'])
-                            if 'tasks' in notify_data and isinstance(notify_data['tasks'], (list, dict)):
-                                merit['tasks'] = notify_data['tasks']
-                            for k, v in notify_data.items():
-                                if k not in ('taskData', 'daily_task', 'tasks'):
-                                    merit[k] = v
-                        elif isinstance(notify_data, list):
-                            for item in notify_data:
-                                if isinstance(item, dict):
-                                    d = item.get('data', item) if isinstance(item.get('data'), dict) else item
-                                    tid = d.get('id') or d.get('taskId') or d.get('dynamicId')
-                                    if tid:
-                                        tid_str = str(tid)
-                                        if tid_str in task_data and isinstance(task_data[tid_str], dict):
-                                            task_data[tid_str].update(d)
-                                        else:
-                                            task_data[tid_str] = d
-                                        if 'cNum' in d:
-                                            try: daily_task[tid_str] = int(d['cNum'])
-                                            except (ValueError, TypeError): pass
-                    elif notify_id in ('NOTIFY_QUEUE', 'QUEUE', '23', 'NOTIFY_PLAYER_QUEUE_CHANGE', '1051'):
-                        q_ctrl = self.init_data.setdefault('queueCtrl', {})
-                        if isinstance(notify_data, list):
-                            for item in notify_data:
-                                if isinstance(item, dict):
-                                    qtype = str(item.get('qtype') or item.get('queuetype') or '')
-                                    notify_type = str(item.get('notifyType', '')).lower()
-                                    if notify_type in ('del', 'remove', 'finish', 'cancel'):
-                                        q_ctrl.pop(qtype, None)
-                                    elif qtype:
-                                        if qtype in q_ctrl and isinstance(q_ctrl[qtype], dict):
-                                            q_ctrl[qtype].update(item)
-                                        else:
-                                            q_ctrl[qtype] = item
-                        elif isinstance(notify_data, dict):
-                            for k, v in notify_data.items():
-                                if isinstance(v, dict):
-                                    q_ctrl[str(k)] = v
-                    elif notify_id in ('NOTIFY_REWARD', '25'):
-                        # وصول سفينة الميناء وجاهزية الجائزة للاستلام (isReceive = 2)
-                        tr = self.init_data.setdefault('timeRewardCtrl', {})
-                        if isinstance(tr, dict):
-                            tr_d = tr.setdefault('data', {})
-                            if isinstance(tr_d, dict):
-                                tr_d['isReceive'] = 2
-                    elif notify_id in ('NOTIFY_TIME_REWARD', '28', 'NOTIFY_RESET_TIME_REWARD', '20'):
-                        # إشعار تحديث/إعادة ضبط عداد سفينة الميناء
-                        if isinstance(notify_data, dict):
-                            self.init_data['timeRewardCtrl'] = notify_data
-                        elif isinstance(notify_data, list) and notify_data and isinstance(notify_data[0], dict):
-                            d_item = notify_data[0].get('data', notify_data[0])
-                            tr = self.init_data.setdefault('timeRewardCtrl', {})
-                            if isinstance(tr, dict):
-                                tr['data'] = d_item
-                    if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
-                        if isinstance(notify_data, list):
-                            for item in notify_data:
-                                if isinstance(item, dict):
-                                    status = item.get('status')
-                                    if status == 'kick':
-                                        self.kick_reason = "other_device"
-                                    elif status == 'seal':
-                                        self.kick_reason = "account_sealed"
-                                    elif status == 'server_maintenance':
-                                        self.kick_reason = "server_maintenance"
-                        elif isinstance(notify_data, dict):
-                            status = notify_data.get('status')
-                            if status == 'kick': self.kick_reason = "other_device"
-                            elif status == 'seal': self.kick_reason = "account_sealed"
-
-                    if data_obj.get('status') == 'kick':
+                    status = data_obj.get('status')
+                    if status == 'kick':
                         self.kick_reason = "other_device"
-                    elif data_obj.get('status') == 'seal':
+                    elif status == 'seal':
                         self.kick_reason = "account_sealed"
+                    elif status == 'server_maintenance':
+                        self.kick_reason = "server_maintenance"
+                    notify_id = str(data_obj.get('notifyID', ''))
+                    if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
+                        n_data = data_obj.get('notifyData')
+                        if isinstance(n_data, list) and n_data and isinstance(n_data[0], dict):
+                            st = n_data[0].get('status')
+                            if st == 'kick': self.kick_reason = "other_device"
+                            elif st == 'seal': self.kick_reason = "account_sealed"
+                            elif st == 'server_maintenance': self.kick_reason = "server_maintenance"
+                        elif isinstance(n_data, dict):
+                            st = n_data.get('status')
+                            if st == 'kick': self.kick_reason = "other_device"
+                            elif st == 'seal': self.kick_reason = "account_sealed"
+                            elif st == 'server_maintenance': self.kick_reason = "server_maintenance"
 
             fut = None
             if sess != 0 and sess in self._pending:
@@ -909,47 +756,79 @@ class GateClient:
 
     def check_and_merge_controller(self, ctrl_name: str) -> Tuple[bool, dict]:
         """
-        يفحص الحزم الواردة (cached_packets) عن أي تحديث للمتحكم المحدد،
-        ويدمجه في init_data بشكل عميق (Deep Merge) دون مسح البيانات الموجودة.
+        التحقق اللحظي الفوري من وجود المتحكم في الذاكرة الحية (O(1) Live State Check).
+        تم إلغاء حلقة التكرار التاريخية البطيئة O(N) على cached_packets
+        نظراً لأن محرك LiveMemoryEngine يعترض كافة الحزم ويدمج الحالات لحظياً في _dispatch.
 
         Args:
             ctrl_name: اسم المتحكم المطلوب فحصه (مثل "cityCtrl", "heroCtrl").
 
         Returns:
-            (merged: bool, data: dict)
-            - True  → تم العثور على تحديث في الحزم الواردة ودمجه.
-            - False → لا يوجد تحديث جديد، البيانات كما هي.
+            (exists: bool, data: dict)
+            - True  → المتحكم متوفر في الذاكرة الحية.
+            - False → المتحكم غير متوفر بعد.
         """
-        merged = False
+        exists = ctrl_name in self.init_data
+        return exists, self.init_data.get(ctrl_name, {})
 
-        for pkt in self.cached_packets.values():
-            if not isinstance(pkt, dict):
-                continue
+    async def wait_for_memory_ready(self, timeout: float = 30.0, auto_fetch_missing: bool = True, grace_period: float = 0.0) -> bool:
+        """
+        بوابة جاهزية الذاكرة الصارمة (Strict Memory Readiness Gate).
+        تتحقق من اكتمال كافة المتحكمات الأساسية CRITICAL_STARTUP_CONTROLLERS في الذاكرة الحية.
+        في حال نقص أي متحكم وكان auto_fetch_missing=True، ترسل الاستعلامات التعويضية المحددة:
+          - cityCtrl: CMD 1001 / Sub 1
+          - lordInfoCtrl: CMD 1002 / Sub 7
+          - queueCtrl: CMD 1003 / Sub 1
+          - armyCtrl: CMD 1005 / Sub 1
+          - backpackCtrl: CMD 1004 / Sub 1
+          - local_queues: CMD 1007 / Sub 1000
+        تنتظر حتى اكتمال البيانات أو انقضاء مهلة timeout مع إعطاء مهلة سماح (grace_period) لبث السيرفر التلقائي.
 
-            c_data = pkt.get('data', {})
+        Returns:
+            True إذا اكتملت الذاكرة وأصبحت جاهزة، False إذا انتهت المهلة دون اكتمالها.
+        """
+        start_time = time.time()
+        fallback_sent = False
+        effective_grace = grace_period if grace_period > 0.0 else (2.0 if timeout >= 5.0 else 0.0)
 
-            # البحث في retdata (الغلاف الشائع لردود أوامر السيرفر)
-            retdata = c_data.get('retdata', {}) if isinstance(c_data, dict) else {}
-            if isinstance(retdata, dict) and ctrl_name in retdata:
-                new_val = retdata[ctrl_name]
-                if ctrl_name not in self.init_data:
-                    self.init_data[ctrl_name] = {}
-                if isinstance(self.init_data[ctrl_name], dict) and isinstance(new_val, dict):
-                    _deep_merge(new_val, self.init_data[ctrl_name])
-                else:
-                    self.init_data[ctrl_name] = new_val
-                merged = True
+        while time.time() - start_time < timeout:
+            if not self._alive:
+                return False
 
-            # البحث في data مباشرة (بعض الردود تضع البيانات هنا مباشرة)
-            if isinstance(c_data, dict) and ctrl_name in c_data:
-                new_val = c_data[ctrl_name]
-                if ctrl_name not in self.init_data:
-                    self.init_data[ctrl_name] = {}
-                if isinstance(self.init_data[ctrl_name], dict) and isinstance(new_val, dict):
-                    _deep_merge(new_val, self.init_data[ctrl_name])
-                    merged = True
+            res = self.memory_engine.is_memory_ready()
+            is_ready = res[0] if isinstance(res, tuple) else bool(res)
+            missing = res[1] if (isinstance(res, tuple) and len(res) > 1) else []
 
-        return merged, self.init_data.get(ctrl_name, {})
+            if is_ready:
+                return True
+
+            if auto_fetch_missing and not fallback_sent and (time.time() - start_time >= effective_grace):
+                fallback_sent = True
+                missing_set = set(missing) if missing else {
+                    c for c in ("cityCtrl", "lordInfoCtrl", "queueCtrl", "armyCtrl", "heroCtrl", "backpackCtrl")
+                    if c not in self.init_data
+                }
+
+                # إرسال استعلامات التعويض المحددة في CONTROLLER_WHITELIST_SPEC
+                if any(k.startswith("cityCtrl") for k in missing_set):
+                    self.send_nowait('1001', '1', {})
+                if any(k.startswith("lordInfoCtrl") for k in missing_set):
+                    uid = getattr(self.creds, 'uid', '') if hasattr(self, 'creds') else ''
+                    self.send_nowait('1002', '7', {'uid': uid} if uid else {})
+                if any(k.startswith("queueCtrl") for k in missing_set):
+                    self.send_nowait('1003', '1', {})
+                if any(k.startswith("armyCtrl") or k.startswith("heroCtrl") for k in missing_set):
+                    self.send_nowait('1005', '1', {})
+                if any(k.startswith("backpackCtrl") for k in missing_set):
+                    self.send_nowait('1004', '1', {})
+                if not self.local_queues_map:
+                    self.send_nowait('1007', '1000', {})
+
+            await asyncio.sleep(0.25)
+
+        # فحص أخير عند انتهاء المهلة
+        res = self.memory_engine.is_memory_ready()
+        return res[0] if isinstance(res, tuple) else bool(res)
 
     def _log_network_action(self, cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False):
         """توثيق آمن ومعزول تماماً لأحداث الشبكة دون التأثير على عمل المقابس."""
@@ -1102,6 +981,10 @@ class GateClient:
         return self._alive
 
 
+# ── الاسم المستعار المعتمد لمحرك العميل ─────────────────────────────
+GameClient = GateClient
+
+
 # ════════════════════════════════════════════════════════════════════
 #  GameConnection — الواجهة الشاملة
 # ════════════════════════════════════════════════════════════════════
@@ -1144,6 +1027,11 @@ class GameConnection:
     @property
     def init_data(self) -> dict:
         return self._gate.init_data if self._gate else {}
+
+    @property
+    def memory_engine(self):
+        """الوصول المباشر لمحرك الذاكرة الحية."""
+        return self._gate.memory_engine if self._gate else None
 
     @property
     def cached_packets(self) -> dict:
@@ -1206,6 +1094,12 @@ class GameConnection:
         if self._gate:
             return self._gate.check_and_merge_controller(ctrl_name)
         return False, {}
+
+    async def wait_for_memory_ready(self, timeout: float = 30.0, auto_fetch_missing: bool = True, grace_period: float = 0.0) -> bool:
+        """تفويض مباشر لبوابة جاهزية الذاكرة في GateClient."""
+        if self._gate:
+            return await self._gate.wait_for_memory_ready(timeout=timeout, auto_fetch_missing=auto_fetch_missing, grace_period=grace_period)
+        return False
 
     async def close(self):
         if self._gate: await self._gate.close()

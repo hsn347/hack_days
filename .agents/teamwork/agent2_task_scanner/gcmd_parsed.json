@@ -1,0 +1,2320 @@
+{
+  "1000": {
+    "name": "LOGIN_DATA_INIT",
+    "reqs": {
+      "1": "LOGIN_DATA_INIT"
+    }
+  },
+  "1001": {
+    "name": "CITY_MODULE",
+    "reqs": {
+      "1": "INIT_CITYDATA",
+      "2": "BUILD_BUILDING",
+      "3": "BUILD_UPGRADE",
+      "4": "BUILD_DEMOLISH",
+      "5": "BUILD_EXCHANGE",
+      "6": "OPEN_GROUND",
+      "7": "OPEN_CHARGE_QUEUE",
+      "8": "COLLECT_RES",
+      "9": "SPEED_UP_RES",
+      "10": "LEFT_CAN_GET_RES",
+      "11": "UNLOCK_BUILDING",
+      "12": "BUILD_HONOR_UPGRADE"
+    }
+  },
+  "1002": {
+    "name": "LORD_MODULE",
+    "reqs": {
+      "1": "INIT_LORDDATA",
+      "2": "CHANGE_NICKNAME",
+      "3": "CHANGE_IMAGEID",
+      "4": "SET_SKILL",
+      "5": "NICKNAMELEGALITY",
+      "6": "RESET_SKILL",
+      "7": "LORD_INFO_UID",
+      "8": "SPARK_INITIATIVE",
+      "9": "LORD_VALUE_UID",
+      "10": "LORD_BATTLE_INFO",
+      "11": "SEARCH_LORD_IN_KINGDOM",
+      "12": "SEARCH_LORD_ALL_WORLD",
+      "14": "CHECK_USER_AGREEMENT",
+      "15": "GET_BIND_ACCOUNT_REWARD",
+      "16": "SNEAK_INTO",
+      "18": "SWITCH_SKILL_SET",
+      "19": "SET_UPGRADE_POP_LV",
+      "20": "LORD_SKILL_UPGRADE",
+      "21": "LORD_SKILL_RESET",
+      "22": "LORD_SKILL_USE",
+      "23": "LORD_SKILL_SWITCH",
+      "24": "LORD_SKILL_SET_TITLE",
+      "25": "CHANGE_SYS_AVATAR",
+      "26": "CHANGE_SIGNATURE",
+      "27": "CHANGE_SIGNATURE_VIEW",
+      "28": "LORD_POWER_RANK",
+      "30": "EXCHANGE_SPAR_TO_GOLD",
+      "31": "REPORT_SIGN",
+      "32": "REPORT_NAME",
+      "33": "LORD_SKILL_QUICK_UNLOCK",
+      "34": "SEAL_ACCOUNT_LIST",
+      "35": "SEARCH_LORD_IN_FIELD"
+    }
+  },
+  "1003": {
+    "name": "QUEUE_MODULE",
+    "reqs": {
+      "1": "INIT_QUEUEDATA",
+      "2": "SPEED_UP_QUEUE",
+      "3": "CANCEL_QUEUE"
+    }
+  },
+  "1004": {
+    "name": "BACKPACK_MODULE",
+    "reqs": {
+      "1": "INIT_BACKPACKDATA",
+      "2": "USE_ITEM",
+      "3": "MERGE_ITEM",
+      "4": "MERGE_ITEM_AS_POSSIBLE",
+      "5": "USE_APPEARANCE_ITEM",
+      "6": "USE_SURPRISE_GIFT_ITEM",
+      "7": "USE_ALL_SAFE_RES",
+      "8": "SPLIT_ITEM"
+    }
+  },
+  "1005": {
+    "name": "ARMY_MODULE",
+    "reqs": {
+      "1": "INIT_ARMYDATA",
+      "2": "TRAIN_ARMY",
+      "3": "FIRE_ARMY",
+      "4": "CURE_WOUNDED_ARMY",
+      "5": "GET_ARMY",
+      "6": "SET_COMPILE",
+      "7": "GET_COMPILE",
+      "8": "SET_COMPILENAME",
+      "10": "SET_DUEL_COMPILE",
+      "11": "GET_DUEL_COMPILE"
+    }
+  },
+  "1006": {
+    "name": "KINGDOM_MAP_MODULE",
+    "reqs": {
+      "1": "KINGDOM_MAP",
+      "15": "KINGDOM_MAP_OBJ_INFO",
+      "16": "KINGDOM_MAP_RELICS_EVENT",
+      "17": "KINGDOM_MAP_MOVE_CITY",
+      "21": "GET_ALLIANCE_MEMBER",
+      "22": "GET_COLLECTING_INFO",
+      "25": "GET_CASTLE_MAP_INFO",
+      "33": "GET_SCOUT_FOOD",
+      "42": "KINGDOM_MAP_GET_INIT_DATA",
+      "47": "SWITCH_WORLD_MAP",
+      "48": "REFRESH_KINGDOM_WAR_TIME",
+      "54": "GET_PLACE_OWNER_INFO",
+      "55": "GET_KING",
+      "56": "GET_OTHER_KINGDOM_INFO",
+      "86": "GET_ALL_QUEUE_ID_IN_SUPER_RES",
+      "88": "SUPER_RES_QUEUES_BY_IDS",
+      "90": "ROSE_GARDEN_QUEUES_BY_IDS",
+      "102": "GET_ALLIANCE_MINE_LIST",
+      "119": "CAN_MOVECITY_IN_TERR",
+      "120": "MANU_PLACE_BOSS",
+      "124": "GET_PLAYER_CHEST_DAY_RECEIVE_COUNT",
+      "127": "KINGDOM_MAP_OBJ_TERR_INFO",
+      "130": "KINGDOM_MAP_EXIT_ALLIANCE_WAR",
+      "134": "GET_TREASURE_BOWL_DAY_RECEIVE_COUNT",
+      "135": "KINGDOM_MAP_CLICK_TREASURE_BOWL",
+      "136": "KINGDOM_MAP_OBJ_TYPE",
+      "137": "CHANGE_BUILD_CAPTAIN",
+      "138": "CHANGE_PLACE_CAPTAIN",
+      "139": "CAPTAIN_BACK_QUEUE",
+      "140": "ALLAINCE_WAR_MAP_OBJ",
+      "1000": "KINGDOM_MAP_SYNC"
+    }
+  },
+  "1007": {
+    "name": "KINGDOM_QUEUE_MODULE",
+    "reqs": {
+      "6": "BACK_QUEUE",
+      "7": "SPEED_QUEUE",
+      "8": "RECALL_QUEUE",
+      "16": "ALL_QUEUE",
+      "17": "DISMISS_QUEUE",
+      "18": "BACK_QUEUE_BY_ID",
+      "19": "ARMY_HELP_NUM",
+      "23": "KINGDOM_QUEUE_SPEED_QUEUE",
+      "24": "KINGDOM_QUEUE_RECALL_QUEUE",
+      "49": "ALL_BUILDING_QUEUE",
+      "73": "ALL_BOSS_QUEUE",
+      "78": "BACK_ALL_QUEUE",
+      "79": "BACK_OTHER_QUEUE",
+      "80": "GET_BATTLE_MEMBER",
+      "101": "KINGDOM_QUEUE_MAP_DATA",
+      "102": "KINGDOM_QUEUE_WARHALL_DATA",
+      "103": "KINGDOM_QUEUE_WATCHTOWER_DATA",
+      "104": "KINGDOM_QUEUE_EMBASSY_DATA",
+      "1000": "KINGDOM_LOCAL_QUEUE_SYNC",
+      "1001": "KINGDOM_CLIENT_REPORT_LOG"
+    }
+  },
+  "1008": {
+    "name": "RELICS_EXPLORE_MODULE",
+    "reqs": {
+      "1": "RELICS_EXPLORE"
+    }
+  },
+  "1009": {
+    "name": "NOTIFY_MODULE",
+    "reqs": {}
+  },
+  "1010": {
+    "name": "ALLIANCE_MODULE",
+    "reqs": {
+      "1": "INIT_ALLIANCEDATA",
+      "2": "ALLIANCE_GET_INFO_BY_ID",
+      "4": "ALLIANCE_GET_INFO_BY_NAME",
+      "5": "ALLIANCE_GET_MEMBER_INFO",
+      "6": "ALLIANCE_GET_MEMBER_LIST",
+      "7": "ALLIANCE_GET_APPLY_LIST",
+      "8": "ALLIANCE_GET_INVITE_LIST",
+      "10": "ALLIANCE_CHECK_NAME",
+      "11": "ALLIANCE_CHECK_ABBR",
+      "9": "ALLIANCE_MODIFY_NOTICE",
+      "12": "ALLIANCE_MODIFY_MANIFESTO",
+      "13": "ALLIANCE_MODIFY_RECRUIT",
+      "14": "ALLIANCE_MODIFY_NAME",
+      "15": "ALLIANCE_MODIFY_ABBR",
+      "16": "ALLIANCE_MODIFY_LANGUAGE",
+      "17": "ALLIANCE_MODIFY_RANK_NAME",
+      "18": "ALLIANCE_MODIFY_FLAG",
+      "19": "ALLIANCE_MODIFY_RECRUIT_CONDITION",
+      "20": "ALLIANCE_CREATE",
+      "21": "ALLIANCE_DISMISS",
+      "22": "ALLIANCE_JOIN",
+      "23": "ALLIANCE_QUIT",
+      "24": "ALLIANCE_EXPEL_MEMBER",
+      "25": "ALLIANCE_APPLY_JOIN",
+      "26": "ALLIANCE_CANCEL_APPLY",
+      "27": "ALLIANCE_AGREE_APPLY",
+      "28": "ALLIANCE_REJECT_APPLY",
+      "29": "ALLIANCE_INVITE_JOIN",
+      "31": "ALLIANCE_AGREE_INVITE",
+      "32": "ALLIANCE_REJECT_INVITE",
+      "33": "ALLIANCE_NOTICE_INVITE",
+      "34": "ALLIANCE_DEMISE",
+      "35": "ALLIANCE_REPLACE_LEADER",
+      "36": "ALLIANCE_PROMOTE_MEMBER",
+      "37": "ALLIANCE_DEMOTE_MEMBER",
+      "38": "ALLIANCE_INVITE_MOVE_CITY",
+      "39": "ALLIANCE_STORE_DATA",
+      "40": "ALLIANCE_STORE_BUY",
+      "41": "ALLIANCE_ITEMSHOP_BUY",
+      "42": "ALLIANCE_LIST",
+      "43": "ALLIANCE_LOG",
+      "44": "ALLIANCE_INIT_HELP",
+      "45": "ALLIANCE_REQ_HELP",
+      "46": "ALLIANCE_HELP_MEMBER",
+      "47": "ALLIANCE_HELP_ALL",
+      "48": "ALLIANCE_DONATE_SCI",
+      "49": "ALLIANCE_RESEARCH_SCI",
+      "50": "ALLIANCE_CLEAN_DONATE_SCI_CD",
+      "51": "ALLIANCE_DONATE_RANK",
+      "52": "ALLIANCE_SEND_ALL_MAIL",
+      "53": "ALLIANCE_SEARCH_PLAYER_NAME",
+      "54": "ALLIANCE_MESSAGE_SHIELD_OPERATE",
+      "55": "ALLIANCE_SEND_MESSAGE",
+      "56": "ALLIANCE_MESSAGE_SHIELD_LIST",
+      "57": "ALLIANCE_REJECT_INVITE_MOVE_CITY",
+      "58": "ALLIANCE_GET_BWIDLIST",
+      "59": "ALLIANCE_GET_BWDETAILLIST",
+      "60": "ALLIANCE_ADD_BWLIST",
+      "61": "ALLIANCE_DEL_BWLIST",
+      "62": "ALLIANCE_GET_STORE_RECORD",
+      "63": "ALLIANCE_SET_BUILDING",
+      "64": "ALLIANCE_DEMOLISH_BUILDING",
+      "65": "ALLIANCE_MODIFY_PERMISSION",
+      "67": "ALLIANCE_BUILD_BUILDING_USE_GOLD",
+      "68": "ALLIANCE_BUILD_BUILDING_USE_BONUS",
+      "70": "ALLIANCE_DEMOLISH_TERR_BUILDING",
+      "71": "ALLIANCE_TERRITORY_INIT_DATA",
+      "72": "ALLIANCE_GET_BUILDING_INFO",
+      "73": "ALLIANCE_RESTORE_BUILDING",
+      "74": "ALLIANCE_ALLOCATE_TAXES",
+      "75": "ALLIANCE_ALLIANCE_SCIENCE",
+      "77": "ALLIANCE_APPLY_OFFICER",
+      "78": "ALLIANCE_CANCLE_APPLY_OFFICER",
+      "79": "ALLIANCE_APPOINT_OFFICER",
+      "80": "ALLIANCE_RELIEVE_OFFICER",
+      "81": "ALLIANCE_DONATE_SYN_DATA",
+      "82": "ALLIANCE_RECOMMENT_SCIENCE",
+      "83": "ALLIANCE_REQ_ALLIANCE_STRIKE_BACK",
+      "84": "ALLIANCE_BUILD_BUILDING",
+      "85": "ALLIANCE_CANNON_INFO",
+      "86": "ALLIANCE_USE_CANNON",
+      "87": "ALLIANCE_FLAG_UPDATE",
+      "88": "ALLIANCE_NEUTRAL_BUILD",
+      "89": "ALLIANCE_LARGE_RES",
+      "90": "ALLIANCE_LARGE_RES_CONSUME",
+      "91": "ALLIANCE_FLAG_CALCEL",
+      "92": "ALLIANCE_IS_CONNECT_NEUTRAL",
+      "93": "ALLIANCE_USE_TECH"
+    }
+  },
+  "1011": {
+    "name": "CHAT_MODULE",
+    "reqs": {
+      "1": "INIT_NEWLY_CHATDATA",
+      "2": "SEND_MESSAGE",
+      "3": "CHAT_DATA",
+      "4": "SHIELD_USER",
+      "5": "UNSHIELD_USER",
+      "6": "NEWLY_CHAT_DATA",
+      "7": "SEND_SERVICE_MESSAGE",
+      "8": "INIT_SHIELD_DATA",
+      "9": "INIT_SHIELD_DATA_AND_CHAT_STATUS",
+      "10": "REPORT_ALLIANCE_CHAT_MSG_STATUS",
+      "11": "CHAT_SET_DATA",
+      "12": "READ_CHAT_MSG",
+      "13": "CHAT_PROMPT_INFO",
+      "14": "SHARE_MESSAGE",
+      "15": "GET_VOICE_ROOM_INVITE_INFO",
+      "16": "AGREE_VOICE_ROOM_INVITATION",
+      "17": "REJECT_VOICE_ROOM_INVITATION",
+      "18": "INVITE_USERS_JOIN_VOICE_ROOM",
+      "19": "SHARE_MULTI_MESSAGE",
+      "50": "SEND_MSG_TO_CHAT_CHANNEL",
+      "51": "GET_CHAT_CHANNEL_DATA"
+    }
+  },
+  "1012": {
+    "name": "PLAYER_MODULE",
+    "reqs": {
+      "1": "KINGDOM_QUEUE_SETTLE"
+    }
+  },
+  "1013": {
+    "name": "PLAYER_DATA_CENTER_MODULE",
+    "reqs": {
+      "1": "PDC_QUERY",
+      "2": "PDC_UPDATE",
+      "3": "PDC_INSERT",
+      "4": "PDC_DELETE",
+      "5": "PDC_IS_EXIST_NAME",
+      "6": "PDC_CHANGE_NAME",
+      "7": "PDC_START_SETTLE_QUEUE",
+      "8": "PDC_SETTLE_QUEUE",
+      "9": "PDC_FINISH_SETTLE_QUEUE",
+      "10": "PDC_GET_PLAYER_DATA4MAP",
+      "11": "PDC_REG",
+      "12": "PDC_UNREG",
+      "13": "PDC_GET_PLAYER",
+      "14": "PDC_GET_CITY_POS",
+      "15": "PDC_UPDATE_CITY_POS",
+      "16": "PDC_GET_MAP_PLAYERS",
+      "17": "PDC_GET_PLAYER_INFO"
+    }
+  },
+  "1014": {
+    "name": "WAR_CENTER_MODULE",
+    "reqs": {
+      "1": "OPT"
+    }
+  },
+  "1015": {
+    "name": "MAIL_MODULE",
+    "reqs": {
+      "1": "INIT_MAILDATA",
+      "2": "MAIL_LIST",
+      "3": "SEND_CHAT_MAIL",
+      "4": "REMOVE_MAIL",
+      "5": "UPDATE_MAIL",
+      "6": "QUERY_MAIL",
+      "7": "SHARE_MAIL",
+      "8": "SEND_CHAT_MAIL_BY_NICKNAME",
+      "9": "REMOVE_MAIL_LIST",
+      "10": "VIEW_MAIL_SET",
+      "11": "VIEW_MAIL_LIST",
+      "12": "VIEW_MAIL",
+      "13": "LOCK_MAIL_LIST",
+      "14": "LOCK_MAIL",
+      "15": "UNLOCK_MAIL_LIST",
+      "16": "UNLOCK_MAIL",
+      "17": "GET_EXTRA_OF_MAIL",
+      "18": "GET_EXTRA_OF_MAILS",
+      "19": "GET_MORE_LIST",
+      "20": "GET_MAIL_WITH_STATUS",
+      "21": "GET_MAIL_WITHOUT_STATUS",
+      "22": "GET_MORE_SET_COVER",
+      "23": "VIEW_VOICE_MSG",
+      "24": "SEN_MULTIPLE_CHAT_MAIL",
+      "25": "CONFIRM_MAIL_AUTO_GET"
+    }
+  },
+  "1016": {
+    "name": "BEHAVIOUR_MODULE",
+    "reqs": {
+      "1": "GET_BEHAVIOUR_DATA",
+      "2": "SET_BEHAVIOUR_DATA"
+    }
+  },
+  "1017": {
+    "name": "TECHNOLOGY_MODULE",
+    "reqs": {
+      "1": "INIT_TECHNOLOGY_DATA",
+      "2": "RESEARCH_TECHNOLOGY",
+      "3": "INIT_QUEUE_DATA",
+      "4": "CANCLE_TECHNOLOGY"
+    }
+  },
+  "1018": {
+    "name": "TREVIFOUNTAIN_MODULE",
+    "reqs": {
+      "1": "INIT_TREVIFOUNTAIN_DATA",
+      "2": "MULTIPLE_DATA",
+      "3": "TREVIFOUNTAIN_WITCH",
+      "4": "TREVIFOUNTAIN_WITCH_LOGIN"
+    }
+  },
+  "1019": {
+    "name": "BUFF_MODULE",
+    "reqs": {
+      "1": "INIT_BUFFDATA",
+      "2": "RESTORE_CASTLE_DRESS",
+      "3": "CLOSE_BUFF",
+      "4": "ALL_ATTRIBUTE_INFO",
+      "5": "ALL_WAR_ATTRIBUTE_INFO",
+      "6": "WAR_WAR_ATTRIBUTE_INFO"
+    }
+  },
+  "1020": {
+    "name": "WATCHTOWER_MODULE",
+    "reqs": {
+      "1": "INIT_WATCHTOWERDATA"
+    }
+  },
+  "1021": {
+    "name": "CHEAT_MODULE",
+    "reqs": {
+      "1": "CHEAT",
+      "2": "GAME_ITEM"
+    }
+  },
+  "1022": {
+    "name": "COLLECTMAP_MODULE",
+    "reqs": {
+      "1": "INIT_COLLECTMAPDATA",
+      "2": "COLLECT_MAP",
+      "3": "EDIT_COLLECT_MAP",
+      "4": "DELETE_COLLECT_MAP"
+    }
+  },
+  "1023": {
+    "name": "WALLS_MODULE",
+    "reqs": {
+      "1": "INIT_WALLSDATA",
+      "2": "WALLS_FIRE",
+      "3": "ADD_DEFENCE",
+      "4": "REBUILD_WALL"
+    }
+  },
+  "1024": {
+    "name": "STORES_MODULE",
+    "reqs": {
+      "1": "INIT_STORESDATA",
+      "2": "REFRESH_STORESDATA",
+      "3": "PURCHASE_GOODS"
+    }
+  },
+  "1026": {
+    "name": "PLAYER_ALLIANCE_MODULE",
+    "reqs": {
+      "1": "ALLIANCE_MSG_LIST",
+      "2": "ALLIANCE_BATTLE_RECORD",
+      "3": "ALLIANCE_INVITE_LIST",
+      "4": "ALLIANCE_INFO",
+      "5": "SEARCH_ALLIANCE_ALL_WORLD",
+      "6": "INVITE_ALLY_ALLIANCE",
+      "7": "CANCEL_INVITE_ALLY_ALLIANCE",
+      "8": "REJECT_ALLY_ALLIANCE_INVITE",
+      "9": "ACCEPT_ALLY_ALLIANCE_INVITE",
+      "10": "ADD_FRIENDLY_ALLIANCE",
+      "11": "ADD_ENEMY_ALLIANCE",
+      "12": "DEL_ALLIANCE_RELATION",
+      "13": "GET_ALLIANCE_RELATIONS",
+      "14": "GET_ALLIANCE_RELATION_INVITES",
+      "15": "GET_ALLIANCE_TAX_RECORD",
+      "16": "ALLIANCE_GET_TERRITORY_INCOME",
+      "17": "ALLIANCE_FILL_CANNON"
+    }
+  },
+  "1027": {
+    "name": "KINGDOM_MODULE",
+    "reqs": {
+      "1": "GET_KINGDOM_LIST"
+    }
+  },
+  "1028": {
+    "name": "QUEST_MODULE",
+    "reqs": {
+      "1": "INIT_QUESTDATA",
+      "2": "COMMIT_QUEST",
+      "3": "COMPLETE_OPERATIONAL_QUEST",
+      "4": "COMMIT_OPERATIONAL_QUEST",
+      "5": "GET_UNIVERSAL_TASK_REWARD",
+      "6": "GET_UNIVERSAL_TASK_LIST_REWARD"
+    }
+  },
+  "1029": {
+    "name": "RANKINGS_MODULE",
+    "reqs": {
+      "1": "INIT_RANKINGS_DATA",
+      "2": "GET_RANKINGS_DATA",
+      "3": "DVWAR_RANK_LIST",
+      "4": "CRAZY_DROP_RANK_LIST"
+    }
+  },
+  "1030": {
+    "name": "ACTIVITY_MODULE",
+    "reqs": {
+      "1": "INIT_ACTIVITY_INFO",
+      "2": "INIT_ACTIVITY_MEMBER_INFO",
+      "3": "STAGE_RANK_INFO",
+      "4": "HISTORY_RANK_INFO",
+      "5": "STRONG_KID_ATY_INFO",
+      "6": "STRONG_KID_GROUP_INFO",
+      "7": "STRONG_KID_PSN_RANK_INFO",
+      "8": "STRONG_KID_ALLICANCE_RANK_INFO",
+      "9": "STRONG_KID_WORLD_RANK_INFO",
+      "10": "STRONG_KID_WORLD_RANK_HISTORY",
+      "11": "STRONG_KID_SEARCH"
+    }
+  },
+  "1031": {
+    "name": "RECHARGE_MODULE",
+    "reqs": {
+      "1": "RECHARGE_INFO",
+      "2": "RECHARGE_CHECK",
+      "3": "RECHARGE_DIRECT",
+      "4": "RECHARGE_ACTIVITY_INFO",
+      "5": "RECHARGE_ACTIVITY_CHECK",
+      "6": "RECHARGE_GET_MONTH_AWARD",
+      "7": "RECHARGE_GET_DAILY_REWARD",
+      "8": "RECHARGE_EXCHANGE_SPAR_PACKAGR",
+      "9": "SELF_CHOOSE_REWARD",
+      "10": "RECHARGE_SPAR_WEEK_AWARD"
+    }
+  },
+  "1032": {
+    "name": "LOGIN_REWARD_MODULE",
+    "reqs": {
+      "1": "LOGIN_REWARD_DATA",
+      "2": "RECEIVE_REWARD"
+    }
+  },
+  "1033": {
+    "name": "TIME_REWARD_MODULE",
+    "reqs": {
+      "1": "TIME_REWARD_DATA",
+      "2": "RECEIVE_TIME_REWARD"
+    }
+  },
+  "1034": {
+    "name": "SHOP_MODULE",
+    "reqs": {
+      "1": "SHOP_INIT_DATA",
+      "2": "ITEM_SHOP_BUY",
+      "3": "DRESS_SHOP_BUY",
+      "4": "ADD_DRESS_SHOP_CART",
+      "5": "REMOVE_DRESS_SHOP_CART",
+      "6": "LIMIT_TIME_DS_SHOP_BUY",
+      "7": "ITEM_SHOP_REDPOINT"
+    }
+  },
+  "1035": {
+    "name": "TIME_MODULE",
+    "reqs": {
+      "1": "SERVER_TIME"
+    }
+  },
+  "1036": {
+    "name": "GUIDE_MODULE",
+    "reqs": {
+      "1": "GUIDE_INITDATA",
+      "2": "COMPLETE_GUIDE_STEP"
+    }
+  },
+  "1037": {
+    "name": "HEARTBEAT_MODULE",
+    "reqs": {
+      "1": "HEARTBEAT",
+      "2": "HEARTBEAT_SWITCH"
+    }
+  },
+  "1038": {
+    "name": "KINGDOM_COMMON_MODULE",
+    "reqs": {
+      "1": "GET_KINGDOM_WEATHER"
+    }
+  },
+  "1039": {
+    "name": "RECAHRGE_SERVER_MODULE",
+    "reqs": {
+      "0": "RECHARGE_VERIFY",
+      "1": "RECHARGE_ACTIVITY_VERIFY"
+    }
+  },
+  "1040": {
+    "name": "FACEBOOK_SHARE_MODULE",
+    "reqs": {
+      "1": "DAILYREWARD_SHARE_REWARD",
+      "2": "LORDLVUP_SHARE_REWARD",
+      "3": "CASTLELVUP_SHARE_REWARD"
+    }
+  },
+  "1041": {
+    "name": "REGISTER_REWARD_MODULE",
+    "reqs": {
+      "1": "REGISTER_REWARD_DATA"
+    }
+  },
+  "1042": {
+    "name": "NOTICE_MODULE",
+    "reqs": {
+      "1": "NOTICE_INIT_DATA",
+      "2": "SET_NOT_DISTURB_STATUS",
+      "3": "SET_NOT_DISTURB_TIME",
+      "4": "SET_NOTICE_STATUS",
+      "5": "SET_LANGUAGE"
+    }
+  },
+  "1043": {
+    "name": "ACCOUNTEXT_MODULE",
+    "reqs": {
+      "1": "ACCOUNTEXT_PID",
+      "2": "ACCOUNTEXT_INVITED",
+      "3": "ACCOUNTEXT_REPLACE_CODE"
+    }
+  },
+  "1044": {
+    "name": "CUMU_ACTIVE_MODULE",
+    "reqs": {
+      "1": "CUMU_ACTIVE_INIT_DATA",
+      "2": "CUMU_ACTIVE_CONSUM_DATA",
+      "3": "CUMU_ACTIVE_RECHARGE_DATA",
+      "4": "CUMU_ACTIVE_GET_CONSUM_RWD"
+    }
+  },
+  "1045": {
+    "name": "PYRAMID_MODULE",
+    "reqs": {
+      "1": "PYRAMID_INIT_DATA",
+      "2": "PYRAMID_REFRESH_DATA",
+      "3": "PYRAMID_START_THROW",
+      "4": "PYRAMID_ONEKEY_THROW",
+      "5": "PYRAMID_RECEIVE_REWARD",
+      "6": "PYRAMID_THROW_AGAIN"
+    }
+  },
+  "1046": {
+    "name": "ACTIVATION_MODULE",
+    "reqs": {
+      "1": "ACTIVATION_RECEIVE"
+    }
+  },
+  "1047": {
+    "name": "EQUIPMENT_MODULE",
+    "reqs": {
+      "1": "STRENGTHEN_EQUIPMENT",
+      "2": "REFINE_EQUIPMENT",
+      "3": "SET_EQUIPMENT_SHOW_OR_HIDE"
+    }
+  },
+  "1048": {
+    "name": "LUCKYGIFT_MODULE",
+    "reqs": {
+      "1": "LUCKYGIFT_INIT_DATA",
+      "2": "LUCKYGIFT_RECEIVE_OR_BUY",
+      "3": "LUCKYGIFT_CHECK_NEW",
+      "4": "EXCHANGE_SPAR_LUCKY_PACKAGE"
+    }
+  },
+  "1050": {
+    "name": "KW_MGR_MODULE",
+    "reqs": {
+      "1": "KW_APPOINT_KING",
+      "2": "KW_CHANGE_NAME",
+      "3": "KW_CHANGE_FLAG",
+      "4": "KW_CHANGE_PLACE",
+      "5": "KW_KING_DATA",
+      "6": "KW_KING_LOG",
+      "7": "KW_GET_PLACE_LOG",
+      "8": "KW_GET_WAR_SCORE_RANK",
+      "9": "KW_GET_OCCUPY_RANK",
+      "10": "KW_SET_KING_ONLINE_NOTIVE",
+      "11": "KW_PLAYER_SCORE_RANK",
+      "12": "KW_BATTERY_ATTACK_PLACE",
+      "13": "KW_SET_ATTACK_MODE",
+      "14": "KW_GET_OWNERS",
+      "15": "KW_PLACE_SCORE_RANK"
+    }
+  },
+  "1051": {
+    "name": "KW_MAP_MODULE",
+    "reqs": {
+      "1": "KW_CHANGE_RES_RATE"
+    }
+  },
+  "1052": {
+    "name": "KW_PACKS_MODULE",
+    "reqs": {
+      "1": "KW_GIVE_PACKS",
+      "2": "KW_GIVE_PACK_LOG",
+      "3": "KW_GET_PACK_DATA",
+      "4": "KW_GIVE_PARTICIPATOR_PACK_LOG"
+    }
+  },
+  "1053": {
+    "name": "KW_RANK_MODULE",
+    "reqs": {
+      "1": "KW_APPOINT_OFFICIAL",
+      "2": "KW_DISMISS_OFFICIAL",
+      "3": "KW_GET_OFFICIAL_DATA"
+    }
+  },
+  "1054": {
+    "name": "ROME_ACTIVITY",
+    "reqs": {
+      "1": "OPEN_ACTIVITY",
+      "2": "INIT_MEMBER_RANK_INFO",
+      "3": "INIT_ALLIANCE_RANK_INFO",
+      "4": "INIT_SCORE_AND_RANK",
+      "5": "ALLIANCE_DATA"
+    }
+  },
+  "1055": {
+    "name": "ACHIEVEMENT_MODULE",
+    "reqs": {
+      "1": "ACHIEVEMENT_REWARD",
+      "2": "ACHIEVEMENT_REFRESH",
+      "3": "ACHIEVEMENT_OPEN_BUFF",
+      "4": "ACHIEVEMENT_CLOSE_BUFF",
+      "5": "ACHIEVEMENT_SWITCH_METAL",
+      "6": "ACHIEVEMENT_SET_METAL",
+      "7": "ACHIEVEMENT_METAL_INFO"
+    }
+  },
+  "1056": {
+    "name": "SETTING_MODULE",
+    "reqs": {
+      "1": "SET_CLIENT_LANGUAGE",
+      "2": "SET_TRANSLATE_LANGUAGE",
+      "3": "SET_TRANSLATE_TL",
+      "4": "SET_KEY_VALUE",
+      "5": "KINGDOM_SETTING_INIT_DATA",
+      "6": "SET_AUTO_TRANSLATE_SWITCH",
+      "7": "SET_SECONDARY_PASSWORD",
+      "8": "MOTIFY_SECONDARY_PASSWORD",
+      "9": "CLOSE_SECONDARY_PASSWORD"
+    }
+  },
+  "1057": {
+    "name": "TRANSLATE_MODULE",
+    "reqs": {
+      "1": "TRANSLATE_TEXT",
+      "2": "TRANSLATE_CONTENT"
+    }
+  },
+  "1058": {
+    "name": "TREASUREMAP_MODULE",
+    "reqs": {
+      "1": "TREASUREMAP_REFRESH",
+      "2": "TREASUREMAP_BLOCK",
+      "3": "TREASUREMAP_ADJUST"
+    }
+  },
+  "1059": {
+    "name": "HT_MODULE",
+    "reqs": {
+      "1": "HT_OPEN_TRIAL",
+      "2": "HT_QUIT_TRIAL",
+      "3": "HT_GENERAl_TRIAL",
+      "4": "HT_AUTO_TRIAL",
+      "5": "HT_STOP_AUTO_TRIAL",
+      "6": "HT_LIKE",
+      "7": "HT_BATTLE_REPORT",
+      "8": "HT_MAP_INFO",
+      "9": "HT_SPEED_UP"
+    }
+  },
+  "1060": {
+    "name": "RAMADAN_MODULE",
+    "reqs": {
+      "1": "RECEIVE_CELEBRATE"
+    }
+  },
+  "1061": {
+    "name": "PICKLIGHT_MODULE",
+    "reqs": {
+      "1": "PICKLIGHT_REWARD"
+    }
+  },
+  "1062": {
+    "name": "EXCHANGEMALL_MODULE",
+    "reqs": {
+      "1": "EXCHANGE_GOOD",
+      "2": "EXCHANGE_REMIND"
+    }
+  },
+  "1063": {
+    "name": "REDENVELOPES_MODULE",
+    "reqs": {
+      "1": "REDENVELOPES_CHECK",
+      "2": "REDENVELOPES_GET"
+    }
+  },
+  "1064": {
+    "name": "GROUPBUY_MODULE",
+    "reqs": {
+      "1": "GROUPBUY_INIT",
+      "2": "GROUPBUY_BUY"
+    }
+  },
+  "1065": {
+    "name": "RAMADAN_RANK_MODULE",
+    "reqs": {
+      "1": "RAMADAN_RANK_GET_ID",
+      "2": "RAMADAN_RANK_INIT"
+    }
+  },
+  "1066": {
+    "name": "CLIENT_LOG_MODULE",
+    "reqs": {
+      "1": "CLIENT_LOG_GIFT"
+    }
+  },
+  "1067": {
+    "name": "BADGE_EXCHANGE_MODULE",
+    "reqs": {
+      "1": "BADGE_EXCHANGE_OPEN_PAGE",
+      "2": "BADGE_EXCHANGE_SEND"
+    }
+  },
+  "1068": {
+    "name": "PREMIUM_STORE_MODULE",
+    "reqs": {
+      "1": "PREMIUM_STORE_OPEN_PAGE",
+      "2": "PREMIUM_STORE_BUY",
+      "3": "PREMIUM_SET_PWD",
+      "4": "PREMIUM_SWITCH",
+      "5": "BUY_N_USE_DRESS"
+    }
+  },
+  "1069": {
+    "name": "CHATROOM_MODULE",
+    "reqs": {
+      "1": "CHATROOM_GET_MSG",
+      "2": "CHATROOM_SEND_MSG",
+      "3": "CHATROOM_CREATE",
+      "4": "CHATROOM_GET_MEMBERS",
+      "5": "CHATROOM_ADD_MEMBERS",
+      "6": "CHATROOM_DEL_MEMBERS",
+      "7": "CHATROOM_QUIT",
+      "8": "CHATROOM_MODIFY_NAME",
+      "9": "CHATROOM_MSG_BEEN_READ",
+      "10": "ALL_CHATROOM_MSG_BEEN_READ",
+      "11": "CHATROOM_DEL_COVER",
+      "12": "CHATROOM_REPORT_CHAT_MSG_STATUS"
+    }
+  },
+  "1070": {
+    "name": "CONQUESTWAR",
+    "reqs": {
+      "1": "GET_CONQUESTWAR_INFO",
+      "2": "GET_CONQUESTWAR_RANK",
+      "3": "GET_CONQUESTWAR_BATTLE_RESULT",
+      "4": "GET_CONQUESTWAR_STAGE_INFO",
+      "5": "GET_CONQUESTWAR_PLAYER_RANK_IN_ALLIANCE",
+      "6": "GET_CONQUESTWAR_HONOR_RANK",
+      "7": "GET_CONQUESTWAR_REPORT_OTHER",
+      "8": "GET_CONQUESTWAR_SEARCH_PLAYER"
+    }
+  },
+  "1071": {
+    "name": "DRESS_MODULE",
+    "reqs": {
+      "1": "DRESS_SELECT",
+      "2": "DRESS_RESTORE",
+      "3": "DRESS_GET_GATHER_REWARD",
+      "4": "DRESS_HIDE"
+    }
+  },
+  "1072": {
+    "name": "PROP_MODULE",
+    "reqs": {
+      "1": "PROP_DISCUSS_JOKE",
+      "2": "PROP_GET_PUMPKIN_CANDY",
+      "3": "PROP_GET_TGD_GIFT",
+      "4": "PROP_CHECK_RECHARGE_GOLD_GIFT"
+    }
+  },
+  "1073": {
+    "name": "SCOUT_RECORD_MODULE",
+    "reqs": {
+      "1": "SCOUT_RECORD_GET_ALL"
+    }
+  },
+  "1074": {
+    "name": "MILITARY_RANK_MODULE",
+    "reqs": {
+      "1": "MILITARY_RANK_GET_REWARD",
+      "2": "MILITARY_RANK_LEARN_SKILL",
+      "3": "MILITARY_RANK_EXCHANGE_TOOL",
+      "4": "MILITARY_OPEN_PAGE",
+      "5": "MILITARY_MARSHAL_TIP"
+    }
+  },
+  "1075": {
+    "name": "ESCORT_CART_MODULE",
+    "reqs": {
+      "1": "ESCORT_CART_DATA",
+      "2": "ESCORT_CART_REFRESH",
+      "3": "ESCORT_CART_APPOINT"
+    }
+  },
+  "1076": {
+    "name": "ESCORT_ASSIST_MODULE",
+    "reqs": {
+      "1": "ESCORT_ASSIST_INVITE",
+      "2": "ESCORT_ASSIST_ACCEPT",
+      "3": "ESCORT_ASSIST_REJECT"
+    }
+  },
+  "1077": {
+    "name": "ESCORT_INTEL_MODULE",
+    "reqs": {
+      "1": "ESCORT_INTEL_GET_KINGDOM_MSG",
+      "2": "ESCORT_INTEL_GET_ALLIANCE_MSG"
+    }
+  },
+  "1078": {
+    "name": "ESCORT_MODULE",
+    "reqs": {
+      "1": "ESCORT_GET_ROB_RECOMMEND",
+      "2": "ESCORT_GET_CLOSEST_BUILD",
+      "3": "ESCORT",
+      "4": "VIP_INFO_SHOW_OR_HIDE"
+    }
+  },
+  "1079": {
+    "name": "AW_MGR_MODULE",
+    "reqs": {
+      "1": "AW_GET_PLACE_LOG",
+      "2": "AW_DATA",
+      "3": "AW_PERSONAL_POINTS_LIST",
+      "4": "SYNC_AW",
+      "5": "STOP_SYNC_AW"
+    }
+  },
+  "1080": {
+    "name": "LLW_MGR_MODULE",
+    "reqs": {
+      "1": "LLW_DATA",
+      "2": "LLW_OCCUPY_RANK_LIST",
+      "3": "LLW_MEMOIR_LIST",
+      "4": "LLW_LEGENDLORD_ALLYS",
+      "5": "LLW_BUILD_OCCUPIER_INFO"
+    }
+  },
+  "1081": {
+    "name": "LLW_MODULE",
+    "reqs": {
+      "1": "LLW_KINGDOM_TITLE_LIST",
+      "2": "LLW_LORD_TITLE_LIST",
+      "3": "LLW_TITLE_INFO",
+      "4": "LLW_GIFT_LIST",
+      "5": "LLW_AWARD_GIFT",
+      "6": "LLW_APPOINT_KINGDOM_TITLE",
+      "7": "LLW_APPOINT_LORD_TITLE",
+      "8": "LLW_CANCEL_KINGDOM_TITLE",
+      "9": "LLW_CANCEL_LORD_TITLE",
+      "10": "LLW_GIFT_LOG",
+      "11": "LLW_GET_KING_INFO"
+    }
+  },
+  "1082": {
+    "name": "VIP_MODULE",
+    "reqs": {
+      "1": "BUY_VIP_DAILY_GIFT",
+      "2": "BUY_VIP_EXCLUSIVE_GIFT",
+      "3": "BUY_VIP_SHOP_ITEM"
+    }
+  },
+  "1083": {
+    "name": "CUMU_SIGN_IN",
+    "reqs": {
+      "1": "GET_SIGN_IN_REWARD"
+    }
+  },
+  "1084": {
+    "name": "WEEKLY_RECHARGE",
+    "reqs": {
+      "1": "WEEKLY_RECHARGE_FEEDBACK"
+    }
+  },
+  "1085": {
+    "name": "TURNTABLE_ACTIVITY",
+    "reqs": {
+      "1": "TURNTABLE_ACTIVITY_SINGLE",
+      "2": "TURNTABLE_ACTIVITY_TEN",
+      "3": "PERSONAL_TURNTABLE_SINGLE",
+      "4": "PERSONAL_TURNTABLE_TEN",
+      "5": "PERSONAL_TURNTABLE_GET_STAGE_RWD",
+      "6": "TURNTABLE_GET_STAGE_RWD"
+    }
+  },
+  "1086": {
+    "name": "TIME_LIMIT_TASK_MODULE",
+    "reqs": {
+      "1": "TIME_LIMIT_TASK_DATA",
+      "2": "OPEN_TIME_LIMIT_TASK",
+      "3": "COMPLETE_TASK",
+      "4": "CHOICE_AND_CLAIM_TASK_REWARD"
+    }
+  },
+  "1087": {
+    "name": "GOD_BEAST",
+    "reqs": {
+      "1": "CLAIM_INJURY_REWARD",
+      "2": "GET_LOG",
+      "3": "GET_MEMBER_INFO",
+      "4": "GET_MEMBER_RANK",
+      "5": "BUY_ATK_COUNT"
+    }
+  },
+  "1088": {
+    "name": "CROSS_MISSION_MODULE",
+    "reqs": {
+      "2": "CROSS_MISSION_GETREWARD"
+    }
+  },
+  "1089": {
+    "name": "VOW_STAR_LAMPS_MODULE",
+    "reqs": {
+      "1": "GET_REBATE_REWARD",
+      "2": "GET_DAILY_REWARD"
+    }
+  },
+  "2000": {
+    "name": "CLICK_PRAISE_MODULE",
+    "reqs": {
+      "1": "GET_CLICK_PRAISE_REWARD"
+    }
+  },
+  "2001": {
+    "name": "EVALUATION_OF_STARS_MODULE",
+    "reqs": {
+      "1": "GET_EVALUATION_INIT",
+      "2": "SEND_STARS_TYPE"
+    }
+  },
+  "2002": {
+    "name": "GREAT_CHALLENGE_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "GREAT_CHALLENGE_ACTIVITY_INIT"
+    }
+  },
+  "2006": {
+    "name": "ABC_CLUB_MODULE",
+    "reqs": {
+      "1": "SEND_REFRESH",
+      "2": "SEND_EXCHANGE",
+      "3": "OPEN_PAGE"
+    }
+  },
+  "2008": {
+    "name": "SIEGE_COMBAT_MODULE",
+    "reqs": {
+      "1": "SIEGE_COMBAT_ENTER",
+      "2": "SIEGE_COMBAT_OPEN_PAGE",
+      "3": "SIEGE_COMBAT_PLUS_STEP",
+      "4": "SIEGE_COMBAT_DOUBLE",
+      "5": "SIEGE_COMBAT_KO",
+      "6": "SIEGE_COMBAT_USE_DOUBLE",
+      "7": "SIEGE_COMBAT_SHARE",
+      "8": "SIEGE_COMBAT_ALLIANCE_SHARE",
+      "9": "SIEGE_GET_KILLINFO",
+      "10": "SIEGE_USE_STEP",
+      "11": "SIEGE_DAMAGE_LIST",
+      "12": "SIEGE_ATTACK_DETAIL"
+    }
+  },
+  "2011": {
+    "name": "FIND_MONSTER_MODULE",
+    "reqs": {
+      "1": "JUST_DO_FIND",
+      "2": "FIND_UP_MAX_LV",
+      "3": "SEARCH_MAP",
+      "4": "JUST_DO_FIND_BATTLE_BOSS",
+      "5": "ALL_GOD_BEAST_INFO",
+      "6": "ALL_DRAGON_INFO"
+    }
+  },
+  "7": {
+    "name": "GET_KILL_MONSTER",
+    "reqs": {}
+  },
+  "2012": {
+    "name": "PRIVILEGE_GIFT_MODULE",
+    "reqs": {
+      "1": "PRIVILEGE_GIFT_INIT",
+      "2": "PRIVILEGE_GIFT_BUY"
+    }
+  },
+  "2013": {
+    "name": "RED_PACKAGE_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "RED_PACKAGE_ACTIVITY_INIT",
+      "2": "RED_PACKAGE_ACTIVITY_RECEIVE"
+    }
+  },
+  "2014": {
+    "name": "HERO_BATTLE_BOSS_MODULE",
+    "reqs": {
+      "1": "HERO_BATTLE_BOSS_RANK"
+    }
+  },
+  "2015": {
+    "name": "ALLIANCE_TREASURE_MODULE",
+    "reqs": {
+      "1": "ALLIANCE_TREASURE_INIT",
+      "2": "ALLIANCE_TREASURE_MANUAL_REFRESH",
+      "3": "ALLIANCE_TREASURE_DIG",
+      "4": "ALLIANCE_TREASURE_REQUEST_HELP",
+      "5": "ALLIANCE_TREASURE_HELP_OTHER",
+      "6": "ALLIANCE_TREASURE_RECEIVE",
+      "7": "ALLIANCE_TREASURE_SPEED"
+    }
+  },
+  "2021": {
+    "name": "STUFF_WORKSHOP_MODULE",
+    "reqs": {
+      "1": "REFRESH",
+      "2": "REFINERY",
+      "3": "CANCEL_REFINERY",
+      "4": "GET_STUFF",
+      "5": "OPEN_POS",
+      "6": "SWITCH_QUALITY"
+    }
+  },
+  "2022": {
+    "name": "FACEBOOK_TREASURE",
+    "reqs": {
+      "1": "GET_REWARD",
+      "2": "SEND_HELP",
+      "3": "LOAD_PAGE"
+    }
+  },
+  "2023": {
+    "name": "FLOWER_SYS_MODULE",
+    "reqs": {
+      "1": "FLOWER_SYS_GIFT",
+      "2": "FLOWER_SYS_BUY",
+      "3": "FLOWER_HISTORY",
+      "4": "FLOWER_OPEN_PAGE"
+    }
+  },
+  "2024": {
+    "name": "RESURRECTION_MODULE",
+    "reqs": {
+      "1": "RESURRECTON",
+      "2": "GET_RESURRECTION_DATA",
+      "3": "QUICK_RESURRECTON"
+    }
+  },
+  "2025": {
+    "name": "GROWUP_FUND_MODULE",
+    "reqs": {
+      "1": "BUY_GROWUP_FUND",
+      "2": "RECEIVE_GROWUP_FUND",
+      "3": "CHECK_SHOW_TIME"
+    }
+  },
+  "2026": {
+    "name": "SNATCH_MODULE",
+    "reqs": {
+      "1": "GET_SNATCH_INFO",
+      "2": "BUY_SNATCH_GOOD"
+    }
+  },
+  "2027": {
+    "name": "EVERYDAY_TASK_MODULE",
+    "reqs": {
+      "1": "EVERYDAY_TASK_INIT",
+      "2": "EVERYDAY_TASK_RECEIVE_NORMAL",
+      "3": "EVERYDAY_TASK_REFRESH",
+      "4": "EVERYDAY_TASK_RECEIVE_CHEST"
+    }
+  },
+  "2028": {
+    "name": "LUCKYDAY_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "LUCKYDAY_ACTIVITY_CLICK"
+    }
+  },
+  "2029": {
+    "name": "ACTIVITY_CENTER_UI_MODULE",
+    "reqs": {
+      "1": "ACTIVITY_CENTER_UI_INIT",
+      "2": "ACTIVITY_CENTER_UI_CLEAR_NEW"
+    }
+  },
+  "2030": {
+    "name": "NEW_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "NEW_ACTIVITY_INIT",
+      "2": "GET_DEVELOP_ARMAMENT_INFO",
+      "3": "GET_DEVELOP_ARMAMENT_RANK",
+      "4": "GET_PERSON_LIMITED_INFO",
+      "5": "GET_PERSON_LIMITED_RANK",
+      "6": "GET_CRAZY_SCORE_INFO",
+      "7": "GET_CRAZY_SCORE_RANK",
+      "8": "GET_FLOWER_ACTIVITY_PERSONAL_INFO",
+      "9": "GET_FLOWER_ACTIVITY_AWARD",
+      "10": "GET_FLOWER_ACTIVITY_RANK_DATA",
+      "11": "GET_CRAZY_SCORE_RANK_NEW"
+    }
+  },
+  "2031": {
+    "name": "SALES_ROOM_MODULE",
+    "reqs": {
+      "1": "SALES_ROOM_INIT",
+      "2": "SALES_ROOM_ADD_PLUS",
+      "3": "SALES_ROOM_CLEAR_LOG",
+      "4": "SALES_ROOM_GET_LOG",
+      "5": "SALES_ROOM_RECEIVE_GOLD",
+      "6": "SALES_ROOM_GET_GOLD_LOG",
+      "7": "SALES_ROOM_RECEIVE_ONE_GOLD"
+    }
+  },
+  "2032": {
+    "name": "NOVICE_GIFT_MODULE",
+    "reqs": {
+      "1": "NOVICE_GIFT_INIT",
+      "2": "NOVICE_GIFT_RECEIVE"
+    }
+  },
+  "2033": {
+    "name": "KILL_MONSTER_VERIFY",
+    "reqs": {
+      "1": "VERIFY_INIT",
+      "2": "ANSTER_QUESTION"
+    }
+  },
+  "2034": {
+    "name": "SIGN_REWARD_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "SIGN_REWARD_ACTIVITY_INIT",
+      "2": "SIGN_REWARD_ACTIVITY_SIGN",
+      "3": "SIGN_REWARD_ACTIVITY_USE_GOLD_SIGN",
+      "4": "SIGN_REWARD_ACTIVITY_GET_EXTRA_REWARD"
+    }
+  },
+  "2035": {
+    "name": "BACK_GOLD_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "BACK_GOLD_ACTIVITY_INIT",
+      "2": "BACK_GOLD_ACTIVITY_RECEIVE"
+    }
+  },
+  "2036": {
+    "name": "PET_MODULE",
+    "reqs": {
+      "1": "UNLOCK_PET",
+      "2": "FEED_PET",
+      "3": "ADVANCE_PET",
+      "4": "GET_SPECIAL_SKILL_TOOL",
+      "5": "PET_SHARE",
+      "6": "PET_HANDBOOK"
+    }
+  },
+  "2037": {
+    "name": "MONSTERPALACE_MODULE",
+    "reqs": {
+      "1": "MONSTERPALACE_ENTRANCE",
+      "2": "MONSTERPALACE_ENTERBATTLE",
+      "3": "MONSTERPALACE_ATTACK",
+      "4": "MONSTERPALACE_FEATHER_SHOP",
+      "5": "MONSTERPALACE_FEATHER_SHOP_BUY",
+      "6": "MONSTERPALACE_QUERY_AWARDLOG",
+      "7": "MONSTERPALACE_SYSTEM_LOG",
+      "8": "MONSTERPALACE_PERSONAL_LOG"
+    }
+  },
+  "2038": {
+    "name": "KING_RETURN_MODULE",
+    "reqs": {
+      "1": "KING_RETURN_INIT",
+      "2": "KING_RETURN_RECEIVE"
+    }
+  },
+  "2039": {
+    "name": "PYRAMIDWAR_MODULE",
+    "reqs": {
+      "1": "PW_REGULAR_SEASON_APPLY",
+      "2": "PW_APPOINT",
+      "3": "PW_CANCEL_APPOINT",
+      "4": "PW_ENTER",
+      "5": "PW_REGULAR_SEASON_GET_APPLYINFO",
+      "6": "PW_GET_ALLIANCE_APPOINTINFO",
+      "7": "PW_REGULAR_SEASON_GET_BATTLE_RECORD",
+      "8": "PW_REGULAR_SEASON_GET_RANK",
+      "9": "PW_REGULAR_SEASON_GET_MATCH_ALLIANCE_INFO",
+      "10": "PW_REGULAR_SEASON_GET_MATCH_TOTAL_INFO",
+      "11": "PW_POST_SEASON_APPLY",
+      "12": "PW_SEND_POST_SEASON_GIFT",
+      "13": "PW_GET_POST_SEASON_TOP_ALLIANCE",
+      "14": "PW_GET_POST_SEASON_TOP_GIFT_SEND_RECORD",
+      "15": "PW_REGULAR_MEMBER_INFO",
+      "16": "PW_INTEND_TIME_NUMBER",
+      "17": "PW_ONEKEY_APPOINT",
+      "18": "PW_GET_WATCH_LIST_INFO",
+      "19": "PW_HC_APPLY",
+      "20": "PW_HC_APPOINT",
+      "21": "PW_HC_DISAPPOINT",
+      "22": "PW_HC_QUIT_TEAM",
+      "23": "PW_HC_GET_TEAM_RANK",
+      "24": "PW_HC_GROUP_DROW_LOTS",
+      "25": "PW_HC_GET_GROUP_INFO",
+      "26": "PW_HC_POS_DROW_LOTS",
+      "27": "PW_HC_CHEER",
+      "28": "PW_HC_KO_MATCH_DATA",
+      "29": "PW_HC_GET_MY_TEAM_DATA",
+      "30": "PW_HC_GET_MATCH_TEAM_INFO",
+      "31": "PW_HC_GET_MY_BATTLE_TEAM",
+      "32": "PW_HC_ENTER_BATTLEGROUD",
+      "33": "PW_HC_GET_WATCH_NUM",
+      "34": "PW_HC_CHAMPION",
+      "35": "PW_HC_SEASON_TOP_TEAM",
+      "36": "PW_HC_SEASON_TEAM_INFO",
+      "37": "PW_HC_EDIT_TEAM_MANIFESTO",
+      "38": "PW_HC_SEASON_TOP_PERSON",
+      "39": "PW_HC_EDIT_PERSON_MANIFESTO",
+      "40": "PW_HC_SPOT_TEAM",
+      "41": "PW_HC_SPECIAL_TEAM",
+      "42": "PW_HC_TOP_TEAM_ROOM_DATA"
+    }
+  },
+  "2040": {
+    "name": "KING_GROUP_BUY_MODULE",
+    "reqs": {
+      "1": "KING_GROUP_BUY_INIT",
+      "2": "KING_GROUP_BUY_CHARGE",
+      "3": "KING_GROUP_BUY_LOG",
+      "4": "KING_GROUP_DEBUG_REFRESH",
+      "5": "KING_GROUP_MARK"
+    }
+  },
+  "2041": {
+    "name": "FLOWER_ACTIVITY_RANK_MODULE",
+    "reqs": {
+      "1": "GET_ACTIVITY_SENDFLOWER_AWARD",
+      "2": "GET_ACTIVITY_RECEFLOWER_AWARD"
+    }
+  },
+  "2042": {
+    "name": "LIFE_WATER_MODULE",
+    "reqs": {
+      "1": "REVIVE",
+      "2": "GET_REVIVE_DATA",
+      "3": "QUICK_REVIVE",
+      "4": "EXCHANGE_DEADSCORE",
+      "5": "HELP_INFO",
+      "6": "HELP_LIST",
+      "7": "HELP_RELIVE",
+      "8": "SEND_HELP_CHAT",
+      "9": "RELIVE_ARMY"
+    }
+  },
+  "2043": {
+    "name": "COLLECT_WORDS_MODULE",
+    "reqs": {
+      "1": "COLLECT_WORDS_INIT",
+      "2": "COLLECT_WORDS_SHAKE",
+      "3": "COLLECT_WORDS_SEND_MAIL"
+    }
+  },
+  "2044": {
+    "name": "MOBILIZATION_MODULE",
+    "reqs": {
+      "1": "MOBI_INIT",
+      "2": "MOBI_GET_AWARD_STAGE",
+      "3": "MOBI_MISSION_DEL",
+      "4": "MOBI_MISSION_ACCEPT",
+      "5": "MOBI_MISSION_COMPLETE",
+      "6": "MOBI_MISSION_ABORT",
+      "7": "MOBI_MISSION_ADDTIMES",
+      "8": "MOBI_MISSION_OP_LOG",
+      "9": "MOBI_MISSION_RANKINFO",
+      "10": "MOBI_MISSION_GROUP_RANK",
+      "11": "MOBI_MISSION_SELECT_INFO",
+      "12": "MOBI_MISSION_FRESH"
+    }
+  },
+  "2045": {
+    "name": "NEW_PLAYRE_TASK_MODULE",
+    "reqs": {
+      "1": "NEW_PLAYRE_TASK_INIT",
+      "2": "NEW_PLAYRE_TASK_RECEIVE_TASK_REWARD",
+      "3": "NEW_PLAYRE_TASK_RECEIVE_CHAPTER_REWARD",
+      "4": "NEW_PLAYRE_TASK_COMPLETE_TASK"
+    }
+  },
+  "2046": {
+    "name": "ICE_BREAK_MODULE",
+    "reqs": {
+      "1": "ICE_BREAK_INIT",
+      "2": "ICE_BREAK_BUY",
+      "3": "ICE_BREAK_TEST"
+    }
+  },
+  "2047": {
+    "name": "START_WROK_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "START_WROK_ACTIVITY_DATA",
+      "2": "START_WROK_ACTIVITY_GET_REWARD"
+    }
+  },
+  "2048": {
+    "name": "DAILY_GOAL_ACTIVITY_MODULE",
+    "reqs": {
+      "1": "DAILY_GOALS_ACTIVITY_GET_KILL_NPC_DATA",
+      "2": "DAILY_GOALS_ACTIVITY_GET_KILL_NPC_REWARD",
+      "3": "DAILY_GOALS_ACTIVITY_GET_TRAIN_ARMY_DATA",
+      "4": "DAILY_GOALS_ACTIVITY_GET_TRAIN_ARMY_REWARD",
+      "5": "DAILY_GOALS_ACTIVITY_GET_COLL_RES_DATA",
+      "6": "DAILY_GOALS_ACTIVITY_GET_COLL_RES_REWARD",
+      "7": "DAILY_GOALS_ACTIVITY_GET_POWER_DATA",
+      "8": "DAILY_GOALS_ACTIVITY_GET_POWER_REWARD"
+    }
+  },
+  "2049": {
+    "name": "NEW_KING_RISES_MODULE",
+    "reqs": {
+      "1": "KING_RISES_INIT",
+      "2": "KING_RISES_COMMIT",
+      "3": "KING_RISES_REWARD",
+      "4": "SEVEN_DAY_INIT",
+      "5": "SEVEN_DAY_COMMIT",
+      "6": "SEVEN_DAY_REWARD"
+    }
+  },
+  "2050": {
+    "name": "PET_EXCHANGE_MODULE",
+    "reqs": {
+      "1": "PET_EXCHAGNE_INIT",
+      "2": "PET_EXCHANGE_EAGLE",
+      "3": "PET_EXCHANGE_NORMAL",
+      "4": "PET_EXCHANGE_RECOVERY",
+      "5": "PET_EXCHANGE_EAGLE_QUICK"
+    }
+  },
+  "2051": {
+    "name": "NPC_TIP_MODULE",
+    "reqs": {
+      "1": "GET_NPC_TIP_REWARD"
+    }
+  },
+  "2052": {
+    "name": "RECHARGE_GIFT_MODULE",
+    "reqs": {
+      "1": "BUY_RECHARGE_GIFT"
+    }
+  },
+  "2053": {
+    "name": "EXCHANGE_MODULE",
+    "reqs": {
+      "1": "EXCHANGE"
+    }
+  },
+  "2054": {
+    "name": "KINGDOM_LEVEL_MODULE",
+    "reqs": {
+      "1": "KINGDOM_LEVEL_INFO",
+      "2": "KINGDOM_LEVEL_EXP_INFO"
+    }
+  },
+  "2055": {
+    "name": "WAR_GEM_MODULE",
+    "reqs": {
+      "1": "WAR_GEM_DATA",
+      "2": "WAR_GEM_MERGE_IN_BAG",
+      "3": "WAR_GEM_MERGE_ALL_IN_BAG",
+      "4": "WAR_GEM_MERGE_IN_PANEL",
+      "5": "WAR_GEM_MOUNT_IN_PANEL",
+      "6": "WAR_GEM_DISMOUNT_FROM_PANEL",
+      "7": "WAR_GEM_REPLACE_TO_PANEL",
+      "8": "WAR_GEM_UPGRADE",
+      "9": "WAR_GEM_SWITH_PAGE",
+      "10": "WAR_GEM_UNLOCK_PAGE",
+      "11": "WAR_GEM_CHANGE_PAGE_NAME",
+      "12": "ENCHANT_BIND_ATTR",
+      "13": "ENCHANT_LV_UP",
+      "14": "ENCHANT_FRESH_ATTR",
+      "15": "ENCHANT_REPLACE_ATTR"
+    }
+  },
+  "2056": {
+    "name": "ATY_DROP_MODULE",
+    "reqs": {
+      "1": "ATY_DROP_RANKDATA",
+      "2": "ATY_DROP_ITEM_NUM"
+    }
+  },
+  "2057": {
+    "name": "EXCHANGE_STORE_MODULE",
+    "reqs": {
+      "1": "EXCHANGE_GOODS",
+      "2": "SET_NOTICE",
+      "3": "KNOW_STORE"
+    }
+  },
+  "2058": {
+    "name": "HERO_MODULE",
+    "reqs": {
+      "1": "DRAW_CARD",
+      "2": "UPGRADE_LV",
+      "3": "UPGRADE_SRAR",
+      "4": "EQUIP_SKILL",
+      "5": "DEMOUNT_SKILL",
+      "6": "UPGRADE_SKILL",
+      "7": "UNLOCK_AWAKEN_SLOT",
+      "8": "REPLACE_AWAKEN_SKILL",
+      "9": "EXCHANGE_HERO_PIECE",
+      "10": "SYNTHESIS_PIECE",
+      "11": "SKILL_BREAK",
+      "12": "UPGRADE_AWAKEN_SKILL",
+      "13": "SAVE_AWAKEN_SKILL",
+      "14": "ABANDON_AWAKEN_SKILL",
+      "15": "APPOINT_HERO",
+      "16": "DRAW_SHARE",
+      "17": "DISAPPOINT_HERO",
+      "18": "HEROSHARE_SUCCESS",
+      "19": "HEROSHARE_GETRWD",
+      "20": "OTHER_PLAYER_HERO",
+      "21": "HERO_HANDBOOK_INFO",
+      "22": "HERO_HANDBOOK_UPGRADE",
+      "23": "SWITCH_LEGEND_DRAW_TYPE",
+      "24": "EXCHANGE_THEN_UPGRADE_STAR"
+    }
+  },
+  "2059": {
+    "name": "ATYRANK_MODULE",
+    "reqs": {
+      "1": "RANK_DATA",
+      "2": "GET_KILLRWD",
+      "3": "LUCKY_BLESS_BLESS",
+      "4": "LUCKY_BLESS_ACITIVE",
+      "5": "LUCKY_BLESS_LOG",
+      "6": "LUCKY_BLESS_REPLACE",
+      "7": "ATYSIGN_GETRWD",
+      "8": "POWERATY_GETQUESTRWD",
+      "9": "POWERATY_RANKDATA",
+      "11": "KINGLV_ATY_GETRWD",
+      "12": "KINGLV_ATY_FRESH",
+      "13": "KINGLV_ATY_BUY_LV",
+      "14": "EMPEROR_DRAW",
+      "15": "CASTARMOR_CAST",
+      "16": "CASTARMOR_SHARE",
+      "18": "CASTARMOR_RANK_DATA",
+      "19": "CASTARMOR_RECORD",
+      "20": "CASTARMOR_MATERIAL_RECORD",
+      "21": "CASTLEUP_RANK_DATA"
+    }
+  },
+  "22": {
+    "name": "HEAVENGIFT_RANK_DATA",
+    "reqs": {}
+  },
+  "23": {
+    "name": "DRAW_CARD_DRAW",
+    "reqs": {}
+  },
+  "24": {
+    "name": "DRAW_CARD_RECORD_REQ",
+    "reqs": {}
+  },
+  "25": {
+    "name": "DRAW_CARD_LUCKY_RESULT",
+    "reqs": {
+      "26": "CASTARMOR_MATERIAL_LASTESTRECORD"
+    }
+  },
+  "27": {
+    "name": "TURN_DRAW",
+    "reqs": {}
+  },
+  "28": {
+    "name": "CUSTOMATY_GETBOX",
+    "reqs": {}
+  },
+  "29": {
+    "name": "CUSTOMATY_CLEARNEW",
+    "reqs": {}
+  },
+  "30": {
+    "name": "DAILY_UNLOCK_ATY_GETBOX",
+    "reqs": {
+      "31": "NEW_KINGLV_ATY_FRESH",
+      "32": "NEW_KINGLV_ATY_BUY_LV",
+      "33": "DAILY_RECHARGE_ATY_GETSCORERWD",
+      "34": "DIG_TROY_TREASURE_NUM",
+      "35": "SPY_TROY_TREASURE",
+      "36": "MY_TROY_TREASURE",
+      "37": "QUERY_TORY_TREASURE_DETAIL",
+      "38": "REWARD_QUEST_FINALLY_REWARD"
+    }
+  },
+  "2060": {
+    "name": "STAMINA_MODULE",
+    "reqs": {
+      "1": "BUY_STAMINA"
+    }
+  },
+  "2061": {
+    "name": "DAILY_DISCOUNT_MODULE",
+    "reqs": {
+      "1": "BUY_DAILY_DISCOUNT_GIFT",
+      "2": "RECEIVE_FREE_GIFT",
+      "3": "RECEIVE_SPECIAL_GIFT",
+      "4": "RECEIVE_TASK_RWD"
+    }
+  },
+  "2068": {
+    "name": "VOICE_ROOM_MODULE",
+    "reqs": {
+      "1": "VOICE_ROOM_CREATE",
+      "2": "VOICE_ROOM_MODIFY_NAME",
+      "3": "VOICE_ROOM_MODIFY_PASSWORD",
+      "4": "VOICE_ROOM_DIMISS_ROOM",
+      "5": "VOICE_ROOM_JOIN_ROOM",
+      "6": "VOICE_ROOM_EXIT_ROOM",
+      "7": "VOICE_ROOM_KICK_ROOM",
+      "8": "VOICE_ROOM_DEMISS_ROOM",
+      "9": "VOICE_ROOM_FORBID_SPEAK",
+      "10": "VOICE_ROOM_DEL_FORBID_SPEAK",
+      "11": "VOICE_ROOM_GET_ROOM_LIST",
+      "12": "VOICE_ROOM_UPDATE_SDK_UID"
+    }
+  },
+  "2062": {
+    "name": "PRINCESS_MODULE",
+    "reqs": {}
+  },
+  "1": {
+    "name": "PRINCESS_RENAME",
+    "reqs": {}
+  },
+  "2": {
+    "name": "PRINCESS_DIVINE",
+    "reqs": {}
+  },
+  "3": {
+    "name": "PRINCESS_GIFT_GIVING",
+    "reqs": {}
+  },
+  "4": {
+    "name": "PRINCESS_RESET_GIFT",
+    "reqs": {}
+  },
+  "5": {
+    "name": "PRINCESS_CHANGE_SKILL",
+    "reqs": {
+      "3140": "MAZE",
+      "1": "MAZE_ENTER",
+      "2": "MAZE_MOVE",
+      "3": "MAZE_FAST_PASS",
+      "4": "MAZE_PASS",
+      "5": "MAZE_EVENT",
+      "6": "MAZE_OUT",
+      "7": "MAZE_BUY_TIMES",
+      "8": "MAZE_BUY_FIRE"
+    }
+  },
+  "6": {
+    "name": "PRINCESS_PATRONIZE",
+    "reqs": {}
+  },
+  "8": {
+    "name": "PRINCESS_TRIBUTE_REFRESH",
+    "reqs": {}
+  },
+  "9": {
+    "name": "PRINCESS_QUERY",
+    "reqs": {}
+  },
+  "10": {
+    "name": "PRINCESS_BUY_DIVINE",
+    "reqs": {}
+  },
+  "2063": {
+    "name": "GENERALATY_MODULE",
+    "reqs": {}
+  },
+  "2064": {
+    "name": "PVE_BATTLE_MODULE",
+    "reqs": {}
+  },
+  "11": {
+    "name": "PVE_BATTLE_GET_TASK_RWD",
+    "reqs": {}
+  },
+  "12": {
+    "name": "PVE_BATTLE_BUY_INCOME",
+    "reqs": {}
+  },
+  "2065": {
+    "name": "RUNE_MODULE",
+    "reqs": {}
+  },
+  "13": {
+    "name": "RUNE_LOCK_RUNE",
+    "reqs": {}
+  },
+  "14": {
+    "name": "RUNE_USE_LUCKYVALUE",
+    "reqs": {}
+  },
+  "15": {
+    "name": "RUNE_SMELT",
+    "reqs": {}
+  },
+  "16": {
+    "name": "RUNE_REFORGE",
+    "reqs": {}
+  },
+  "2066": {
+    "name": "FOOLSDAY_MODULE",
+    "reqs": {}
+  },
+  "2067": {
+    "name": "BIRTHDAY_CAKE_MODULE",
+    "reqs": {}
+  },
+  "2069": {
+    "name": "CONQUER_MODULE",
+    "reqs": {}
+  },
+  "2070": {
+    "name": "WEEKLY_CALENDAR_MODULE",
+    "reqs": {
+      "1": "DATA"
+    }
+  },
+  "3066": {
+    "name": "RUINS_WAR_MODULE",
+    "reqs": {}
+  },
+  "17": {
+    "name": "RUINS_WAR_CHANGE_ARMY",
+    "reqs": {}
+  },
+  "18": {
+    "name": "RUINS_WAR_MATCH",
+    "reqs": {}
+  },
+  "19": {
+    "name": "RUINS_WAR_CANCEL_MATCH",
+    "reqs": {}
+  },
+  "20": {
+    "name": "RUINS_WAR_ENTER_BATTLEFIELD",
+    "reqs": {}
+  },
+  "21": {
+    "name": "RUINS_WAR_QUIT_BATTLEFIELD",
+    "reqs": {}
+  },
+  "26": {
+    "name": "RUINS_WAR_CHECK_NAME",
+    "reqs": {}
+  },
+  "31": {
+    "name": "RUINS_WAR_SHARE_SEASON_INFO",
+    "reqs": {}
+  },
+  "3067": {
+    "name": "RW_MGR_MODULE",
+    "reqs": {
+      "1": "RW_DATA",
+      "2": "RW_PLAYER_POINTS_LIST",
+      "3": "RW_ROME_ATTACK",
+      "4": "SYNC_RW",
+      "5": "STOP_SYNC_RW",
+      "6": "RW_PLAYER_BUFF_LIST"
+    }
+  },
+  "2009": {
+    "name": "DEVIL_VALLEY_MODULE",
+    "reqs": {
+      "1": "DEVIL_VALLEY_CREATE_TEAM",
+      "2": "DEVIL_VALLEY_JOIN_TEAM",
+      "3": "DEVIL_VALLEY_LEAVE_TEAM",
+      "4": "DEVIL_VALLEY_KICKOUT_TEAM",
+      "5": "DEVIL_VALLEY_DISBAND_TEAM",
+      "6": "DEVIL_VALLEY_TEAM_LIST",
+      "7": "DEVIL_VALLEY_FAST_JOIN",
+      "8": "DEVIL_VALLEY_START_CHALLENGE",
+      "9": "DEVIL_VALLEY_SHARE_CHAT",
+      "10": "DEVIL_VALLEY_SEND_CHAT_CHANNEL",
+      "11": "DEVIL_VALLEY_GET_CHAT_MESSAGE",
+      "12": "DEVIL_VALLEY_EXCHANGE",
+      "13": "DEVIL_VALLEY_END_CHALLENGE",
+      "14": "DEVIL_VALLEY_INIT_INFO",
+      "15": "DEVIL_VALLEY_GET_REWARD",
+      "16": "DEVIL_VALLEY_HONOR_RANK"
+    }
+  },
+  "3079": {
+    "name": "WAR_GEM_HALL_MODULE",
+    "reqs": {
+      "1": "WAR_GEM_HALL_APPOINT_HERO",
+      "2": "WAR_GEM_HALL_DISAPPOINT_HERO",
+      "3": "WAR_GEM_HALL_INFO"
+    }
+  },
+  "3075": {
+    "name": "DVW_MGR_MODULE",
+    "reqs": {
+      "1": "DVW_DATA"
+    }
+  },
+  "3076": {
+    "name": "BATTLE_GROUND_ATTR",
+    "reqs": {
+      "1": "PYRAMID_ATTRIBUTE"
+    }
+  },
+  "3077": {
+    "name": "BOE_CHAPTER_TASK",
+    "reqs": {
+      "1": "CHAPTER_TASK_REWARD"
+    }
+  },
+  "3078": {
+    "name": "BOE_NEW_PLAYE_GUIDE",
+    "reqs": {
+      "1": "UPDATE_NEW_PLAYE_GUIDE"
+    }
+  },
+  "2089": {
+    "name": "TEAM_MODULE",
+    "reqs": {
+      "1": "TEAM_INIT_DATA",
+      "2": "TEAM_CREATE",
+      "3": "TEAM_DISMISS",
+      "4": "TEAM_JOIN",
+      "5": "TEAM_QUIT",
+      "6": "TEAM_KICK",
+      "7": "TEAM_APPLY_JOIN",
+      "9": "TEAM_AGREE_APPLY",
+      "10": "TEAM_REJECT_APPLY",
+      "11": "TEAM_INVITE_JOIN",
+      "13": "TEAM_AGREE_INVITE",
+      "14": "TEAM_REJECT_INVITE",
+      "15": "TEAM_SET_NAME",
+      "16": "TEAM_TRANSFER_LEADER",
+      "17": "TEAM_SEARCH_TEAM",
+      "18": "TEAM_SEND_INVITATION",
+      "19": "TEAM_MATCH",
+      "20": "TEAM_CANCEL_MATCH",
+      "21": "TEAM_GET_TEAM_INFO",
+      "22": "TEAM_GET_TEAM_MEMBER_INFO",
+      "23": "TEAM_GET_TEAM_APPLY_INFO",
+      "24": "TEAM_CHANGE_TROOP",
+      "25": "TEAM_SEARCH_USER",
+      "26": "TEAM_GET_ALLY_INFO",
+      "27": "TEAM_GET_FRIEND_INFO",
+      "28": "TEAM_SET_ABBR",
+      "29": "TEAM_SET_FLAG",
+      "30": "TEAM_REJECT_ALL_APPLY"
+    }
+  },
+  "3080": {
+    "name": "LIMIT_TEAM_ATTR_MODULE",
+    "reqs": {
+      "1": "LIMIT_TEAM_ATTR_UPDATE",
+      "2": "VIEW_LIMIT_TEAM_ATTR_ALLIANCE",
+      "3": "CHANGE_LIMIT_TEAM_NAME"
+    }
+  },
+  "3081": {
+    "name": "BOE_PET_MODULE",
+    "reqs": {
+      "1": "UNLOCK_PET",
+      "2": "FEED_PET",
+      "3": "PET_GARRISON",
+      "4": "PET_PATROL",
+      "5": "GET_PET_PATROL_RWD",
+      "6": "PET_EXCHANGE_SHOP_BUY",
+      "7": "PET_STEP_UP",
+      "8": "REFRESH_PET_EQUIP",
+      "9": "CONFIRM_REFRESH_PET_EQUIP",
+      "10": "CANCEL_REFRESH_PET_EQUIP",
+      "11": "LEVELUP_PET_EQUIP"
+    }
+  },
+  "3090": {
+    "name": "KINGDOM_GUARD_MODULE",
+    "reqs": {
+      "1": "KINGDOM_GUARD_OVERVIEW_INFO",
+      "2": "KINGDOM_GUARD_SIGN",
+      "3": "KINGDOM_GUARD_RANK_LIST",
+      "4": "KINGDOM_GUARD_VOTE",
+      "5": "KINGDOM_GUARD_VOTE_LIST"
+    }
+  },
+  "3091": {
+    "name": "MIRCALE_BOX_MODULE",
+    "reqs": {
+      "1": "SELECT_BOX_CORE_REWARD",
+      "2": "OPEN_MIRCALE_BOX"
+    }
+  },
+  "3092": {
+    "name": "DUNGEON_MODLUE",
+    "reqs": {}
+  },
+  "3093": {
+    "name": "DOMINATION_MODULE",
+    "reqs": {}
+  },
+  "3094": {
+    "name": "CUMULATE_REWARD",
+    "reqs": {
+      "1": "GET_CUMULATE_REWARD"
+    }
+  },
+  "3095": {
+    "name": "GOLDENSHIP_MODLUE",
+    "reqs": {}
+  },
+  "3096": {
+    "name": "CELEBRATION_FREE_ATY",
+    "reqs": {
+      "1": "REWARD_HISTORY"
+    }
+  },
+  "3097": {
+    "name": "THANKS_FEEDBACK_ATY",
+    "reqs": {
+      "1": "SCORE_REWARD",
+      "2": "PLAYER_SCORE"
+    }
+  },
+  "3098": {
+    "name": "CIRCUS_MODULE",
+    "reqs": {}
+  },
+  "3099": {
+    "name": "WORSHIP_BULL_MODULE",
+    "reqs": {}
+  },
+  "3100": {
+    "name": "ANTIQUE_MODULE",
+    "reqs": {}
+  },
+  "3101": {
+    "name": "FAMOUS_CITY",
+    "reqs": {}
+  },
+  "3102": {
+    "name": "SULEIMAN_TREASURE",
+    "reqs": {}
+  },
+  "3103": {
+    "name": "DRILL_BATTLE",
+    "reqs": {}
+  },
+  "3104": {
+    "name": "SERVER_QUEST",
+    "reqs": {}
+  },
+  "3105": {
+    "name": "EXPLOIT_TASK",
+    "reqs": {}
+  },
+  "3106": {
+    "name": "GENTING_BATTLE",
+    "reqs": {}
+  },
+  "3107": {
+    "name": "CLOUDPEAK_MGR_MODULE",
+    "reqs": {
+      "1": "CP_DATA",
+      "2": "CP_ENTER_BATTLEFIELD",
+      "3": "CP_QUIT_BATTLEFIELD",
+      "4": "CP_CAMP_SCORE_DATA",
+      "5": "CP_PLAYER_RANK_DATA",
+      "6": "CP_TEAM_RANK_DATA",
+      "7": "CP_BUILD_LOG",
+      "8": "CP_BUILD_BUFF",
+      "9": "CP_BOSS_DATA"
+    }
+  },
+  "3108": {
+    "name": "LUCKY_DICE",
+    "reqs": {}
+  },
+  "3110": {
+    "name": "RACE_TIME",
+    "reqs": {}
+  },
+  "5008": {
+    "name": "WW_STRONG_ROOK",
+    "reqs": {}
+  },
+  "5009": {
+    "name": "WW_GAINING_WAR_PROCESS_RECORD",
+    "reqs": {}
+  },
+  "5011": {
+    "name": "FIELD_SHOP",
+    "reqs": {}
+  },
+  "5012": {
+    "name": "SNOWMAN_ACTIVITY",
+    "reqs": {}
+  },
+  "3113": {
+    "name": "CARRIAGE_ESCORT_ACTIVITY",
+    "reqs": {}
+  },
+  "3109": {
+    "name": "IMAGE_SEAL",
+    "reqs": {}
+  },
+  "3111": {
+    "name": "EASTER_EGGS",
+    "reqs": {}
+  },
+  "3112": {
+    "name": "ROSE_ROAD",
+    "reqs": {}
+  },
+  "3114": {
+    "name": "ROSE_GARDEN",
+    "reqs": {}
+  },
+  "3116": {
+    "name": "PULL_PIN_PUZZLE",
+    "reqs": {}
+  },
+  "3117": {
+    "name": "GUEST_VISIT",
+    "reqs": {}
+  },
+  "3118": {
+    "name": "COMPOSITE_ACTIVITY",
+    "reqs": {}
+  },
+  "3115": {
+    "name": "FIREWORK_CELEBRATION",
+    "reqs": {}
+  },
+  "5014": {
+    "name": "FESTIVAL_SIGN",
+    "reqs": {}
+  },
+  "5021": {
+    "name": "CLOWN_PRANK",
+    "reqs": {}
+  },
+  "3119": {
+    "name": "MIGRATION_MODULE",
+    "reqs": {}
+  },
+  "3121": {
+    "name": "RAPID_DEVELOPMENT",
+    "reqs": {}
+  },
+  "3122": {
+    "name": "VEDIO_AD",
+    "reqs": {}
+  },
+  "3123": {
+    "name": "TICKET_ATY",
+    "reqs": {}
+  },
+  "3124": {
+    "name": "PLANTING_ROSE",
+    "reqs": {}
+  },
+  "3125": {
+    "name": "FIREWORK_PARTY",
+    "reqs": {}
+  },
+  "5033": {
+    "name": "SURPRISE_DROP",
+    "reqs": {}
+  },
+  "3126": {
+    "name": "PAZZY_CHALLENGE",
+    "reqs": {
+      "1": "PAZZY_CHALLENGE_DATA",
+      "2": "PAZZY_CHALLENGE_GET_TASKRWD",
+      "3": "PAZZY_CHALLENGE_RANK_DATA",
+      "4": "PAZZY_CHALLENGE_RECORD",
+      "5": "PAZZY_CHALLENGE_MATERIAL_RECORD",
+      "6": "PAZZY_CHALLENGE_MATERIAL_LASTESTRECORD",
+      "7": "PIZZA_CHALLENGE_STAGE_RWD"
+    }
+  },
+  "3127": {
+    "name": "HERO_BOX",
+    "reqs": {}
+  },
+  "3128": {
+    "name": "SPAR_BOX",
+    "reqs": {}
+  },
+  "3129": {
+    "name": "HERO_EQUIP",
+    "reqs": {}
+  },
+  "3130": {
+    "name": "CAKE_PUZZLE",
+    "reqs": {}
+  },
+  "3131": {
+    "name": "CORBAN_CELEBRATION",
+    "reqs": {}
+  },
+  "3132": {
+    "name": "SPEED_PIONEER",
+    "reqs": {}
+  },
+  "5020": {
+    "name": "SMASH_GOLDEN_EGG",
+    "reqs": {}
+  },
+  "5038": {
+    "name": "SMASH_BOOM",
+    "reqs": {}
+  },
+  "5042": {
+    "name": "RICH_MAN",
+    "reqs": {}
+  },
+  "5043": {
+    "name": "SEASIDE_CAMP",
+    "reqs": {}
+  },
+  "5039": {
+    "name": "FISH_ATY",
+    "reqs": {}
+  },
+  "5044": {
+    "name": "LOTTERY",
+    "reqs": {}
+  },
+  "5045": {
+    "name": "BONFIRE",
+    "reqs": {}
+  },
+  "5035": {
+    "name": "PREFERENTIAL_CARD",
+    "reqs": {}
+  },
+  "5036": {
+    "name": "OPTIONAL_GIFT",
+    "reqs": {}
+  },
+  "3133": {
+    "name": "ANA_STAR",
+    "reqs": {}
+  },
+  "3134": {
+    "name": "ANASTAT_WAR_INSIDE",
+    "reqs": {
+      "1": "ANASTAT_WAR_DATA",
+      "2": "ANASTAT_PLAYER_POINTS_LIST",
+      "3": "ANASTAT_WAR_BUFF_LIST",
+      "4": "ANA_STAR_SHARE_SEASON"
+    }
+  },
+  "3136": {
+    "name": "ONE_DOLLOR_SHOP",
+    "reqs": {}
+  },
+  "3135": {
+    "name": "HERO_TACTICS",
+    "reqs": {}
+  },
+  "3137": {
+    "name": "HERO_TACTICAL_HALL",
+    "reqs": {}
+  },
+  "3141": {
+    "name": "FISHER_MAN",
+    "reqs": {}
+  },
+  "3139": {
+    "name": "NEW_ESCORT",
+    "reqs": {}
+  },
+  "3138": {
+    "name": "SUPER_LOTTERY",
+    "reqs": {}
+  },
+  "5048": {
+    "name": "ELIMINATE",
+    "reqs": {}
+  },
+  "5049": {
+    "name": "LOCK_SMITH",
+    "reqs": {}
+  },
+  "3142": {
+    "name": "AREAN",
+    "reqs": {}
+  },
+  "3143": {
+    "name": "SNOW_JOURNEY",
+    "reqs": {}
+  },
+  "3145": {
+    "name": "NUGGETS",
+    "reqs": {}
+  },
+  "5050": {
+    "name": "OTHER_RACE_INTRUSION",
+    "reqs": {}
+  },
+  "5051": {
+    "name": "HERO_BATTLE_BOSS",
+    "reqs": {}
+  },
+  "5052": {
+    "name": "BATTLE_SHIP",
+    "reqs": {}
+  },
+  "5047": {
+    "name": "FROST_DRAGON",
+    "reqs": {}
+  },
+  "3144": {
+    "name": "GOLDENMINER",
+    "reqs": {}
+  },
+  "3146": {
+    "name": "IMPERIAL_TREASURE",
+    "reqs": {}
+  },
+  "3147": {
+    "name": "LEGEND_TREASURE",
+    "reqs": {}
+  },
+  "5053": {
+    "name": "MAP_BUFF",
+    "reqs": {}
+  },
+  "5054": {
+    "name": "RESCUE_HERO_ATY",
+    "reqs": {}
+  },
+  "6004": {
+    "name": "STONE_MINE",
+    "reqs": {}
+  },
+  "6005": {
+    "name": "COMPASS_SLOT",
+    "reqs": {}
+  },
+  "6007": {
+    "name": "FOUR_SQUARE_GIFT",
+    "reqs": {}
+  },
+  "6006": {
+    "name": "TURKEY_GIFT",
+    "reqs": {}
+  },
+  "6008": {
+    "name": "TWO_CITY_PLAYER",
+    "reqs": {}
+  },
+  "6009": {
+    "name": "TWO_CITY_STORM",
+    "reqs": {}
+  },
+  "6010": {
+    "name": "TWO_CITY_WAR",
+    "reqs": {}
+  },
+  "6015": {
+    "name": "LANTERN",
+    "reqs": {}
+  },
+  "6016": {
+    "name": "BAR_DARTS",
+    "reqs": {}
+  },
+  "6017": {
+    "name": "CHISEL_LAND",
+    "reqs": {}
+  },
+  "6018": {
+    "name": "DECORATION_COLLECT",
+    "reqs": {}
+  },
+  "6019": {
+    "name": "MYSTERIOUS_NOTES",
+    "reqs": {}
+  },
+  "6020": {
+    "name": "GEM_ROAD",
+    "reqs": {}
+  },
+  "6021": {
+    "name": "HERO_FORMATION",
+    "reqs": {}
+  },
+  "3148": {
+    "name": "HERO_VOYAGE",
+    "reqs": {}
+  },
+  "3149": {
+    "name": "PERSONAL_ATY",
+    "reqs": {}
+  },
+  "6022": {
+    "name": "LIGHT_JOURNEY",
+    "reqs": {}
+  },
+  "6023": {
+    "name": "SAVINGSBANK",
+    "reqs": {}
+  },
+  "6024": {
+    "name": "NUM_RACE",
+    "reqs": {}
+  },
+  "6025": {
+    "name": "RICHER_MAN",
+    "reqs": {}
+  },
+  "5046": {
+    "name": "WHACK_A_MOLE",
+    "reqs": {}
+  },
+  "3150": {
+    "name": "WINTER_WAR",
+    "reqs": {}
+  },
+  "3151": {
+    "name": "ORDER_ATY",
+    "reqs": {}
+  },
+  "6026": {
+    "name": "RADAR_ATY",
+    "reqs": {}
+  }
+}

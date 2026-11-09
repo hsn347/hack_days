@@ -1,0 +1,1007 @@
+{
+  "__init__.py": {
+    "class_name": "__init__",
+    "task_name": "__init__",
+    "controllers": [],
+    "commands": [],
+    "lines": 53,
+    "elf_check": {
+      "has_elf": false,
+      "has_march_mgr": false
+    }
+  },
+  "abra.py": {
+    "class_name": "AbraTask",
+    "task_name": "AbraTask",
+    "controllers": [
+      "armyCtrl",
+      "cityCtrl",
+      "godBeastCtrl",
+      "heroCtrl",
+      "kingdomMapCtrl",
+      "loginDataInitCtrl",
+      "lord",
+      "lordInfoCtrl"
+    ],
+    "commands": [
+      "1002/7",
+      "1005/1",
+      "1005/7",
+      "1006/1000",
+      "1006/15",
+      "1006/25",
+      "1007/2",
+      "1087/3"
+    ],
+    "lines": 1194,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": true
+    }
+  },
+  "alliance.py": {
+    "class_name": "AllianceTask",
+    "task_name": "AllianceTask",
+    "controllers": [
+      "allianceCtrl",
+      "lord"
+    ],
+    "commands": [
+      "1010/48"
+    ],
+    "lines": 299,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "alliance_treasure.py": {
+    "class_name": "AllianceTreasureTask",
+    "task_name": "AllianceTreasureTask",
+    "controllers": [
+      "allianceCtrl",
+      "allianceTreasureCtrl"
+    ],
+    "commands": [
+      "2015/1",
+      "2015/3",
+      "2015/4",
+      "2015/5",
+      "2015/6"
+    ],
+    "lines": 503,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "auction.py": {
+    "class_name": "AuctionTask",
+    "task_name": "AuctionTask",
+    "controllers": [
+      "lordInfoCtrl",
+      "salesRoomAgCtrl"
+    ],
+    "commands": [
+      "2031/1",
+      "2031/2",
+      "2031/5"
+    ],
+    "lines": 301,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "base_task.py": {
+    "class_name": "GatherTask",
+    "task_name": "base",
+    "controllers": [
+      "armyCtrl",
+      "cityCtrl",
+      "heroCtrl",
+      "loginDataInitCtrl",
+      "lordInfoCtrl",
+      "meritoriousTaskCtrl",
+      "petCtrl",
+      "technologyCtrl",
+      "vipCtrl"
+    ],
+    "commands": [
+      "1000/1",
+      "1002/7",
+      "1005/1",
+      "1005/7",
+      "1006/1000",
+      "1006/22",
+      "1006/25",
+      "1007/1000"
+    ],
+    "lines": 1396,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "blacksmith_forge.py": {
+    "class_name": "BlacksmithForgeTask",
+    "task_name": "BlacksmithForgeTask",
+    "controllers": [
+      "runeForgeAgCtrl"
+    ],
+    "commands": [
+      "2065/2"
+    ],
+    "lines": 245,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "building.py": {
+    "class_name": "BuildingTask",
+    "task_name": "BuildingTask",
+    "controllers": [
+      "backpackCtrl",
+      "cityCtrl",
+      "vipCtrl"
+    ],
+    "commands": [
+      "1001/1",
+      "1001/2",
+      "1001/3",
+      "1001/8",
+      "1003/1",
+      "1003/2",
+      "1004/1",
+      "1004/2"
+    ],
+    "lines": 2272,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "caravan.py": {
+    "class_name": "CaravanTask",
+    "task_name": "CaravanTask",
+    "controllers": [
+      "heroCtrl",
+      "petCtrl"
+    ],
+    "commands": [
+      "3139/1",
+      "3139/14",
+      "3139/6",
+      "3139/7"
+    ],
+    "lines": 300,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "city_harvest.py": {
+    "class_name": "CityHarvestTask",
+    "task_name": "CityHarvestTask",
+    "controllers": [
+      "cityCtrl"
+    ],
+    "commands": [
+      "1001/1",
+      "1001/8"
+    ],
+    "lines": 294,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "daily_luxury_gift.py": {
+    "class_name": "DailyLuxuryGiftTask",
+    "task_name": "DailyLuxuryGiftTask",
+    "controllers": [
+      "cumulateRewardData"
+    ],
+    "commands": [
+      "3094/1"
+    ],
+    "lines": 172,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "elf_boss.py": {
+    "class_name": "ElfBossTask",
+    "task_name": "ElfBossTask",
+    "controllers": [
+      "activityShowCtrl",
+      "armyCtrl",
+      "cityCtrl",
+      "heroCtrl",
+      "kingdomMapCtrl",
+      "lord",
+      "lordInfoCtrl"
+    ],
+    "commands": [
+      "1002/7",
+      "1005/1",
+      "1005/7",
+      "1006/25",
+      "1007/16",
+      "1007/2",
+      "2011/3",
+      "2011/4"
+    ],
+    "lines": 1370,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "exclude_manager.py": {
+    "class_name": "exclude_manager",
+    "task_name": "exclude_manager",
+    "controllers": [],
+    "commands": [],
+    "lines": 323,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "fortress.py": {
+    "class_name": "FortressTask",
+    "task_name": "FortressTask",
+    "controllers": [
+      "armyCtrl",
+      "boeAttributeCtrl",
+      "cityCtrl",
+      "lordInfoCtrl",
+      "lordSkillCtrl",
+      "queueCtrl",
+      "technologyCtrl"
+    ],
+    "commands": [
+      "1005/1",
+      "1005/2",
+      "1005/5"
+    ],
+    "lines": 698,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "fountain.py": {
+    "class_name": "FountainTask",
+    "task_name": "FountainTask",
+    "controllers": [
+      "cityCtrl",
+      "lordInfoCtrl",
+      "playerCtrl"
+    ],
+    "commands": [
+      "1018/1",
+      "1018/2"
+    ],
+    "lines": 645,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "gather.py": {
+    "class_name": "GatherTask",
+    "task_name": "GatherTask",
+    "controllers": [
+      "armyCtrl",
+      "boeAttributeCtrl",
+      "buffCtrl",
+      "cityCtrl",
+      "equipmentCtrl",
+      "heroCtrl",
+      "lordInfoCtrl",
+      "lordSkillCtrl",
+      "petCtrl",
+      "technologyCtrl",
+      "vipCtrl"
+    ],
+    "commands": [
+      "1005/1",
+      "1006/15",
+      "1006/25",
+      "1007/2",
+      "1019/6",
+      "2011/3"
+    ],
+    "lines": 1334,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "gather_boost.py": {
+    "class_name": "GatherBoostTask",
+    "task_name": "GatherBoostTask",
+    "controllers": [
+      "buffCtrl"
+    ],
+    "commands": [
+      "1004/1",
+      "1004/2",
+      "1019/1"
+    ],
+    "lines": 352,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "gold_gather.py": {
+    "class_name": "GoldGatherTask",
+    "task_name": "GoldGatherTask",
+    "controllers": [
+      "armyCtrl",
+      "heroCtrl",
+      "lordInfoCtrl",
+      "petCtrl"
+    ],
+    "commands": [
+      "1002/7",
+      "1005/1",
+      "1006/1000",
+      "1006/22",
+      "1007/2",
+      "2011/3"
+    ],
+    "lines": 1515,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "hero_consign.py": {
+    "class_name": "HeroConsignTask",
+    "task_name": "HeroConsignTask",
+    "controllers": [
+      "heroCtrl",
+      "heroVoyageAgCtrl"
+    ],
+    "commands": [
+      "3148/1",
+      "3148/3",
+      "3148/4",
+      "3148/5",
+      "3148/7"
+    ],
+    "lines": 532,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "hero_draw.py": {
+    "class_name": "HeroDrawTask",
+    "task_name": "HeroDrawTask",
+    "controllers": [
+      "heroEnlistCtrl"
+    ],
+    "commands": [
+      "2058/1"
+    ],
+    "lines": 208,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "hospital.py": {
+    "class_name": "HospitalTask",
+    "task_name": "HospitalTask",
+    "controllers": [
+      "armyCtrl",
+      "cityCtrl",
+      "meritoriousTaskCtrl",
+      "queueCtrl"
+    ],
+    "commands": [
+      "1001/1",
+      "1005/4",
+      "1013/1"
+    ],
+    "lines": 574,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "imperial_mausoleum.py": {
+    "class_name": "ImperialMausoleumTask",
+    "task_name": "ImperialMausoleumTask",
+    "controllers": [
+      "pyramidCtrl"
+    ],
+    "commands": [
+      "1045/1",
+      "1045/3",
+      "1045/5"
+    ],
+    "lines": 286,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "mail.py": {
+    "class_name": "MailTask",
+    "task_name": "MailTask",
+    "controllers": [],
+    "commands": [
+      "1015/1",
+      "1015/18",
+      "1015/19",
+      "1015/4"
+    ],
+    "lines": 228,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "march_capacity.py": {
+    "class_name": "march_capacity",
+    "task_name": "march_capacity",
+    "controllers": [
+      "boeAttributeCtrl",
+      "cityCtrl",
+      "heroCtrl",
+      "technologyCtrl"
+    ],
+    "commands": [],
+    "lines": 300,
+    "elf_check": {
+      "has_elf": false,
+      "has_march_mgr": false
+    }
+  },
+  "march_coordinator.py": {
+    "class_name": "MarchCoordinatorTask",
+    "task_name": "MarchCoordinatorTask",
+    "controllers": [
+      "cityCtrl",
+      "lordInfoCtrl",
+      "meritoriousTaskCtrl"
+    ],
+    "commands": [
+      "1000/1"
+    ],
+    "lines": 935,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": true
+    }
+  },
+  "march_manager.py": {
+    "class_name": "MarchManagerTask",
+    "task_name": "MarchManagerTask",
+    "controllers": [
+      "armyCtrl",
+      "loginDataInitCtrl",
+      "lordInfoCtrl",
+      "meritoriousTaskCtrl",
+      "vipCtrl"
+    ],
+    "commands": [
+      "1001/1",
+      "1005/1",
+      "1007/1000",
+      "1013/1"
+    ],
+    "lines": 1695,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": true
+    }
+  },
+  "material_workshop.py": {
+    "class_name": "MaterialWorkshopTask",
+    "task_name": "MaterialWorkshopTask",
+    "controllers": [
+      "heroEquipAgCtrl",
+      "queueCtrl"
+    ],
+    "commands": [
+      "3129/4"
+    ],
+    "lines": 288,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "merchant.py": {
+    "class_name": "MerchantTask",
+    "task_name": "MerchantTask",
+    "controllers": [
+      "cityCtrl",
+      "lordInfoCtrl"
+    ],
+    "commands": [
+      "1024/1",
+      "1024/2",
+      "1024/3"
+    ],
+    "lines": 492,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "monster.py": {
+    "class_name": "MonsterTask",
+    "task_name": "MonsterTask",
+    "controllers": [
+      "allianceCtrl",
+      "armyCtrl",
+      "cityCtrl",
+      "heroCtrl",
+      "kingdomMapCtrl",
+      "lord",
+      "lordInfoCtrl",
+      "petCtrl"
+    ],
+    "commands": [
+      "1005/1",
+      "1007/2",
+      "2011/3"
+    ],
+    "lines": 1642,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "pet_patrol.py": {
+    "class_name": "PetPatrolTask",
+    "task_name": "PetPatrolTask",
+    "controllers": [
+      "cityCtrl",
+      "petCtrl"
+    ],
+    "commands": [
+      "3078/1",
+      "3081/1",
+      "3081/4",
+      "3081/5"
+    ],
+    "lines": 396,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "port.py": {
+    "class_name": "PortTask",
+    "task_name": "PortTask",
+    "controllers": [
+      "queueCtrl",
+      "timeRewardCtrl"
+    ],
+    "commands": [
+      "1033/2"
+    ],
+    "lines": 90,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "port_delegate.py": {
+    "class_name": "PortDelegateTask",
+    "task_name": "PortDelegateTask",
+    "controllers": [
+      "PveBattleCtrl",
+      "fieldShopCtrl",
+      "heroCtrl"
+    ],
+    "commands": [
+      "2064/10",
+      "2064/11",
+      "2064/9",
+      "5011/1"
+    ],
+    "lines": 1004,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "prestige.py": {
+    "class_name": "PrestigeTask",
+    "task_name": "PrestigeTask",
+    "controllers": [
+      "badgeExchangeCtrl",
+      "cityCtrl",
+      "meritoriousTaskCtrl",
+      "queueCtrl"
+    ],
+    "commands": [
+      "1024/1",
+      "1024/2",
+      "1024/3",
+      "1067/1",
+      "1067/2"
+    ],
+    "lines": 1123,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "prestige_box.py": {
+    "class_name": "PrestigeBoxTask",
+    "task_name": "PrestigeBoxTask",
+    "controllers": [
+      "cityCtrl",
+      "meritoriousTaskCtrl"
+    ],
+    "commands": [
+      "3105/2"
+    ],
+    "lines": 246,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "research.py": {
+    "class_name": "ResearchTask",
+    "task_name": "ResearchTask",
+    "controllers": [
+      "backpackCtrl",
+      "cityCtrl",
+      "queueCtrl",
+      "technologyCtrl"
+    ],
+    "commands": [
+      "1017/1",
+      "1017/2",
+      "1017/3"
+    ],
+    "lines": 859,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "ruins.py": {
+    "class_name": "RuinsTask",
+    "task_name": "RuinsTask",
+    "controllers": [
+      "armyCtrl",
+      "cityCtrl",
+      "heroCtrl",
+      "lordInfoCtrl"
+    ],
+    "commands": [
+      "1005/1",
+      "1005/7",
+      "1006/15",
+      "1006/25",
+      "1007/2",
+      "2011/3"
+    ],
+    "lines": 986,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "savings_bank.py": {
+    "class_name": "SavingsBankTask",
+    "task_name": "SavingsBankTask",
+    "controllers": [
+      "lordInfoCtrl",
+      "savingsBankAgCtrl"
+    ],
+    "commands": [
+      "1002/1",
+      "6023/1",
+      "6023/2"
+    ],
+    "lines": 319,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "shield.py": {
+    "class_name": "ShieldTask",
+    "task_name": "ShieldTask",
+    "controllers": [
+      "buffCtrl",
+      "item_sign",
+      "kingdomMapCtrl"
+    ],
+    "commands": [
+      "1004/1",
+      "1004/2",
+      "1034/2"
+    ],
+    "lines": 374,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "show_quests.py": {
+    "class_name": "show_quests",
+    "task_name": "show_quests",
+    "controllers": [
+      "meritoriousTaskCtrl"
+    ],
+    "commands": [],
+    "lines": 126,
+    "elf_check": {
+      "has_elf": false,
+      "has_march_mgr": false
+    }
+  },
+  "skill_finder.py": {
+    "class_name": "skill_finder",
+    "task_name": "skill_finder",
+    "controllers": [
+      "lordSkillCtrl"
+    ],
+    "commands": [],
+    "lines": 492,
+    "elf_check": {
+      "has_elf": false,
+      "has_march_mgr": false
+    }
+  },
+  "skills.py": {
+    "class_name": "SkillsTask",
+    "task_name": "SkillsTask",
+    "controllers": [
+      "lordSkillCtrl",
+      "vipCtrl"
+    ],
+    "commands": [
+      "1002/22",
+      "1002/23"
+    ],
+    "lines": 638,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "stamina.py": {
+    "class_name": "StaminaTask",
+    "task_name": "StaminaTask",
+    "controllers": [
+      "buyStaminaCtrl"
+    ],
+    "commands": [
+      "1004/1",
+      "1004/2",
+      "2060/1"
+    ],
+    "lines": 232,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "stronghold.py": {
+    "class_name": "StrongholdTask",
+    "task_name": "StrongholdTask",
+    "controllers": [
+      "armyCtrl",
+      "heroCtrl"
+    ],
+    "commands": [
+      "1007/2",
+      "2011/3"
+    ],
+    "lines": 513,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "tactics_hall.py": {
+    "class_name": "TacticsHallTask",
+    "task_name": "TacticsHallTask",
+    "controllers": [
+      "heroEnlistCtrl",
+      "heroTacticalHallAgCtrl",
+      "heroTacticalHallCtrl",
+      "queueCtrl"
+    ],
+    "commands": [
+      "2058/1",
+      "3137/1",
+      "3137/2"
+    ],
+    "lines": 452,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "territory_expansion.py": {
+    "class_name": "TerritoryExpansionTask",
+    "task_name": "TerritoryExpansionTask",
+    "controllers": [
+      "generalAtyMgr"
+    ],
+    "commands": [
+      "1028/5"
+    ],
+    "lines": 412,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "torch_chest.py": {
+    "class_name": "TorchChestTask",
+    "task_name": "TorchChestTask",
+    "controllers": [
+      "backpackCtrl",
+      "shopItemBuyTimesMgr"
+    ],
+    "commands": [
+      "1004/1",
+      "1004/2",
+      "1034/1",
+      "1034/2"
+    ],
+    "lines": 263,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "train.py": {
+    "class_name": "TrainTask",
+    "task_name": "TrainTask",
+    "controllers": [
+      "armyCtrl",
+      "boeAttributeCtrl",
+      "cityCtrl",
+      "lordInfoCtrl",
+      "lordSkillCtrl",
+      "queueCtrl"
+    ],
+    "commands": [
+      "1005/1",
+      "1005/2",
+      "1005/5"
+    ],
+    "lines": 691,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "transport.py": {
+    "class_name": "TransportTask",
+    "task_name": "TransportTask",
+    "controllers": [
+      "cityCtrl",
+      "lordInfoCtrl"
+    ],
+    "commands": [
+      "1007/2",
+      "1010/75",
+      "2011/3"
+    ],
+    "lines": 637,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "treasure_pavilion.py": {
+    "class_name": "TreasurePavilionTask",
+    "task_name": "TreasurePavilionTask",
+    "controllers": [
+      "heroEnlistCtrl"
+    ],
+    "commands": [
+      "2058/1"
+    ],
+    "lines": 222,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "troy_treasure.py": {
+    "class_name": "TroyTreasureTask",
+    "task_name": "TroyTreasureTask",
+    "controllers": [
+      "troyTreasureAgCtrl"
+    ],
+    "commands": [
+      "1028/5",
+      "2059/36"
+    ],
+    "lines": 251,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "vip_gift.py": {
+    "class_name": "VipGiftTask",
+    "task_name": "VipGiftTask",
+    "controllers": [
+      "vipCtrl"
+    ],
+    "commands": [
+      "1082/1"
+    ],
+    "lines": 141,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "warrior_exchange.py": {
+    "class_name": "WarriorExchangeTask",
+    "task_name": "WarriorExchangeTask",
+    "controllers": [
+      "backpackCtrl",
+      "exchangeStoreAgCtrl"
+    ],
+    "commands": [
+      "2057/1"
+    ],
+    "lines": 347,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "watermill.py": {
+    "class_name": "WatermillTask",
+    "task_name": "WatermillTask",
+    "controllers": [
+      "backpackCtrl",
+      "buffCtrl",
+      "cityCtrl"
+    ],
+    "commands": [
+      "1001/9",
+      "1010/39",
+      "1010/40"
+    ],
+    "lines": 526,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  },
+  "week_start_benefits.py": {
+    "class_name": "WeekStartBenefitsTask",
+    "task_name": "WeekStartBenefitsTask",
+    "controllers": [
+      "generalAtyMgr"
+    ],
+    "commands": [
+      "1028/5",
+      "2063/2"
+    ],
+    "lines": 405,
+    "elf_check": {
+      "has_elf": true,
+      "has_march_mgr": false
+    }
+  }
+}

@@ -185,3 +185,24 @@ Gate Result: **PASS** (Milestone 5 certified: all 18 mandatory operational and f
 
 Gate Result: **PASS** (Milestone 6 Victory Gate certified: All reviewers, challengers approved; victory audit CLEAN; 61/61 tests passing across all 5 test suites; 2.60x workload speedup; 0.00% idle CPU; memory leak regression slope m=+0.0034 MB/cycle; zero thread leaks; prohibited files untouched; 100% local execution).
 
+## Gate — Live State Memory Overhaul (20-Agent Swarm)
+| Agent | Role | Verdict | Source |
+|---|---|---|---|
+| worker_core_memory | teamwork_worker | DONE (core/live_memory.py built, 37/37 hermetic pass) | worker_core_memory/handoff.md |
+| worker_dispatch_hygiene | teamwork_worker | DONE (game_client.py refactored, bounded cache <= 64) | worker_dispatch_hygiene/handoff.md |
+| worker_bot_loop | teamwork_worker | DONE (readiness gate integrated in bot_manager.py) | worker_bot_loop/handoff.md |
+| worker_remediation_m4 | teamwork_worker | DONE (5 protocol hygiene fixes, double ingestion removed) | worker_remediation_m4/handoff.md |
+| worker_remediation_v2 | teamwork_worker | DONE (local_queues whitelisted, openChargeQueue starttime aligned) | worker_remediation_v2/handoff.md |
+| agent11_live_conn | teamwork_challenger | APPROVE (real connection to Gate 119.8.214.169:4000) | agent11_live_conn/handoff.md |
+| agent12_gate_fallback | teamwork_challenger | APPROVE (14/14 fallback query tests passed) | agent12_gate_fallback/handoff.md |
+| agent13_socket_spy | teamwork_challenger | APPROVE (56.39 µs latency, 14/14 tests passed) | agent13_socket_spy/handoff.md |
+| agent14_city_resource | teamwork_reviewer | APPROVE (20/20 city/resource tests passed) | agent14_city_resource/handoff.md |
+| agent15_building_lifecycle | teamwork_reviewer | APPROVE (10/10 building lifecycle tests passed) | agent15_building_lifecycle/handoff.md |
+| agent16_marches_army | teamwork_reviewer | APPROVE (15/15 army sync tests passed) | agent16_marches_army/handoff.md |
+| agent17_backpack_hero_lord | teamwork_reviewer | APPROVE (17/17 backpack/hero/lord tests passed) | agent17_backpack_hero_lord/handoff.md |
+| agent18_whitelist_audit | teamwork_auditor | CLEAN (187 non-whitelisted controllers pruned, >58% RAM saved) | agent18_whitelist_audit/handoff.md |
+| agent19_concurrency_stress | teamwork_challenger | APPROVE (10,000 packet flood, 37,982 pkt/s, 0 race conditions) | agent19_concurrency_stress/handoff.md |
+| victory_reauditor | teamwork_auditor | CLEAN — APPROVE (132/132 tests pass across 9 suites, 0 leaks, 0 errors) | victory_reauditor/handoff.md |
+
+Gate Result: **PASS** (Live State Memory Overhaul certified: All 20 agents complete; 132/132 automated and live connection tests passed with 0 failures and 0 errors; independent Victory Re-Audit certified CLEAN; 100% compliant with GEMINI.md Rules 4, 5, 6, and 7).
+

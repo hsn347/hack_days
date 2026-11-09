@@ -1,119 +1,71 @@
-# Project: Platform Reliability, Admin Pagination & Memory Overhaul
+# Project: Live State Memory Architecture & 20-Agent Swarm
 
 ## Architecture
-- **Backend**: FastAPI (`api_server.py`), AsyncIO, SQLite WAL mode (`database/castles.db`).
-- **State & Bot Engine**: `bot_manager.py`, in-memory thread & state registries, WebSocket streaming.
-- **Frontend**: React 18, TypeScript, Tailwind CSS, TanStack Query v5, Zustand v5 (`dashboard/src/`).
-- **Inspection & Testing**: Hermetic baseline measurement (`tools/measure_baseline.py`), 18-scenario harness (`tests/test_mandatory_scenarios.py`), soak tester (`tools/soak_test_lifecycle.py`).
+- **Core Game Client**: `game_client.py` (Packet dispatching, socket framing, real-time dispatch, state caches).
+- **Bot Engine & Lifecycle**: `bot_manager.py` (Account lifecycle, task execution loop, memory readiness verification).
+- **Live Memory Engine**: Unified memory engine (`core/live_memory_engine.py` or within `game_client.py`) intercepting `retdata`, `data`, and `notifyData`.
+- **Reference Specification**: `e:\osmanli\game file\lua_src` (`cityCtrl.lua`, `notifyCtrl.lua`, `queueCtrl.lua`, etc.).
+- **Live Verification Suite**: Real session execution via `session_cache.json` and hermetic simulated packet test suites.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Baseline Measurement Tooling | Multi-metric baseline profiling tool (RSS MB via ctypes/psutil, tracemalloc, CPU %, threads, handles, sockets, queues, dicts, WAL) | M1 | R4 |
-| 2 | Admin Castles Backend Pagination | SQL pagination (`LIMIT`, `OFFSET`, `COUNT(*)`, search, filter, merchant tenant isolation) in `core/database.py` & `api_server.py` | M2 | R1 |
-| 3 | Admin Castles Config Separation | Exclude heavy `config` JSON from summary query; lazy-load castle details on demand when expanding card | M2 | R1 |
-| 4 | Admin Castles Frontend Pagination | Mirror Users page pagination UI (`[10, 25, 50, 100]`, default 25, range counters, chevrons) with local mutation updates (`setQueryData`) | M2 | R1 |
-| 5 | Live Operations State Decoupling | Decouple thread liveness from bot state; enforce 6 allowed states (Running, Waiting for Next Cycle, Other Device Login, Reconnecting, Waiting for Re-login, Starting) | M3 | R2 |
-| 6 | Stalled Thread Isolation & Deduplication | Isolate orphan/stalled threads into `stalled` diagnostic counter; prevent duplicate operations per castle with atomic check-and-reserve | M3 | R2 |
-| 7 | Live Operations Backend Pagination & Zero-Flicker UI | Implement backend pagination (`page`, `page_size`, `search`, `status`) in API; update `AdminLiveProcesses.tsx` with smooth, flicker-free polling | M3 | R2 |
-| 8 | Global Data Structures Leak Cleanup | Clean up `_castle_emails` in `finally:`, secure early returns in `_bot_thread`, purge `_deleted_castles` safely, clean `_castle_bindings` in proxy manager | M4 | R3 |
-| 9 | Thread Lifecycle Management & Join Timeouts | Implement deterministic stop signals and `thread.join(timeout=3.0)` outside global locks across all stop/delete paths | M4 | R3 |
-| 10 | WebSockets Disconnect & ThreadPool Protection | Add disconnect detection to `ws_logs`, `ws_status`, `ws_user_status`; eliminate 0.8s SQLite polling spam in `asyncio.to_thread` | M4 | R3 |
-| 11 | CPU Optimization & Streaming Log Pruning | Replace 1-second busy sleep in `bot_manager.py` with `asyncio.wait_for`; stream/tail logs without `f.readlines()`; remove redundant `importlib.reload` | M4 | R3 |
-| 12 | 18 Mandatory Test Scenarios | Hermetic test suite verifying all 18 specified operational and failure scenarios | M5 | R4 |
-| 13 | Multi-Cycle Continuous Soak Testing | Automated soak test verifying memory leak regression slope $\le 0.05$ MB/cycle and zero leaked threads/handles | M5 | R4 |
-| 14 | Post-Fix Measurement & Final Comprehensive Report | Measure post-fix baseline under identical conditions, verify all acceptance criteria, and publish final report | M6 | R4 |
+| 1 | Lua Protocol & Notification Analysis | Comprehensive extraction of `gNotifyID`s, notification payloads, and controller schemas from `game file/lua_src` | M0 | R0 (Agent 1) |
+| 2 | Task Scanner & Controller Whitelist | Audit all `tasks/` and `bot_manager.py` to establish `ALLOWED_CONTROLLERS` and `CRITICAL_STARTUP_CONTROLLERS` | M0 | R0 (Agent 2), R1 |
+| 3 | Smart Deep-Merge Engine | Keyed list merge algorithm (`blist` via `index`, `heroes`/`buffCtrl` via `id`) preventing data wipes and duplicates | M1 | R0 (Agent 8), R2 |
+| 4 | Memory Hygiene & Dispatch Refactor | Immediate packet routing in `_dispatch`, eliminating packet staleness and memory bloat | M1 | R0 (Agent 9), R2 |
+| 5 | City, Building & Resource Sync | Full replication of `cityCtrl.lua` logic (`reslist`, `saferes`, `dayMaxRes`, `updateUnCollectRes`, `openChargeQueue`) | M2 | R0 (Agent 4), R2 |
+| 6 | Queues & Build Lifecycle Sync | Direct linkage of `NOTIFY_QUEUE` to `queueCtrl` and `cityCtrl` building state/level updates | M2 | R0 (Agent 5), R2 |
+| 7 | Army, Hero, Lord & Backpack Sync | Real-time synchronization for `armyCtrl`, `heroCtrl`, `lordInfoCtrl`, `buffCtrl`, `backpackCtrl`, `meritoriousTaskCtrl` | M2 | R0 (Agent 6, 7) |
+| 8 | Strict Memory Readiness Gate & Fallback Query | `wait_for_memory_ready` with automated fallback queries for missing critical controllers | M3 | R0 (Agent 3), R3 |
+| 9 | Bot Loop Integration & Elf Decoupling | Integrate memory readiness into `bot_manager.py` startup loop while strictly preserving elf task decoupling | M3 | R0 (Agent 10), R3, GEMINI.md |
+| 10 | Live Connection & Init Verification | Field testing with real `session_cache.json` validating packet flow and live state population | M4 | R0 (Agent 11) |
+| 11 | Live Gate & Fallback Testing | Empirical verification of bot pausing on missing critical controllers and successful fallback recovery | M4 | R0 (Agent 12) |
+| 12 | Live Socket Spy & Notify Verification | Verification of live S2C packet reception and instantaneous reflection in state | M4 | R0 (Agent 13) |
+| 13 | City & Resource Delta QA | Practical verification of `NOTIFY_CITY` mutations and building upgrades | M4 | R0 (Agent 14, 15) |
+| 14 | Marches, Army, Backpack & Hero QA | Empirical verification of army march queues and inventory delta computations | M4 | R0 (Agent 16, 17) |
+| 15 | Whitelist & Memory Footprint Audit | Verification of zero unauthorized controllers in `init_data` | M4 | R0 (Agent 18) |
+| 16 | Concurrency & Stress Testing | Verification of race condition resistance and duplicate-free concurrent deep merges | M4 | R0 (Agent 19) |
+| 17 | Chief QA Sign-off & Forensic Audit | Comprehensive verification and independent forensic integrity sign-off | M5 | R0 (Agent 20) |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Baseline Measurement Tooling & Pre-Fix Profiling | F1: `tools/measure_baseline.py` & pre-fix metrics recording | none | DONE |
-| M2 | Admin Castles Pagination & Lazy-Loading | F2, F3, F4: SQL pagination, config separation, UI pagination & local mutations | M1 | DONE |
-| M3 | Live Operations Lifecycle, State Clarification & Pagination | F5, F6, F7: State decoupling, 6 allowed states, stalled isolation, live ops pagination | M1 | DONE |
-| M4 | Memory & CPU Optimization — Leaks, Threads, WebSockets & Loops | F8, F9, F10, F11: Global dict cleanup, thread join timeouts, socket disconnects, CPU loops | M2, M3 | DONE |
-| M5 | 18 Mandatory Scenarios & Soak Testing Verification | F12, F13: Hermetic 18 scenarios suite & multi-cycle soak test with mathematical slope | M4 | DONE |
-| M6 | Post-Fix Baseline Measurement, E2E Suite & Final Report | F14: Post-fix profiling, run_all_tests suite, comprehensive report | M5 | DONE |
+| M0 | Survey & Specification Mining | F1, F2: Lua protocol mapping & task controller audit | none | DONE |
+| M1 | Core Memory Engine & Deep Merge | F3, F4: Smart deep-merge engine, memory hygiene, dispatch refactoring | M0 | DONE |
+| M2 | Controller State Synchronizers | F5, F6, F7: City, building, queue, army, hero, backpack sync | M1 | DONE |
+| M3 | Readiness Gate & Bot Loop Integration | F8, F9: `wait_for_memory_ready`, fallback query, `bot_manager.py` hook | M1, M2 | DONE |
+| M4 | Swarm Live Verification & QA Battery | F10 - F16: 7 specialized live & simulated test agents executing in parallel | M2, M3 | DONE |
+| M5 | Chief QA Sign-Off & Forensic Audit | F17: Final forensic integrity audit and sign-off report | M4 | DONE |
 
 ## Interface Contracts
-### 1. Admin Castles Paginated API
-- Endpoint: `GET /api/admin/users-castles/summary`
-- Parameters: `page: int = 1`, `page_size: int = 25`, `search: str = ""`, `filter_status: str = "all"`
-- Response JSON:
-  ```json
-  {
-    "items": [
-      {
-        "uid": "user_123",
-        "email": "user@example.com",
-        "username": "user1",
-        "castles_count": 3,
-        "running_count": 1,
-        "pending_count": 2,
-        "castles": [
-          {
-            "castle_id": "c_1",
-            "email": "c1@example.com",
-            "is_active": 1,
-            "state": "running",
-            "conn_state": "connected"
-          }
-        ]
-      }
-    ],
-    "total": 120,
-    "page": 1,
-    "page_size": 25,
-    "total_pages": 5,
-    "has_more": true
-  }
-  ```
-- Castle Detail Endpoint: `GET /api/admin/users/{uid}/castles` returns full castle rows including `config` on-demand for single expanded user.
+### 1. Controller Whitelists
+- `ALLOWED_CONTROLLERS: frozenset[str]`:
+  Strict set of all 44 controllers consumed by bot tasks, internal state keys, and core logic (including `local_queues`). Any packet targeting a controller outside this set is dropped at ingress.
+- `CRITICAL_STARTUP_CONTROLLERS: frozenset[str]`:
+  Mandatory 6 controllers required for bot operation (`cityCtrl`, `lordInfoCtrl`, `queueCtrl`, `armyCtrl`, `heroCtrl`, `backpackCtrl`). Bot execution is blocked until all are populated with structural validity.
 
-### 2. Live Operations Paginated API
-- Endpoint: `GET /api/admin/live-processes`
-- Parameters: `page: int = 1`, `page_size: int = 25`, `search: str = ""`, `status: str = "all"`
-- Response JSON:
-  ```json
-  {
-    "processes": [
-      {
-        "castle_id": "c_1",
-        "email": "c1@example.com",
-        "user_id": "u_1",
-        "status": "Running",
-        "current_task": "GatherResources",
-        "uptime_seconds": 1420,
-        "next_cycle_time": null
-      }
-    ],
-    "total_active": 15,
-    "summary": {
-      "Running": 8,
-      "Waiting for Next Cycle": 4,
-      "Other Device Login": 1,
-      "Reconnecting": 1,
-      "Waiting for Re-login": 1,
-      "Starting": 0,
-      "stalled": 0
-    },
-    "page": 1,
-    "page_size": 25,
-    "total_pages": 1,
-    "has_more": false
-  }
-  ```
+### 2. LiveMemoryEngine Interface
+- `smart_deep_merge(target: dict, source: dict) -> dict`:
+  Recursively merges `source` into `target`.
+  - Dictionaries: recursive merge.
+  - Lists of dicts: identify primary keys (`index`, `bid`, `iid`, `id`, `queueId`) and merge matching elements; append new elements.
+  - Primitive values: replace.
+- `handle_notify(notify_id: int, notify_data: dict) -> None`:
+  Dispatches notification payloads to registered controller synchronizers.
 
-### 3. Thread & Resource Termination Contract
-- Function: `_stop_and_join_bot(castle_id: str, timeout: float = 3.0) -> bool`
-- Invariants:
-  1. Signal `_stop_events[castle_id].set()`.
-  2. Outside `_lock`, invoke `thread.join(timeout=timeout)`.
-  3. If thread is still alive after timeout, move to `_stalled_threads[castle_id] = thread` for diagnostic isolation; do not orphan silently.
-  4. Safely pop all tracking references (`_threads`, `_stop_events`, `_bot_managers`, `_log_qs`, `_conn_states`, `_castle_emails`, `_castle_users`).
+### 3. Readiness Gate Contract
+- `async wait_for_memory_ready(self, timeout: float = 30.0, auto_fetch_missing: bool = True) -> bool`:
+  Checks presence of `CRITICAL_STARTUP_CONTROLLERS` in `self.init_data`.
+  Validates structural integrity (e.g., `cityCtrl.blist` is non-empty list, `reslist` present).
+  If missing and `auto_fetch_missing=True`, dispatches fallback sync commands (`_send_command`) for each missing controller.
+  Raises or returns `False` if timeout expires before memory is ready.
 
 ## Code Layout
-- Backend Core: `api_server.py`, `bot_manager.py`, `core/database.py`, `core/session_manager.py`, `proxy/proxy_manager.py`
-- Frontend Dashboard: `dashboard/src/pages/AdminUsersCastles.tsx`, `dashboard/src/pages/AdminLiveProcesses.tsx`, `dashboard/src/lib/botApi.ts`, `dashboard/src/pages/Admin.tsx`
-- Measurement & Inspection Tools: `tools/measure_baseline.py`, `tools/soak_test_lifecycle.py`
-- Automated Test Scenarios: `tests/test_mandatory_scenarios.py`, `tests/run_all_tests.py`
-- Strictly Prohibited (NEVER touch/read/modify): `game_client.py`, `core/onemt_auth.py`, `core/onemt_bot.py`
+- Reference Code: `game file/lua_src/src/src/app/module/*/*.lua`
+- Core Client: `game_client.py`
+- Memory Engine / Modules: `core/live_memory.py` (or integrated in `game_client.py`)
+- Bot Manager: `bot_manager.py`
+- Tasks: `tasks/*.py`
+- Test Suites: `tests/test_live_memory.py`, `tests/test_readiness_gate.py`, `tests/test_deep_merge.py`
+- Metadata: `.agents/teamwork/`

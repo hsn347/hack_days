@@ -140,6 +140,14 @@ class PrestigeTask(BaseTask):
         self.max_gold_refresh = int(self.config.get("max_gold_refresh", 20))
         self.subtasks_config = self.config.get("subtasks", {})
 
+    def get_merit_level(self) -> int:
+        """جلب مستوى الهيبة / الجدارة من الذاكرة الحية (meritoriousTaskCtrl.meritLv)."""
+        try:
+            init = getattr(self.conn, 'init_data', {}) or {}
+            return int(init.get('meritoriousTaskCtrl', {}).get('meritLv', 0))
+        except Exception:
+            return 0
+
     def is_subtask_enabled(self, subtask_name: str) -> bool:
         """
         فحص ما إذا كانت مهمة فرعية محددة من مهام الهيبة مفعلة من المستخدم.
@@ -784,6 +792,11 @@ class PrestigeTask(BaseTask):
           - إذا كان رصيد القمح بالقلعة أقل من 300,000 يتم التخطي فوراً.
         """
         MAX_WHEAT_COST = 300000
+
+        merit_lv = self.get_merit_level()
+        if merit_lv < 5:
+            self.log.info(f"👾 [غزاة الهيبة] تم التخطي: نظام الهيبة غير مفتوح للقلعة بعد (meritLv = {merit_lv}).")
+            return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
 
         q_info = self.get_quest_info("badge_exchange")
         if q_info["is_done"]:

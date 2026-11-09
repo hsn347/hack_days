@@ -224,43 +224,101 @@ class BaseTask(ABC):
 
     async def get_max_marches_capacity(self, allow_network: bool = True) -> int:
         """
-        حساب سعة الفيالق والمسيرات القصوى المسموح بها للقلعة بدقة:
+        حساب سعة الفيالق والمسيرات القصوى المسموح بها للقلعة بدقة طبقاً لكود اللعبة:
         1. السقف الأساسي لجميع القلاع = 1 (DEFAULT_EXP_ARMY_QUEUE).
-        2. أبحاث معهد العلوم (technologyCtrl):
+        2. أبحاث معهد العلوم (technologyCtrl - EXPEDITION_TROOPS):
            - #24011 (فيلق البعثة I): +1
            - #24017 (فيلق البعثة II): +1
            - #24033 (فيلق البعثة III): +1
-        3. ميزة الـ VIP (vipCtrl / buffCtrl):
-           - مستوى VIP 10 فما فوق يمنح +1 طابور مسيرة إضافي.
-        4. مراعاة السقف اليدوي المخصص في إعدادات المهمة config.max_queues إن وُجد.
+           (الحد الأقصى لزيادة الأبحاث = +3).
+        3. ميزة الـ VIP (vipCtrl - buffType 30 / MARCH_TROOP_TOTAL_BOOST):
+           - المستويات من VIP 4 إلى VIP 9: تمنح +1 طابور مسيرة إضافي.
+           - المستويات من VIP 10 إلى VIP 18: تمنح +2 طابور مسيرة إضافي.
+        4. مراعاة السقف الأقصى العام للعبة (MAX_MARCH_TROOP = 6) أو التقييد اليدوي في config.max_queues إن وُجد.
         """
         capacity = 1
 
         init_data = getattr(self.conn, 'init_data', {}) if hasattr(self, 'conn') and self.conn else {}
-        if isinstance(init_data, dict):
-            # فحص تقنيات فيالق البعثة العسكرية في المعهد
-            tech_ctrl = init_data.get('technologyCtrl', {})
-            if isinstance(tech_ctrl, dict):
-                for tid in ('24011', '24017', '24033'):
-                    if tid in tech_ctrl:
-                        val = tech_ctrl[tid]
-                        if isinstance(val, (list, tuple)) and len(val) > 1:
-                            if int(val[1] or 0) > 0:
-                                capacity += 1
-                        elif str(val).isdigit() and int(val) > 0:
-                            capacity += 1
 
-            # فحص مستوى الـ VIP (مستوى 10 فما فوق يضيف طابور مسيرة)
+        # 1. استخراج بيانات التقنيات مع دعم الذاكرة الحية والحزم المؤقتة والاستعلام الشبكي
+        tech_data: Dict[str, Any] = {}
+        if isinstance(init_data, dict):
+            raw_tech = init_data.get('technologyCtrl')
+            if isinstance(raw_tech, dict) and raw_tech:
+                tech_data = raw_tech
+
+        if not tech_data and hasattr(self, 'conn') and self.conn:
+            cached = getattr(self.conn, 'cached_packets', {})
+            resp_cached = cached.get(('1017', '1')) or cached.get(('1017', 1)) or cached.get((1017, 1))
+            if isinstance(resp_cached, dict) and resp_cached.get('err') == '0':
+                tech_data = resp_cached.get('data', {})
+
+        if not tech_data and allow_network and getattr(self, 'is_connected', False):
+            try:
+                resp = await self.conn.query('1017', '1', {}, timeout=4)
+                if isinstance(resp, dict) and resp.get('err') == '0':
+                    tech_data = resp.get('data', {})
+                    if isinstance(init_data, dict):
+                        init_data['technologyCtrl'] = tech_data
+            except Exception:
+                pass
+
+        # فحص تقنيات فيالق البعثة العسكرية الثلاثة (24011, 24017, 24033)
+        for tid in ('24011', '24017', '24033'):
+            val = tech_data.get(tid) if tid in tech_data else tech_data.get(int(tid))
+            if val is not None:
+                lv = 0
+                if isinstance(val, (list, tuple)):
+                    if len(val) > 1:
+                        try:
+                            lv = int(val[1] or 0)
+                        except (ValueError, TypeError):
+                            lv = 0
+                    elif len(val) == 1:
+                        try:
+                            lv = int(val[0] or 0)
+                        except (ValueError, TypeError):
+                            lv = 0
+                elif isinstance(val, dict):
+                    lv = int(val.get('level', val.get('lv', 0)) or 0)
+                else:
+                    try:
+                        lv = int(val or 0)
+                    except (ValueError, TypeError):
+                        lv = 0
+                if lv > 0:
+                    capacity += 1
+
+        # 2. احتساب طوابير الـ VIP طبقاً لكود اللعبة (VIP 4..9 -> +1, VIP 10+ -> +2)
+        vip_lv = 0
+        if isinstance(init_data, dict):
             vip_ctrl = init_data.get('vipCtrl', {})
             if isinstance(vip_ctrl, dict):
                 try:
                     vip_lv = int(vip_ctrl.get('vipLv', 0) or 0)
-                    if vip_lv >= 10:
-                        capacity += 1
+                except (ValueError, TypeError):
+                    vip_lv = 0
+
+        if vip_lv >= 10:
+            capacity += 2
+        elif vip_lv >= 4:
+            capacity += 1
+
+        # 3. سقف اللعبة الأقصى 6 مسيرات (MAX_MARCH_TROOP = 6)
+        capacity = min(6, max(1, capacity))
+
+        # مراعاة التقييد اليدوي config.max_queues إن وُجد
+        if hasattr(self, 'config') and isinstance(self.config, dict):
+            cfg_max = self.config.get('max_queues')
+            if cfg_max is not None:
+                try:
+                    c_val = int(cfg_max)
+                    if c_val > 0:
+                        capacity = min(capacity, c_val)
                 except (ValueError, TypeError):
                     pass
 
-        return max(1, capacity)
+        return capacity
 
     async def get_available_marches_count(self, force_sync: bool = False, allow_network: bool = True) -> int:
         """

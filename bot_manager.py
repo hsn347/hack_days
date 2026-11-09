@@ -975,6 +975,14 @@ class BotManager:
         """جلب طاقة اللورد من الذاكرة الحية مباشرة."""
         base = self.conn.init_data.get("lordInfoCtrl", {}).get("base", {})
         return int(float(base.get("health", 100)))
+
+    def _log(self, message: str) -> None:
+        """تسجيل وإرسال رسالة إلى log_callback و logger النظام."""
+        log.info(message)
+        if getattr(self, "_log_callback", None):
+            self._log_callback(message)
+        else:
+            print(message, flush=True)
         
     def _update_bot_conn_state(self, conn_state: str, message: str = "", next_run_time: Optional[str] = None) -> None:
         """إبلاغ لوحة التحكم وقاعدة البيانات المحلية بحالة اتصال اللعبة الفعلية (دخول، انقطاع، إعادة اتصال، انتظار)."""
@@ -1598,6 +1606,13 @@ class BotManager:
         results = {}
         now = datetime.now()  # لقطة واحدة للوقت تُستخدم في كل فحوصات الجدول بالدورة
 
+        # 🛑 فحص بوابة جاهزية الذاكرة الصارمة قبل بدء تنفيذ أي مهام
+        if self.conn and hasattr(self.conn, "wait_for_memory_ready"):
+            is_ready = await self.conn.wait_for_memory_ready(timeout=30.0, auto_fetch_missing=True)
+            if not is_ready:
+                self._log("⚠️ الذاكرة الحية غير مكتملة، تعليق تشغيل المهام للدورة القادمة...")
+                return
+
         # 📋👇👇 قائمة تسلسل المهام: (الاسم، الدالة، مفتاح_الجدولة) — رتبها أو عدلها كما تشاء 👇👇📋
         # ⚠️ مفتاح_الجدولة يجب أن يطابق مفتاح المهمة في DEFAULT_FIREBASE_USER_CONFIG
         pipeline: List[Tuple[str, Callable, str]] = [
@@ -1789,6 +1804,9 @@ class BotManager:
         self.current_task_name = None
         self.last_heartbeat = time.time()
         return results
+
+    # اسم مستعار للدالة للتوافق مع استدعاءات واختبارات _run_task_pipeline
+    _run_task_pipeline = execute_task_pipeline
 
     # ─────────────────────────────────────────────────────────────────
     #  دوال تفاصيل كل مهمة على حدة (Individual Task Handlers)
@@ -3047,6 +3065,13 @@ class BotManager:
         elf_cfg = self.config.get("elf", {})
         if not isinstance(elf_cfg, dict) or not bool(elf_cfg.get("enabled", False)):
             return False
+
+        # 🛑 فحص بوابة جاهزية الذاكرة الصارمة لبوت العفريت ذي الأولوية
+        if self.conn and hasattr(self.conn, "wait_for_memory_ready"):
+            is_ready = await self.conn.wait_for_memory_ready(timeout=30.0, auto_fetch_missing=True)
+            if not is_ready:
+                self._log("⚠️ الذاكرة الحية غير مكتملة، تعليق تشغيل المهام للدورة القادمة...")
+                return True
 
         # إنشاء كائن مهمة العفريت
         elf_task = ElfBossTask(self.conn, elf_cfg)
