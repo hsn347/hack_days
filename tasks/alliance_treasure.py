@@ -227,9 +227,8 @@ class AllianceTreasureTask(BaseTask):
         )
 
         can_help_others = (left_help_today > 0 and len(unhelped_members) > 0)
-        can_request_help = any(d.get("canCallHelp", True) not in (False, 0, "0", "false") for d in active_digs)
 
-        ready = bool(can_receive_list or can_receive_help_rewards or free_dig_ready or can_help_others or can_request_help)
+        ready = bool(can_receive_list or can_receive_help_rewards or free_dig_ready or can_help_others)
 
         if can_receive_list or can_receive_help_rewards:
             total_pending_claims = len(can_receive_list) + len(can_receive_help_rewards)
@@ -260,7 +259,7 @@ class AllianceTreasureTask(BaseTask):
             "unhelped_members": unhelped_members,
             "active_digs": active_digs,
             "can_help_others": can_help_others,
-            "can_request_help": can_request_help,
+            "can_request_help": False,
             "is_digging": is_digging,
             "dig_remain": dig_remain,
             "dig_count": dig_count,
@@ -352,7 +351,8 @@ class AllianceTreasureTask(BaseTask):
                     except Exception as e_h:
                         self.log.debug(f"تنبيه أثناء مساعدة العضو {nick}: {e_h}")
 
-        # ── الخطوة 4: فحص الصناديق الخاصة: استلام الجوائز إن وجدت (2015/6) وطلب المساعدة للجارية (2015/4) ──
+        # ── الخطوة 4: فحص الصناديق الخاصة: استلام الجوائز المكتملة فقط (2015/6) ──
+        # ملاحظة: طلب مساعدة التحالف يتم حصراً وفوراً مرة واحدة لحظة حفر الصندوق الجديد في الخطوة 7
         my_digs = st.get("dig_list", []) or (st.get("can_receive_list", []) + st.get("active_digs", []))
         now_ts = int(time.time())
         for d in my_digs:
@@ -365,7 +365,7 @@ class AllianceTreasureTask(BaseTask):
             endtime = int(d.get("endtime", 0))
             can_recv = d.get("canReceive") in (True, 1, "1", "true")
 
-            # 1. إذا كان الصندوق مكتملاً أو انتهى وقته وجاهزاً للاستلام (2015/6 - receiveType: 1)
+            # استلام الصندوق إذا كان مكتملاً أو انتهى وقته (2015/6 - receiveType: 1)
             if can_recv or (endtime > 0 and endtime <= now_ts):
                 if not self.is_open_treasure_enabled():
                     self.log.debug(f"تخطي استلام الكنز الخاص #{d_idx_int} (open_treasure معطل).")
@@ -392,35 +392,6 @@ class AllianceTreasureTask(BaseTask):
                             self.log.warning(f"⚠️ تعذر استلام جائزة صندوق التحالف #{d_idx_int}: {err_r}")
                     except Exception as e_r:
                         self.log.debug(f"تنبيه أثناء استلام جائزة صندوق التحالف #{d_idx_int}: {e_r}")
-
-            # 2. إذا كان الصندوق لا يزال قيد الحفر، نطلب مساعدة التحالف لتسريعه (2015/4)
-            else:
-                can_call = d.get("canCallHelp", True) not in (False, 0, "0", "false")
-                if can_call:
-                    self.log.info(f"🤝 طلب مساعدة أعضاء التحالف للصندوق قيد الحفر #{d_idx} (2015/4)...")
-                    await asyncio.sleep(round(random.uniform(0.8, 1.5), 2))
-                    try:
-                        r_ch = await self.conn.query(
-                            self.CMD_ALLIANCE_TREASURE,
-                            self.REQ_CALL_HELP,
-                            {"index": int(d_idx)},
-                            timeout=6
-                        )
-                        if r_ch and str(r_ch.get("err", "-1")) == "0":
-                            help_requested_count += 1
-                            d["canCallHelp"] = False
-                            self.log.info(f"✅ تم إرسال طلب المساعدة للصندوق الجاري #{d_idx} بنجاح.")
-                        elif r_ch and str(r_ch.get("err")) == "620011":
-                            d["canCallHelp"] = False
-                            self.log.info(f"ℹ️ تم طلب مساعدة التحالف للصندوق #{d_idx} مسبقاً.")
-                        elif r_ch and str(r_ch.get("err")) == "620003":
-                            d["canCallHelp"] = False
-                            self.log.info(f"ℹ️ الصندوق #{d_idx} تمت مساعدته بالكامل مسبقاً.")
-                        else:
-                            err_ch = r_ch.get("err") if r_ch else "timeout"
-                            self.log.warning(f"⚠️ نتيجة طلب مساعدة التحالف للصندوق #{d_idx}: {err_ch}")
-                    except Exception as e_ch:
-                        self.log.debug(f"تنبيه أثناء طلب مساعدة التحالف: {e_ch}")
 
         # إذا تم استلام أي صندوق مكتمل في الخطوة 4، نحدث الحالة لمعرفة هل توفر حفر مجاني جديد
         if total_received > 0:

@@ -499,16 +499,155 @@ class PrestigeTask(BaseTask):
     #  الجزء 3: تدريب الجنود (Train Troops - 250 وحدة من كل نوع)
     # ════════════════════════════════════════════════════════════════
 
+    def get_prestige_train_status(self) -> Dict[str, Any]:
+        """
+        فحص حالة مهام تدريب الجنود الأربعة في الهيبة من الذاكرة الحية (RAM / Zero-Request):
+          - #4112010: المشاة (250 وحدة)
+          - #4112011: الخيالة (250 وحدة)
+          - #4112012: الرماة (250 وحدة)
+          - #4112013: العربات (250 وحدة - مفتوحة عند لفل هيبة 5)
+        ترجع قاموساً يحدد ما إذا كانت جميع المهام مكتملة وقائمة الأنواع المحتاجة للتدريب.
+        """
+        TRAIN_QUEST_IDS = {
+            "infantry": 4112010,
+            "cavalry":  4112011,
+            "archers":  4112012,
+            "chariots": 4112013,
+        }
+        merit = self.conn.init_data.get("meritoriousTaskCtrl", {})
+        task_data = merit.get("taskData", {}) if isinstance(merit, dict) else {}
+        daily_task = merit.get("daily_task", {}) if isinstance(merit, dict) else {}
+
+        needed_types: List[str] = []
+        completed_types: List[str] = []
+        details: Dict[str, Any] = {}
+
+        for t_type, qid in TRAIN_QUEST_IDS.items():
+            qid_str = str(qid)
+            q_obj = task_data.get(qid_str)
+
+            # إذا كانت المهمة غير موجودة في taskData (مثلاً مقفلة حسب مستوى الهيبة)
+            if not q_obj or not isinstance(q_obj, dict):
+                if qid_str in daily_task:
+                    c_num = int(daily_task[qid_str])
+                    if c_num >= 250:
+                        completed_types.append(t_type)
+                    else:
+                        needed_types.append(t_type)
+                continue
+
+            c_num = int(q_obj.get("cNum", q_obj.get("c_num", 0)))
+            l_num = int(q_obj.get("lNum", q_obj.get("l_num", 250)))
+            status = int(q_obj.get("status", 0))
+
+            details[t_type] = {"c_num": c_num, "l_num": l_num, "status": status}
+
+            # حالة 4: مكتملة وجاهزة للاستلام، حالة 1: تم استلامها، أو العدد المنجز وصل للمستهدف
+            if status in (1, 4) or (l_num > 0 and c_num >= l_num):
+                completed_types.append(t_type)
+            else:
+                needed_types.append(t_type)
+
+        all_done = (len(needed_types) == 0 and len(completed_types) > 0)
+        return {
+            "all_done": all_done,
+            "needed_types": needed_types,
+            "completed_types": completed_types,
+            "details": details
+        }
+
+    def get_busy_training_barracks(self) -> Set[str]:
+        """
+        فحص الثكنات التي تجري فيها عملية تدريب فعلياً حالياً من queueCtrl بالذاكرة الحية (RAM / Zero-Request).
+        ترجع مجموعة بأسماء الأنواع المشغولة ('infantry', 'cavalry', 'archers', 'chariots').
+        """
+        BID_TO_TYPE = {
+            "118": "infantry",  # ثكنة المشاة
+            "116": "cavalry",   # ثكنة الفرسان / الخيالة
+            "117": "archers",   # ثكنة الرماة
+            "119": "chariots",  # مصنع العربات
+        }
+        QTYPE_TO_TYPE = {
+            "1206": "infantry",
+            "1204": "cavalry",
+            "1205": "archers",
+            "1203": "chariots",
+        }
+        now_ts = int(time.time())
+        queue_ctrl = self.conn.init_data.get("queueCtrl", {})
+        busy_types: Set[str] = set()
+
+        if isinstance(queue_ctrl, dict):
+            for qkey, qdata in queue_ctrl.items():
+                if not isinstance(qdata, dict):
+                    continue
+                qtype_str = str(qdata.get("qtype") or qdata.get("queuetype") or qkey)
+                bid_str = str(qdata.get("data", {}).get("bid", ""))
+
+                t_type = BID_TO_TYPE.get(bid_str) or QTYPE_TO_TYPE.get(qtype_str)
+                if t_type:
+                    start_t = int(qdata.get("starttime", 0))
+                    total_t = int(qdata.get("totaltime", 0))
+                    # الطابور مشغول إذا كان وقت الانتهاء لم يحل بعد
+                    if start_t + total_t > now_ts:
+                        busy_types.add(t_type)
+
+        return busy_types
+
     async def run_train_step(self) -> Dict[str, Any]:
         """
-        تدريب الجنود لمهام الهيبة: 250 جندي من كل نوع على مستوى 1.
+        تدريب الجنود لمهام الهيبة مع الفحص المسبق الذكي (Zero-Request):
+          1. فحص اكتمال مهام تدريب الجنود في الهيبة مسبقاً (4112010 - 4112013) لتوفير الموارد.
+          2. فحص طوابير التدريب الجارية في الثكنات من queueCtrl وتجنب المشغولة.
+          3. تدريب الأنواع الشاغرة فقط والمطلوبة للهيبة.
         """
-        self.log.info("⚔️ ───【 الخطوة 3: تدريب الجنود (250 وحدة من كل نوع مستوى 1) 】───")
+        # 1. فحص اكتمال مهام تدريب الجنود بالهيبة في الذاكرة الحية
+        t_status = self.get_prestige_train_status()
+        if t_status["all_done"]:
+            c_cnt = len(t_status["completed_types"])
+            self.log.info(
+                f"✨ [استعلام مسبق] جميع مهام تدريب الجنود في الهيبة مكتملة مسبقاً ({c_cnt}/4 أنواع) "
+                f"— يتم تخطي الخطوة 3 بالكامل لحفظ الموارد!"
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "already_done": True,
+                "trained_count": 0,
+                "busy_count": 0,
+                "message": f"مهام تدريب الجنود بالهيبة مكتملة مسبقاً ({c_cnt} أنواع)"
+            }
+
+        needed_types = t_status["needed_types"] or ["infantry", "cavalry", "archers", "chariots"]
+        done_names = ", ".join(t_status["completed_types"]) if t_status["completed_types"] else "لا يوجد"
+        self.log.info(f"📋 حالة مهام تدريب الهيبة: مكتمل [{done_names}] | متبقي بحاجة لتدريب [{', '.join(needed_types)}]")
+
+        # 2. فحص طوابير التدريب الجارية حالياً في الذاكرة الحية
+        busy_types = self.get_busy_training_barracks()
+        available_types = [t for t in needed_types if t not in busy_types]
+
+        if not available_types:
+            busy_str = ", ".join(busy_types) if busy_types else "الكل"
+            self.log.info(
+                f"⏳ [طوابير مشغولة] جميع الثكنات المطلوبة قيد التدريب حالياً ({busy_str}) "
+                f"— يتم التخطي لتفادي التعارض مع التدريب الجاري."
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "busy": True,
+                "trained_count": 0,
+                "busy_count": len(busy_types),
+                "message": f"الثكنات المطلوبة مشغولة بالتدريب حالياً ({busy_str})"
+            }
+
+        avail_str = ", ".join(available_types)
+        self.log.info(f"⚔️ ───【 الخطوة 3: تدريب الجنود للهيبة (المطلوب والشاغر: {avail_str}) 】───")
         try:
             train_cfg = {
-                "types": "all",      # جميع أنواع الثكنات (مشاة، خيالة، أسهم، عربات)
-                "level": 1,          # مستوى 1 لجميع الأنواع
-                "count": 250,        # 250 وحدة من كل نوع
+                "types": available_types,  # تدريب الأنواع الشاغرة والمطلوبة فقط
+                "level": 1,                # مستوى 1 لجميع الأنواع
+                "count": 250,              # 250 وحدة لكل نوع
             }
             train_task = TrainTask(self.conn, train_cfg)
             await train_task.on_start()
@@ -516,7 +655,7 @@ class PrestigeTask(BaseTask):
             self.log.info(f"🏁 اكتملت مهمة تدريب الجنود: {res.message if res else 'تم التنفيذ'}")
             data = res.data if (res and res.data) else {}
             trained = data.get("trained", [])
-            busy    = data.get("busy", [])
+            busy = data.get("busy", [])
             return {
                 "success": bool(res and res.success),
                 "message": res.message if res else "No response",
@@ -780,6 +919,13 @@ class PrestigeTask(BaseTask):
 
         if train_res.get("user_disabled"):
             skipped_parts.append("تدريب الجنود (معطل)")
+        elif train_res.get("skipped"):
+            if train_res.get("already_done"):
+                skipped_parts.append("تدريب الجنود ✨")
+            elif train_res.get("busy"):
+                skipped_parts.append("تدريب الجنود ⏳")
+            else:
+                skipped_parts.append("تدريب الجنود (تخطي)")
         else:
             executed_parts.append(f"تدريب الجنود ({train_trained} أنواع)")
 

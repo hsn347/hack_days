@@ -755,23 +755,52 @@ class GateClient:
                         for item in notify_data:
                             if isinstance(item, dict) and item.get('notifyType') == 'points':
                                 pve['points'] = int(item.get('points', pve.get('points', 0)))
-                    elif notify_id in ('NOTIFY_MERITORIOUS_TASK', '1070'):
+                    elif notify_id in ('NOTIFY_MERITORIOUS_TASK', '1070', 'NOTIFY_UNIVERSAL_TASK', '1025'):
                         merit = self.init_data.setdefault('meritoriousTaskCtrl', {})
+                        task_data = merit.setdefault('taskData', {})
+                        daily_task = merit.setdefault('daily_task', {})
                         if isinstance(notify_data, dict):
                             if 'taskData' in notify_data and isinstance(notify_data['taskData'], dict):
-                                merit.setdefault('taskData', {}).update(notify_data['taskData'])
+                                task_data.update(notify_data['taskData'])
+                            if 'daily_task' in notify_data and isinstance(notify_data['daily_task'], dict):
+                                daily_task.update(notify_data['daily_task'])
                             if 'tasks' in notify_data and isinstance(notify_data['tasks'], (list, dict)):
                                 merit['tasks'] = notify_data['tasks']
                             for k, v in notify_data.items():
-                                if k not in ('taskData', 'tasks'):
+                                if k not in ('taskData', 'daily_task', 'tasks'):
                                     merit[k] = v
                         elif isinstance(notify_data, list):
-                            task_data = merit.setdefault('taskData', {})
                             for item in notify_data:
                                 if isinstance(item, dict):
-                                    tid = item.get('id') or item.get('taskId') or item.get('dynamicId')
+                                    d = item.get('data', item) if isinstance(item.get('data'), dict) else item
+                                    tid = d.get('id') or d.get('taskId') or d.get('dynamicId')
                                     if tid:
-                                        task_data[str(tid)] = item
+                                        tid_str = str(tid)
+                                        if tid_str in task_data and isinstance(task_data[tid_str], dict):
+                                            task_data[tid_str].update(d)
+                                        else:
+                                            task_data[tid_str] = d
+                                        if 'cNum' in d:
+                                            try: daily_task[tid_str] = int(d['cNum'])
+                                            except (ValueError, TypeError): pass
+                    elif notify_id in ('NOTIFY_QUEUE', 'QUEUE', '23', 'NOTIFY_PLAYER_QUEUE_CHANGE', '1051'):
+                        q_ctrl = self.init_data.setdefault('queueCtrl', {})
+                        if isinstance(notify_data, list):
+                            for item in notify_data:
+                                if isinstance(item, dict):
+                                    qtype = str(item.get('qtype') or item.get('queuetype') or '')
+                                    notify_type = str(item.get('notifyType', '')).lower()
+                                    if notify_type in ('del', 'remove', 'finish', 'cancel'):
+                                        q_ctrl.pop(qtype, None)
+                                    elif qtype:
+                                        if qtype in q_ctrl and isinstance(q_ctrl[qtype], dict):
+                                            q_ctrl[qtype].update(item)
+                                        else:
+                                            q_ctrl[qtype] = item
+                        elif isinstance(notify_data, dict):
+                            for k, v in notify_data.items():
+                                if isinstance(v, dict):
+                                    q_ctrl[str(k)] = v
                     if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
                         if isinstance(notify_data, list):
                             for item in notify_data:
