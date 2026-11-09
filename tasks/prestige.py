@@ -478,6 +478,8 @@ class PrestigeTask(BaseTask):
         try:
             wm_cfg = {
                 "types": "all",
+                "allow_shop_buy": True,
+                "auto_buy": True,
                 "allow_alliance_shop": True,
             }
             watermill_task = WatermillTask(self.conn, wm_cfg)
