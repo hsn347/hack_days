@@ -14,7 +14,7 @@ refresh_live_memory.py — أداة تجديد وتحديث ملفات تفري�
      python refresh_live_memory.py my_account_live_memory.json
 
   2. استخراج الذاكرة عبر تحديد البريد مباشرة:
-     python tools/refresh_live_memory.py jzarco.all@gmail.com
+     python tools/refresh_live_memory.py burcudemr@gmail.com
      أو:
      python refresh_live_memory.py razan@gamil.com
 

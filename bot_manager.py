@@ -1920,16 +1920,25 @@ class BotManager:
     # [4] مهمة الميناء
     async def step_4_port_task_1(self) -> Dict[str, Any]:
 
-        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية
         tr = self.conn.init_data.get("timeRewardCtrl", {})
         tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
         if tr_data.get("isAllReceive") == 1:
             return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
-        now_ts = time.time()
-        rec_time = float(tr_data.get("receiveTime", 0))
-        if rec_time > now_ts:
-            rem = int(rec_time - now_ts)
-            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
+
+        # فحص حالة الجاهزية: إذا لم تكن 2 فالسفينة لا تزال مبحرة ولم تصل بعد
+        if tr_data.get("isReceive") != 2:
+            return {"skipped": True, "message": "⏳ سفينة الميناء في الطريق (لم تصل بعد)."}
+
+        # فحص طابور الميناء (1227) في قائمة الطوابير إن وُجد
+        queue_ctrl = self.conn.init_data.get("queueCtrl", {})
+        port_q = queue_ctrl.get("1227") or queue_ctrl.get(1227)
+        if isinstance(port_q, dict):
+            end_t = float(port_q.get("endTime") or port_q.get("endtime") or 0)
+            now_ts = time.time()
+            if end_t > now_ts:
+                rem = int(end_t - now_ts)
+                return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
 
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
@@ -2485,16 +2494,25 @@ class BotManager:
     # [4] مهمة الميناء
     async def step_4_port_task_2(self) -> Dict[str, Any]:
 
-        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية
         tr = self.conn.init_data.get("timeRewardCtrl", {})
         tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
         if tr_data.get("isAllReceive") == 1:
             return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
-        now_ts = time.time()
-        rec_time = float(tr_data.get("receiveTime", 0))
-        if rec_time > now_ts:
-            rem = int(rec_time - now_ts)
-            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
+
+        # فحص حالة الجاهزية: إذا لم تكن 2 فالسفينة لا تزال مبحرة ولم تصل بعد
+        if tr_data.get("isReceive") != 2:
+            return {"skipped": True, "message": "⏳ سفينة الميناء في الطريق (لم تصل بعد)."}
+
+        # فحص طابور الميناء (1227) في قائمة الطوابير إن وُجد
+        queue_ctrl = self.conn.init_data.get("queueCtrl", {})
+        port_q = queue_ctrl.get("1227") or queue_ctrl.get(1227)
+        if isinstance(port_q, dict):
+            end_t = float(port_q.get("endTime") or port_q.get("endtime") or 0)
+            now_ts = time.time()
+            if end_t > now_ts:
+                rem = int(end_t - now_ts)
+                return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
 
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
@@ -2981,16 +2999,25 @@ class BotManager:
     # [4] مهمة الميناء
     async def step_4_port_task_3(self) -> Dict[str, Any]:
 
-        # فحص جاهزية سفينة الميناء في الذاكرة الحية بالاعتماد على توقيت الوصول
+        # فحص جاهزية سفينة الميناء في الذاكرة الحية
         tr = self.conn.init_data.get("timeRewardCtrl", {})
         tr_data = tr.get("data", tr) if isinstance(tr, dict) else {}
         if tr_data.get("isAllReceive") == 1:
             return {"skipped": True, "message": "⏭️ تم استلام جميع سفن الميناء لهذا اليوم."}
-        now_ts = time.time()
-        rec_time = float(tr_data.get("receiveTime", 0))
-        if rec_time > now_ts:
-            rem = int(rec_time - now_ts)
-            return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
+
+        # فحص حالة الجاهزية: إذا لم تكن 2 فالسفينة لا تزال مبحرة ولم تصل بعد
+        if tr_data.get("isReceive") != 2:
+            return {"skipped": True, "message": "⏳ سفينة الميناء في الطريق (لم تصل بعد)."}
+
+        # فحص طابور الميناء (1227) في قائمة الطوابير إن وُجد
+        queue_ctrl = self.conn.init_data.get("queueCtrl", {})
+        port_q = queue_ctrl.get("1227") or queue_ctrl.get(1227)
+        if isinstance(port_q, dict):
+            end_t = float(port_q.get("endTime") or port_q.get("endtime") or 0)
+            now_ts = time.time()
+            if end_t > now_ts:
+                rem = int(end_t - now_ts)
+                return {"skipped": True, "message": f"⏳ سفينة الميناء في الطريق (متبقي {rem} ثانية)."}
 
         log.info("🚀 تشغيل مهمة الميناء لإرسال السفن التجارية...")
         task_cfg = {
@@ -3003,6 +3030,7 @@ class BotManager:
         else:
             log.warning(f"⚠️ تنبيه في مهمة الميناء: {res_port.message}")
         return {"success": res_port.success, "message": res_port.message, "data": res_port.data}
+
 
 
 

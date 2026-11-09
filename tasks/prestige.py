@@ -66,6 +66,11 @@ PRESTIGE_QUEST_IDS: Dict[str, int] = {
     "smuggler": 4112022,        # متجر المهربين / التاجر المتجول (10 مشتريات)
     "watermill": 4112027,       # تعزيز إنتاج حقول الموارد (الساقية - مرة واحدة)
     "badge_exchange": 4112024,  # تبديل الموارد بوسام الحرب (مرة واحدة)
+    "fortress": 4112014,        # تصنيع الفخاخ في حصن الحرب (250 وحدة)
+    "train_infantry": 4112010,  # تدريب المشاة (250 وحدة)
+    "train_cavalry": 4112011,   # تدريب الخيالة (250 وحدة)
+    "train_archers": 4112012,   # تدريب الرماة (250 وحدة)
+    "train_chariots": 4112013,  # تدريب العربات (250 وحدة)
 }
 
 # أسماء وتسميات مهام الهيبة للعرض والتقارير
@@ -73,6 +78,20 @@ PRESTIGE_QUEST_NAMES: Dict[str, str] = {
     "smuggler": "متجر المهربين (10 مشتريات بالموارد)",
     "watermill": "تعزيز إنتاج حقول الموارد (الساقية)",
     "badge_exchange": "تبديل القمح بوسام الحرب (مرة واحدة)",
+    "fortress": "تصنيع فخاخ حصن الحرب (250 وحدة)",
+    "train_infantry": "تدريب المشاة (250 وحدة)",
+    "train_cavalry": "تدريب الخيالة (250 وحدة)",
+    "train_archers": "تدريب الرماة (250 وحدة)",
+    "train_chariots": "تدريب العربات (250 وحدة)",
+}
+
+# أسماء أنواع القوات والفخاخ بالعربية لسجلات البوت
+TRAIN_TYPE_NAMES_AR: Dict[str, str] = {
+    "infantry": "مشاة",
+    "cavalry": "خيالة",
+    "archers": "رماة",
+    "chariots": "عربات",
+    "traps": "فخاخ",
 }
 
 # ── أسماء وتسميات المهام الفرعية لمهام الهيبة داخل القلعة ───────────
@@ -496,16 +515,17 @@ class PrestigeTask(BaseTask):
             return {"success": False, "message": str(e), "activated": 0}
 
     # ════════════════════════════════════════════════════════════════
-    #  الجزء 3: تدريب الجنود (Train Troops - 250 وحدة من كل نوع)
+    #  الجزء 3: تدريب الجنود وتصنيع الفخاخ (Train Troops & Traps - 250 وحدة)
     # ════════════════════════════════════════════════════════════════
 
     def get_prestige_train_status(self) -> Dict[str, Any]:
         """
-        فحص حالة مهام تدريب الجنود الأربعة في الهيبة من الذاكرة الحية (RAM / Zero-Request):
+        فحص حالة مهام تدريب الجنود والفخاخ الخمسة في الهيبة من الذاكرة الحية (RAM / Zero-Request):
           - #4112010: المشاة (250 وحدة)
           - #4112011: الخيالة (250 وحدة)
           - #4112012: الرماة (250 وحدة)
           - #4112013: العربات (250 وحدة - مفتوحة عند لفل هيبة 5)
+          - #4112014: الفخاخ / حصن الحرب (250 وحدة - مفتوحة عند لفل هيبة 5)
         ترجع قاموساً يحدد ما إذا كانت جميع المهام مكتملة وقائمة الأنواع المحتاجة للتدريب.
         """
         TRAIN_QUEST_IDS = {
@@ -513,6 +533,7 @@ class PrestigeTask(BaseTask):
             "cavalry":  4112011,
             "archers":  4112012,
             "chariots": 4112013,
+            "traps":    4112014,
         }
         merit = self.conn.init_data.get("meritoriousTaskCtrl", {})
         task_data = merit.get("taskData", {}) if isinstance(merit, dict) else {}
@@ -523,6 +544,10 @@ class PrestigeTask(BaseTask):
         details: Dict[str, Any] = {}
 
         for t_type, qid in TRAIN_QUEST_IDS.items():
+            # إذا عطل المستخدم حصن الحرب صراحة من المهام الفرعية
+            if t_type == "traps" and not self.is_subtask_enabled("fortress"):
+                continue
+
             qid_str = str(qid)
             q_obj = task_data.get(qid_str)
 
@@ -558,20 +583,22 @@ class PrestigeTask(BaseTask):
 
     def get_busy_training_barracks(self) -> Set[str]:
         """
-        فحص الثكنات التي تجري فيها عملية تدريب فعلياً حالياً من queueCtrl بالذاكرة الحية (RAM / Zero-Request).
-        ترجع مجموعة بأسماء الأنواع المشغولة ('infantry', 'cavalry', 'archers', 'chariots').
+        فحص المنشآت التي تجري فيها عملية تدريب فعلياً حالياً من queueCtrl بالذاكرة الحية (RAM / Zero-Request).
+        ترجع مجموعة بأسماء الأنواع المشغولة ('infantry', 'cavalry', 'archers', 'chariots', 'traps').
         """
         BID_TO_TYPE = {
             "118": "infantry",  # ثكنة المشاة
             "116": "cavalry",   # ثكنة الفرسان / الخيالة
             "117": "archers",   # ثكنة الرماة
             "119": "chariots",  # مصنع العربات
+            "120": "traps",     # حصن الحرب / الفخاخ
         }
         QTYPE_TO_TYPE = {
             "1206": "infantry",
             "1204": "cavalry",
             "1205": "archers",
             "1203": "chariots",
+            "1207": "traps",    # طابور حصن الحرب
         }
         now_ts = int(time.time())
         queue_ctrl = self.conn.init_data.get("queueCtrl", {})
@@ -588,7 +615,7 @@ class PrestigeTask(BaseTask):
                 if t_type:
                     start_t = int(qdata.get("starttime", 0))
                     total_t = int(qdata.get("totaltime", 0))
-                    # الطابور مشغول إذا كان وقت الانتهاء لم يحل بعد
+                    # المنشأة مشغولة إذا كان وقت الانتهاء لم يحل بعد
                     if start_t + total_t > now_ts:
                         busy_types.add(t_type)
 
@@ -596,75 +623,127 @@ class PrestigeTask(BaseTask):
 
     async def run_train_step(self) -> Dict[str, Any]:
         """
-        تدريب الجنود لمهام الهيبة مع الفحص المسبق الذكي (Zero-Request):
-          1. فحص اكتمال مهام تدريب الجنود في الهيبة مسبقاً (4112010 - 4112013) لتوفير الموارد.
-          2. فحص طوابير التدريب الجارية في الثكنات من queueCtrl وتجنب المشغولة.
-          3. تدريب الأنواع الشاغرة فقط والمطلوبة للهيبة.
+        تدريب الجنود وتصنيع الفخاخ لمهام الهيبة مع الفحص المسبق الذكي (Zero-Request):
+          1. فحص اكتمال مهام تدريب الجنود والفخاخ في الهيبة مسبقاً (4112010 - 4112014) لتوفير الموارد.
+          2. فحص طوابير التدريب الجارية في الثكنات وحصن الحرب من queueCtrl وتجنب المشغولة.
+          3. تدريب الجنود الشاغرين (250 مستوى 1) وتصنيع فخاخ الحصن (250 وحدة) للهيبة فقط.
         """
-        # 1. فحص اكتمال مهام تدريب الجنود بالهيبة في الذاكرة الحية
+        # 1. فحص اكتمال مهام تدريب الجنود والفخاخ بالهيبة في الذاكرة الحية
         t_status = self.get_prestige_train_status()
         if t_status["all_done"]:
             c_cnt = len(t_status["completed_types"])
             self.log.info(
-                f"✨ [استعلام مسبق] جميع مهام تدريب الجنود في الهيبة مكتملة مسبقاً ({c_cnt}/4 أنواع) "
+                f"✨ [استعلام مسبق] جميع مهام تدريب الجنود والفخاخ في الهيبة مكتملة مسبقاً ({c_cnt} مهام) "
                 f"— يتم تخطي الخطوة 3 بالكامل لحفظ الموارد!"
             )
             return {
                 "success": True,
                 "skipped": True,
                 "already_done": True,
+                "trained": [],
                 "trained_count": 0,
+                "busy": [],
                 "busy_count": 0,
-                "message": f"مهام تدريب الجنود بالهيبة مكتملة مسبقاً ({c_cnt} أنواع)"
+                "message": f"مهام تدريب الجنود والفخاخ بالهيبة مكتملة مسبقاً ({c_cnt} مهام)"
             }
 
-        needed_types = t_status["needed_types"] or ["infantry", "cavalry", "archers", "chariots"]
-        done_names = ", ".join(t_status["completed_types"]) if t_status["completed_types"] else "لا يوجد"
-        self.log.info(f"📋 حالة مهام تدريب الهيبة: مكتمل [{done_names}] | متبقي بحاجة لتدريب [{', '.join(needed_types)}]")
+        needed_types = t_status["needed_types"] or ["infantry", "cavalry", "archers", "chariots", "traps"]
+        done_names = ", ".join(TRAIN_TYPE_NAMES_AR.get(t, t) for t in t_status["completed_types"]) if t_status["completed_types"] else "لا يوجد"
+        needed_names = ", ".join(TRAIN_TYPE_NAMES_AR.get(t, t) for t in needed_types)
+        self.log.info(f"📋 حالة مهام تدريب الهيبة: مكتمل [{done_names}] | متبقي بحاجة لتدريب [{needed_names}]")
 
-        # 2. فحص طوابير التدريب الجارية حالياً في الذاكرة الحية
+        # 2. فحص طوابير التدريب الجارية حالياً في الذاكرة الحية (الثكنات وحصن الحرب)
         busy_types = self.get_busy_training_barracks()
         available_types = [t for t in needed_types if t not in busy_types]
 
         if not available_types:
-            busy_str = ", ".join(busy_types) if busy_types else "الكل"
+            busy_str = ", ".join(TRAIN_TYPE_NAMES_AR.get(t, t) for t in busy_types) if busy_types else "الكل"
             self.log.info(
-                f"⏳ [طوابير مشغولة] جميع الثكنات المطلوبة قيد التدريب حالياً ({busy_str}) "
+                f"⏳ [طوابير مشغولة] جميع المنشآت المطلوبة قيد التدريب حالياً ({busy_str}) "
                 f"— يتم التخطي لتفادي التعارض مع التدريب الجاري."
             )
             return {
                 "success": True,
                 "skipped": True,
                 "busy": True,
+                "trained": [],
                 "trained_count": 0,
                 "busy_count": len(busy_types),
-                "message": f"الثكنات المطلوبة مشغولة بالتدريب حالياً ({busy_str})"
+                "message": f"المنشآت المطلوبة مشغولة بالتدريب حالياً ({busy_str})"
             }
 
-        avail_str = ", ".join(available_types)
-        self.log.info(f"⚔️ ───【 الخطوة 3: تدريب الجنود للهيبة (المطلوب والشاغر: {avail_str}) 】───")
-        try:
-            train_cfg = {
-                "types": available_types,  # تدريب الأنواع الشاغرة والمطلوبة فقط
-                "level": 1,                # مستوى 1 لجميع الأنواع
-                "count": 250,              # 250 وحدة لكل نوع
-            }
-            train_task = TrainTask(self.conn, train_cfg)
-            await train_task.on_start()
-            res = await train_task.run()
-            self.log.info(f"🏁 اكتملت مهمة تدريب الجنود: {res.message if res else 'تم التنفيذ'}")
-            data = res.data if (res and res.data) else {}
-            trained = data.get("trained", [])
-            busy = data.get("busy", [])
-            return {
-                "success": bool(res and res.success),
-                "message": res.message if res else "No response",
-                "trained_count": len(trained),
-                "busy_count": len(busy),
-            }
-        except Exception as e:
-            self.log.warning(f"⚠️ خطأ في مهمة تدريب الجنود: {e}")
-            return {"success": False, "message": str(e), "trained_count": 0, "busy_count": 0}
+        avail_str = ", ".join(TRAIN_TYPE_NAMES_AR.get(t, t) for t in available_types)
+        self.log.info(f"⚔️ ───【 الخطوة 3: تدريب الجنود وتصنيع الفخاخ للهيبة (المطلوب والشاغر: {avail_str}) 】───")
+
+        troop_types = [t for t in available_types if t != "traps"]
+        train_traps = "traps" in available_types
+
+        trained_all: List[str] = []
+        busy_all: List[str] = list(busy_types)
+        success_all = True
+        messages: List[str] = []
+
+        # 1. تدريب الجنود في الثكنات (مشاة، خيالة، رماة، عربات)
+        if troop_types:
+            try:
+                train_cfg = {
+                    "types": troop_types,  # تدريب الأنواع الشاغرة والمطلوبة فقط
+                    "level": 1,            # مستوى 1 لجميع الأنواع
+                    "count": 250,          # 250 وحدة لكل نوع
+                }
+                train_task = TrainTask(self.conn, train_cfg)
+                await train_task.on_start()
+                res = await train_task.run()
+                self.log.info(f"🏁 اكتمل تدريب الجنود: {res.message if res else 'تم التنفيذ'}")
+                data = res.data if (res and res.data) else {}
+                trained_troops = data.get("trained", [])
+                busy_troops = data.get("busy", [])
+                trained_all.extend(trained_troops)
+                busy_all.extend(busy_troops)
+                if res and res.success:
+                    messages.append(res.message or "تم تدريب الجنود")
+                else:
+                    success_all = False
+                    messages.append(res.message if res else "فشل تدريب الجنود")
+            except Exception as e:
+                self.log.warning(f"⚠️ خطأ في مهمة تدريب الجنود: {e}")
+                messages.append(str(e))
+                success_all = False
+
+        # 2. تصنيع الفخاخ في حصن الحرب (250 وحدة)
+        if train_traps:
+            if troop_types:
+                await asyncio.sleep(round(random.uniform(1.2, 2.0), 2))
+            try:
+                self.log.info("🏰 بدء تصنيع فخاخ حصن الحرب لمهام الهيبة (250 فخ)...")
+                fortress_cfg = {
+                    "type": "auto",   # الفئة التلقائية المتاحة
+                    "level": 1,       # مستوى 1 لتوفير الموارد
+                    "count": 250,     # 250 فخ لإنجاز مهمة الهيبة
+                }
+                fortress_task = FortressTask(self.conn, fortress_cfg)
+                await fortress_task.on_start()
+                res_f = await fortress_task.run()
+                self.log.info(f"🏁 اكتمل تصنيع الفخاخ: {res_f.message if res_f else 'تم التنفيذ'}")
+                if res_f and res_f.success:
+                    trained_all.append("traps")
+                    messages.append(res_f.message or "تم تصنيع الفخاخ")
+                else:
+                    if res_f and res_f.status == "busy":
+                        busy_all.append("traps")
+                    messages.append(res_f.message if res_f else "فشل تصنيع الفخاخ")
+            except Exception as e:
+                self.log.warning(f"⚠️ خطأ في مهمة تصنيع الفخاخ: {e}")
+                messages.append(str(e))
+
+        return {
+            "success": success_all,
+            "message": " | ".join(messages) if messages else "تم التنفيذ",
+            "trained": trained_all,
+            "trained_count": len(trained_all),
+            "busy": list(set(busy_all)),
+            "busy_count": len(set(busy_all)),
+        }
 
     # ════════════════════════════════════════════════════════════════
     #  الجزء 4: حصن الحرب — تدريب الفخاخ تلقائياً
@@ -835,10 +914,10 @@ class PrestigeTask(BaseTask):
         print("  🎖️ بدء مهمة مهام الهيبة اليومية (داخل القلعة حصراً)")
         print(f"  • متجر المهربين: الشراء بالموارد العادية حصراً (المستهدف: {self.target_smuggler_buys} عمليات شراء)")
         print(f"  • الساقية: تفعيل جميع مباني الموارد مع السماح بالشراء من متجر التحالف")
-        print(f"  • تدريب الجنود: 250 وحدة من كل نوع على مستوى 1 (مشاة، خيالة، أسهم، عربات)")
-        print(f"  • حصن الحرب: تدريب الفخاخ بالحد الأقصى التلقائي")
+        print(f"  • تدريب الجنود والفخاخ: 250 وحدة من كل نوع على مستوى 1 (مشاة، خيالة، أسهم، عربات، فخاخ)")
+        print(f"  • حصن الحرب: تدريب الفخاخ الإضافية تلقائياً")
         print(f"  • وسام الحرب: تبديل القمح بوسام الحرب (مرة واحدة يومياً)")
-        print("  ℹ️ مهام الهيبة المعتمدة داخل المدينة: متجر المهربين، الساقية، تدريب الجنود، حصن الحرب، وسام الحرب.")
+        print("  ℹ️ مهام الهيبة المعتمدة داخل المدينة: متجر المهربين، الساقية، تدريب الجنود والفخاخ، حصن الحرب، وسام الحرب.")
         print("═" * 70 + "\n")
 
         # 0. تجديد بيانات مهام الهيبة من السيرفر للحصول على أحدث حالة
@@ -846,7 +925,7 @@ class PrestigeTask(BaseTask):
         await self._refresh_merit_data()
 
         # 0.1 الاستعلام المسبق وفحص حالة مهام الهيبة من السيرفر (المهام الداخلية)
-        quests_status = self.query_prestige_summary(["smuggler", "watermill", "badge_exchange"])
+        quests_status = self.query_prestige_summary(["smuggler", "watermill", "fortress", "badge_exchange"])
         self.log_prestige_overview(quests_status)
 
         # 1. متجر المهربين
@@ -865,18 +944,23 @@ class PrestigeTask(BaseTask):
             self.log.info("⏭️ [تخطي] مهمة الساقية معطلة بناءً على اختيار المستخدم.")
             watermill_res = {"success": True, "skipped": True, "user_disabled": True, "activated": 0}
 
-        # 3. تدريب الجنود — 250 من كل نوع على مستوى 1
+        # 3. تدريب الجنود وتصنيع الفخاخ — 250 من كل نوع على مستوى 1
         if self.is_subtask_enabled("train"):
             train_res = await self.run_train_step()
             await asyncio.sleep(round(random.uniform(2.0, 3.5), 2))
         else:
-            self.log.info("⏭️ [تخطي] مهمة تدريب الجنود معطلة بناءً على اختيار المستخدم.")
+            self.log.info("⏭️ [تخطي] مهمة تدريب الجنود والفخاخ معطلة بناءً على اختيار المستخدم.")
             train_res = {"success": True, "skipped": True, "user_disabled": True, "trained_count": 0}
 
         # 4. حصن الحرب — تدريب الفخاخ تلقائياً
         if self.is_subtask_enabled("fortress"):
-            fortress_res = await self.run_fortress_step()
-            await asyncio.sleep(round(random.uniform(1.5, 2.5), 2))
+            # إذا تم تصنيع الفخاخ بالفعل في خطوة التدريب المشتركة أو اكتملت المهمة مسبقاً
+            if "traps" in train_res.get("trained", []) or self.get_quest_info(4112014)["is_done"]:
+                self.log.info("✨ [استعلام مسبق] فخاخ حصن الحرب تم تصنيعها بالفعل في خطوة التدريب — يتم التخطي لتوفير الموارد.")
+                fortress_res = {"success": True, "skipped": True, "already_done": True}
+            else:
+                fortress_res = await self.run_fortress_step()
+                await asyncio.sleep(round(random.uniform(1.5, 2.5), 2))
         else:
             self.log.info("⏭️ [تخطي] مهمة حصن الحرب معطلة بناءً على اختيار المستخدم.")
             fortress_res = {"success": True, "skipped": True, "user_disabled": True}
@@ -918,19 +1002,21 @@ class PrestigeTask(BaseTask):
             executed_parts.append(f"الساقية ({watermill_activated} مبنى)")
 
         if train_res.get("user_disabled"):
-            skipped_parts.append("تدريب الجنود (معطل)")
+            skipped_parts.append("تدريب الجنود والفخاخ (معطل)")
         elif train_res.get("skipped"):
             if train_res.get("already_done"):
-                skipped_parts.append("تدريب الجنود ✨")
+                skipped_parts.append("تدريب الجنود والفخاخ ✨")
             elif train_res.get("busy"):
-                skipped_parts.append("تدريب الجنود ⏳")
+                skipped_parts.append("تدريب الجنود والفخاخ ⏳")
             else:
-                skipped_parts.append("تدريب الجنود (تخطي)")
+                skipped_parts.append("تدريب الجنود والفخاخ (تخطي)")
         else:
-            executed_parts.append(f"تدريب الجنود ({train_trained} أنواع)")
+            executed_parts.append(f"تدريب الجنود والفخاخ ({train_trained} أنواع)")
 
         if fortress_res.get("user_disabled"):
             skipped_parts.append("حصن الحرب (معطل)")
+        elif fortress_res.get("skipped"):
+            skipped_parts.append("حصن الحرب ✨")
         else:
             executed_parts.append(f"حصن الحرب ({'✅' if fortress_res.get('success') else '⚠️'})")
 

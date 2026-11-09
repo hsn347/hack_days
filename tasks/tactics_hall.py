@@ -158,6 +158,38 @@ class TacticsHallTask(BaseTask):
         raw_tactic = self.config.get("tactic") or self.config.get("mid")
         self.target_mid = parse_tactic_choice(raw_tactic)
 
+    def can_receive_tactic_reward(self) -> bool:
+        """
+        فحص هل يوجد بحث تكتيكي منتهٍ وجاهز للاستلام من الذاكرة الحية (Live Memory).
+
+        المنطق المطابق لكود اللعبة الرسمي (heroTacticalHallCtrl.canReceive):
+          1. فحص قائمة الجوائز mList في heroTacticalHallAgCtrl أو heroTacticalHallCtrl.
+          2. أو فحص طابور البحث التكتيكي 1257 في queueCtrl إذا كان قد انقضى وقته (endTime <= now).
+        """
+        init_data = getattr(self.conn, "init_data", {}) or {}
+        now_ts = int(time.time())
+
+        # 1. فحص قائمة الجوائز الجاهزة mList (الأصل الرسمي في بروتوكول اللعبة)
+        hall_ctrl = init_data.get("heroTacticalHallAgCtrl") or init_data.get("heroTacticalHallCtrl", {})
+        if isinstance(hall_ctrl, dict):
+            m_list = hall_ctrl.get("mList")
+            if isinstance(m_list, list) and len(m_list) > 0:
+                return True
+            if isinstance(m_list, dict) and any(m_list.values()):
+                return True
+
+        # 2. فحص طابور البحث التكتيكي (1257) في queueCtrl إذا كان انتهى وقته الفعلي
+        queue_ctrl = init_data.get("queueCtrl", {})
+        if isinstance(queue_ctrl, dict):
+            tactical_q = queue_ctrl.get(QUEUE_TYPE_TACTICAL)
+            if isinstance(tactical_q, dict):
+                q_data = tactical_q.get("data", {}) if isinstance(tactical_q.get("data"), dict) else tactical_q
+                end_time = int(q_data.get("endTime", 0))
+                if end_time > 0 and end_time <= now_ts:
+                    return True
+
+        return False
+
     async def collect_free_tactics(self) -> Dict[str, Any]:
         """
         فحص واستلام سحبة كتب التكتيكات المجانية بقاعة الاستراتيجيات (cmd: 2058 / subcmd: 1 / nType: 5).
@@ -247,12 +279,19 @@ class TacticsHallTask(BaseTask):
             if free_draw_result.get("collected"):
                 actions_performed.append("جمع كتب التكتيكات المجانية")
 
-        # ── الخطوة 2: محاولة استلام أي بحث تكتيكي مكتمل جاهز (cmd: 3137 / subcmd: 2) ──
-        r_claim = await self.conn.query("3137", "2", {}, timeout=8)
-        if r_claim and str(r_claim.get("err", "0")) == "0":
-            self.log.info("🎁 تم استلام نتائج ومكافآت البحث التكتيكي السابق بنجاح!")
-            actions_performed.append("استلام البحث المكتمل")
-            await asyncio.sleep(random.uniform(1.2, 2.2))
+        # ── الخطوة 2: استلام أي بحث تكتيكي مكتمل جاهز فقط عند التحقق من الذاكرة الحية ──
+        if self.can_receive_tactic_reward():
+            self.log.info("🎁 رصد بحث تكتيكي مكتمل بالذاكرة الحية! جاري استلام المكافأة (3137/2)...")
+            r_claim = await self.conn.query("3137", "2", {}, timeout=8)
+            if r_claim and str(r_claim.get("err", "0")) == "0":
+                self.log.info("🎁 تم استلام نتائج ومكافآت البحث التكتيكي بنجاح!")
+                actions_performed.append("استلام البحث المكتمل")
+                hall_ctrl = self.conn.init_data.get("heroTacticalHallAgCtrl") or self.conn.init_data.get("heroTacticalHallCtrl", {})
+                if isinstance(hall_ctrl, dict) and "mList" in hall_ctrl:
+                    hall_ctrl["mList"] = {}
+                await asyncio.sleep(random.uniform(1.2, 2.2))
+        else:
+            self.log.debug("ℹ️ لا يوجد بحث تكتيكي مكتمل جاهز للاستلام حالياً (تخطي 3137/2 بأمان).")
 
         # ── الخطوة 3: فحص مسار البحث الحالي (queueCtrl -> 1257) ──
         queue_ctrl = self.conn.init_data.get("queueCtrl", {})

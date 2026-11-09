@@ -254,7 +254,7 @@ class WatermillTask(BaseTask):
                     return shop_stock
 
         # 2. استعلام السيرفر 1010/39 عند عدم التوفر بالذاكرة المؤقتة
-        r_store = await self.conn.query('1010', '39', {}, timeout=8)
+        r_store = await self.conn.query('1010', '39', {}, timeout=12)
         if r_store and str(r_store.get('err', '0')) == '0' and isinstance(r_store.get('data'), dict):
             ret = r_store['data'].get('retdata', {})
             item_list = ret.get('itemlist', {})
@@ -289,7 +289,7 @@ class WatermillTask(BaseTask):
 
         buy_qty = min(missing_count, in_store)
         self.log.info(f"🛒 جاري شراء {buy_qty} من أداة ({item_id}) لـ {bname} من متجر التحالف (المتوفر بالمتجر: {in_store})...")
-        r_buy = await self.conn.query('1010', '40', {"itemid": item_id, "count": buy_qty}, timeout=8)
+        r_buy = await self.conn.query('1010', '40', {"itemid": item_id, "count": buy_qty}, timeout=11)
         if r_buy and str(r_buy.get('err', '0')) == '0':
             self.log.info(f"✅ تم شراء {buy_qty} أداة بنجاح من متجر التحالف!")
             bag_counts[item_id] = bag_counts.get(item_id, 0) + buy_qty
@@ -314,7 +314,7 @@ class WatermillTask(BaseTask):
             return 0, 0
 
         can_len = len(can_activate)
-        r_batch = await self.conn.query('1001', '9', {"allData": can_activate}, timeout=8)
+        r_batch = await self.conn.query('1001', '9', {"allData": can_activate}, timeout=11)
         if r_batch and str(r_batch.get('err', '0')) == '0':
             self.log.info(f"🎉 تم تفعيل {bname} بنجاح ({can_len} مبنى) دفعة واحدة! ✅")
             return can_len, 0
@@ -327,7 +327,7 @@ class WatermillTask(BaseTask):
         consecutive_fails = 0
 
         for item in can_activate:
-            r_s = await self.conn.query('1001', '9', {"allData": [item]}, timeout=5)
+            r_s = await self.conn.query('1001', '9', {"allData": [item]}, timeout=11)
             if r_s and str(r_s.get('err', '0')) == '0':
                 success_s += 1
                 consecutive_fails = 0

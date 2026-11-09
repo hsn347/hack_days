@@ -111,6 +111,8 @@ BENIGN_STATUS_CODES = {
     "0",
     "Err_CARRIAGE_ESCORT_NOT_DOING",  # لا توجد قافلة تسير حالياً (حالة طبيعية)
     "Err_ALLIANCE_NOT_HAVE",          # الحساب ليس في تحالف بعد
+    "17001",                          # تم استلام جائزة الميناء مسبقاً (Err_RECEIVED_REWARD)
+    "17002",                          # تم استلام جميع سفن الميناء لليوم (Err_ALL_RECEIVED_TODAY)
 }
 
 CMD_REGISTRY: Dict[Tuple[str, str], str] = {
@@ -184,6 +186,7 @@ CMD_REGISTRY: Dict[Tuple[str, str], str] = {
 
     # ── الفعاليات والموانئ والأنشطة ────────────────────────────────
     ('1032', '2'):    "مبادلة القافلة",
+    ('1033', '1'):    "استعلام بيانات سفن الميناء",
     ('1033', '2'):    "استلام جوائز سفن الميناء",
     ('1034', '1'):    "مزايدة في المزاد",
     ('1034', '2'):    "شراء فوري من المزاد",
@@ -226,8 +229,8 @@ CMD_REGISTRY: Dict[Tuple[str, str], str] = {
     ('3120', '1'):    "إيداع دار الادخار",
     ('3129', '4'):    "استعلام مهام يومية",
     ('3130', '1'):    "استكشاف كنز طروادة",
-    ('3137', '1'):    "استعلام نشاط",
-    ('3137', '2'):    "مشاركة نشاط",
+    ('3137', '1'):    "بدء بحث تكتيكي",
+    ('3137', '2'):    "استلام بحث تكتيكي",
     ('3139', '1'):    "إرسال القافلة وحراسة الكنز",
     ('3139', '6'):    "استعلام مسيرة القافلة",
     ('3139', '7'):    "استلام جوائز وصول القافلة",
@@ -645,6 +648,29 @@ class GateClient:
                         if isinstance(h_ctrl, list) and h_ctrl:
                             self.heroes = list(h_ctrl)
 
+                # 🚢 المزامنة المباشرة لحزم متحكم سفن الميناء (CMD 1033) في الذاكرة الحية
+                if cmd == '1033' and isinstance(c_data, dict):
+                    err_code = str(c.get('err', '0'))
+                    if err_code == '0':
+                        if 'data' in c_data and isinstance(c_data['data'], dict):
+                            self.init_data['timeRewardCtrl'] = c_data
+                        elif 'sequence' in c_data or 'isReceive' in c_data:
+                            self.init_data['timeRewardCtrl'] = {'data': c_data}
+                    elif err_code == '17001':
+                        # الجائزة مستلمة مسبقاً (Err_RECEIVED_REWARD) ➔ تحديث الذاكرة فوراً لمنع التكرار
+                        tr = self.init_data.setdefault('timeRewardCtrl', {})
+                        if isinstance(tr, dict):
+                            tr_d = tr.setdefault('data', {})
+                            if isinstance(tr_d, dict):
+                                tr_d['isReceive'] = 1
+                    elif err_code == '17002':
+                        # استنفاد جميع سفن اليوم (Err_ALL_RECEIVED_TODAY)
+                        tr = self.init_data.setdefault('timeRewardCtrl', {})
+                        if isinstance(tr, dict):
+                            tr_d = tr.setdefault('data', {})
+                            if isinstance(tr_d, dict):
+                                tr_d['isAllReceive'] = 1
+
                 data_obj = c.get('data', {})
                 if isinstance(data_obj, dict):
                     notify_id = str(data_obj.get('notifyID', ''))
@@ -801,6 +827,22 @@ class GateClient:
                             for k, v in notify_data.items():
                                 if isinstance(v, dict):
                                     q_ctrl[str(k)] = v
+                    elif notify_id in ('NOTIFY_REWARD', '25'):
+                        # وصول سفينة الميناء وجاهزية الجائزة للاستلام (isReceive = 2)
+                        tr = self.init_data.setdefault('timeRewardCtrl', {})
+                        if isinstance(tr, dict):
+                            tr_d = tr.setdefault('data', {})
+                            if isinstance(tr_d, dict):
+                                tr_d['isReceive'] = 2
+                    elif notify_id in ('NOTIFY_TIME_REWARD', '28', 'NOTIFY_RESET_TIME_REWARD', '20'):
+                        # إشعار تحديث/إعادة ضبط عداد سفينة الميناء
+                        if isinstance(notify_data, dict):
+                            self.init_data['timeRewardCtrl'] = notify_data
+                        elif isinstance(notify_data, list) and notify_data and isinstance(notify_data[0], dict):
+                            d_item = notify_data[0].get('data', notify_data[0])
+                            tr = self.init_data.setdefault('timeRewardCtrl', {})
+                            if isinstance(tr, dict):
+                                tr['data'] = d_item
                     if notify_id in ('100', 'NOTIFY_SERVER_STATUS', 'SERVER_STATUS'):
                         if isinstance(notify_data, list):
                             for item in notify_data:
