@@ -338,77 +338,35 @@ class MarchManagerTask(BaseTask):
                         active += 1
         return active
 
-    async def wait_for_free_queue(self, context_desc: str = "", caused_by_queue_full: bool = True) -> bool:
+    async def wait_for_free_queue(
+        self, 
+        context_desc: str = "", 
+        caused_by_queue_full: bool = True,
+        wait_seconds: Optional[int] = None
+    ) -> bool:
         """
-        الانتظار الذكي عند نفاذ الفيالق (الحالة 1):
-          - إذا حدث امتلاء الفيالق (كود 8004 أو استجابة QUEUE_FULL):
-            يسجل سقف الفيالق الحقيقي للقلعة تلقائياً (_max_castle_queues = max(1, current_active)).
-          - يدخل حلقة انتظار إجبارية بـ دقيقتين (120 ثانية) فوراً دون أي تخطي.
-          - بعد انتهاء الدقيقتين: يستعلم من السيرفر فورياً (1007/1000) ويفحص حالة وعدد الفيالق.
-          - إذا وجد فيلقاً شاغراً (عاد أحد الفيالق: current_active < max_q)، يسمح بإطلاق المسيرة.
-          - إذا كانت الفيالق لا تزال مشغولة بالكامل، يواصل دورة انتظار دقيقتين أخرى دون إرسال محاولات فاشلة للسيرفر.
+        الانتظار الصرف عند امتلاء الفيالق دون أي فحص أو استعلام:
+          - ينتظر المدة المحددة (أو عشوائياً 120-150 ثانية افتراضياً).
+          - لا يتحقق إطلاقاً من عدد أو حالة الفيالق بالخارج.
+          - يعود بـ True لاستئناف المحاولة فور انتهاء مدة الانتظار.
+          - يعود بـ False فقط في حال انتهاء مهلة الـ 20 دقيقة الكلية للمهمة.
         """
-        current_active = await self.get_active_marches_count(force_sync=True)
-        observed_active = max(1, current_active)
+        if self.is_time_expired():
+            self.log.warning("⏱️ [انتهاء المهلة] انتهت مهلة الـ 20 دقيقة المخصصة لمهمة المسيرات.")
+            return False
 
-        # تحديث سقف القلعة ديناميكياً إذا رصدنا عدداً أكبر من الفيالق النشطة
-        prev_max = getattr(self, '_max_castle_queues', 0)
-        if current_active > prev_max:
-            self._max_castle_queues = current_active
-            if self.max_queues > 0:
-                self._max_castle_queues = min(self._max_castle_queues, self.max_queues)
+        sec = int(wait_seconds) if (wait_seconds is not None and wait_seconds > 0) else random.randint(120, 150)
+        self.log.info(
+            f"⏳ [انتظار الفيالق] جميع الفيالق مشغولة — الانتظار {sec} ثانية لإتاحة تفريغ فيلق {context_desc}..."
+        )
+        await asyncio.sleep(sec)
 
-        if caused_by_queue_full:
-            # عند حدوث امتلاء الفيالق (كود 8004)، السقف الفعلي للقلعة هو عدد الفيالق النشطة حالياً
-            self._max_castle_queues = max(getattr(self, '_max_castle_queues', 0), observed_active)
-            max_q = self._max_castle_queues
-            if self.max_queues > 0:
-                max_q = min(max_q, self.max_queues)
-        else:
-            # استدعاء من فحص مسبق أو بعد إرسال مسيرات: إذا كان السقف معروفاً وتوفر فيلق شاغر، نسمح بالانطلاق فوراً
-            max_q = getattr(self, '_max_castle_queues', 0)
-            if max_q <= 0:
-                max_q = max(observed_active, self.max_queues)
-                self._max_castle_queues = max_q
-            if current_active < max_q:
-                return True
+        if self.is_time_expired():
+            self.log.warning("⏱️ [انتهاء المهلة] انتهت مهلة الـ 20 دقيقة المخصصة أثناء انتظار عودة الفيالق.")
+            return False
 
-        wait_count = 0
-        while not self.is_time_expired():
-            wait_count += 1
-            wait_sec = random.randint(150, 180)
-            self.log.info(
-                f"⏳ [الحالة 1: نفاذ الفيالق ({current_active}/{max_q})] "
-                f"جميع الفيالق مشغولة بالخارج — الانتظار قرابة 2.5 إلى 3 دقائق ({wait_sec} ثانية) لتفريغ فيلق {context_desc} [دورة {wait_count}]..."
-            )
-            await asyncio.sleep(wait_sec)
-
-            if self.is_time_expired():
-                self.log.warning("⏱️ [انتهاء المهلة] انتهت مهلة الـ 20 دقيقة المخصصة أثناء انتظار عودة الفيالق.")
-                return False
-
-            # فحص حالة الفيالق بعد انتهاء الانتظار قبل القيام بأي محاولة إطلاق مع تحديث فوري من السيرفر
-            current_active = await self.get_active_marches_count(force_sync=True)
-            if current_active > getattr(self, '_max_castle_queues', 0):
-                self._max_castle_queues = current_active
-                if self.max_queues > 0:
-                    self._max_castle_queues = min(self._max_castle_queues, self.max_queues)
-            max_q = getattr(self, '_max_castle_queues', max_q)
-            self.log.info(f"🔍 [فحص الفيالق] الفيالق النشطة بالخارج حالياً: {current_active}/{max_q}")
-
-            if current_active < max_q:
-                self.log.info(
-                    f"✅ [توفر فيلق شاغر] عاد أحد الفيالق إلى القلعة بنجاح ({current_active}/{max_q}) "
-                    f"— جاري إطلاق المسيرة {context_desc} الآن!"
-                )
-                return True
-            else:
-                self.log.info(
-                    f"⏳ [الفيالق لا تزال ممتلئة ({current_active}/{max_q})] "
-                    f"لم يعد أي فيلق بعد — مواصلة الانتظار قرابة 3 دقائق أخرى دون إرسال محاولات فاشلة..."
-                )
-
-        return False
+        self.log.info(f"✅ [اكتمال الانتظار] انتهت مدة الانتظار ({sec} ثانية) {context_desc} — متابعة التنفيذ الآن.")
+        return True
 
     async def get_active_gather_resource_types(self) -> Set[int]:
         """
@@ -1305,10 +1263,8 @@ class MarchManagerTask(BaseTask):
                     if not has_army:
                         return {"status": "critical_no_army", "sent": total_sent}
                 else:
-                    # انتظار تفريغ فيلق فعلي بدلاً من حلقة 4-7 ثوانٍ عبثية
-                    has_free_queue = await self.wait_for_free_queue(f"لقتال {choice}", caused_by_queue_full=False)
-                    if not has_free_queue:
-                        break
+                    # مهلة أمان طبيعية بين الهجمات الناجحة
+                    await asyncio.sleep(round(random.uniform(3.5, 6.0), 2))
                 continue
 
             # ج) امتلاء طوابير الفيالق دون إرسال مسيرات جديدة ➔ انتظار تفريغ فيلق

@@ -1284,6 +1284,28 @@ class BotManager:
                 self.config["elf"]["enabled"] = False
         return ok
 
+    def get_castle_level(self) -> int:
+        """
+        استخراج مستوى مبنى القلعة الرئيسي (bid: 101) مباشرة من الذاكرة الحية (cityCtrl.blist).
+        """
+        if not self.conn or not getattr(self.conn, "init_data", None):
+            return getattr(self, "castle_level", 0)
+
+        city_ctrl = self.conn.init_data.get("cityCtrl", {})
+        blist = city_ctrl.get("blist", []) if isinstance(city_ctrl, dict) else []
+        for b in blist:
+            if not isinstance(b, dict):
+                continue
+            binfo = b.get("binfo") if isinstance(b.get("binfo"), dict) else b
+            if str(binfo.get("bid", "")) == "101":
+                try:
+                    lv = int(binfo.get("lv", 0) or 0)
+                    if lv > 0:
+                        self.castle_level = lv
+                    return lv
+                except (ValueError, TypeError):
+                    pass
+        return getattr(self, "castle_level", 0)
 
     def is_connection_alive(self) -> bool:
         """التحقق هل اتصال الحساب مع السيرفر نشط وما زال يعمل بصحة كاملة."""
@@ -2797,6 +2819,17 @@ class BotManager:
 
         if not bool(cfg.get("enabled", False)):
             msg = "⏭️ تم تخطي مهمة رحلات وتكليف الأبطال (hero_consign.enabled = False)."
+            log.info(msg)
+            return {"skipped": True, "message": msg}
+
+        castle_lv = self.get_castle_level()
+        voyage_data = self.conn.init_data.get("heroVoyageAgCtrl", {}) if self.conn else {}
+        is_locked = (
+            (0 < castle_lv < 40)
+            or (voyage_data and int(voyage_data.get("unlockTime", 0) or 0) == 0 and not isinstance(voyage_data.get("consignTasks"), list))
+        )
+        if is_locked:
+            msg = f"🔒 تم تخطي مهمة رحلات وتكليف الأبطال: الميزة مغلقة في القلعة (المستوى الحالي: {castle_lv}/40)."
             log.info(msg)
             return {"skipped": True, "message": msg}
 
