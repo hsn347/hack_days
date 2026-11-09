@@ -54,7 +54,7 @@ from tasks.territory_expansion import TerritoryExpansionTask
 from tasks.torch_chest import TorchChestTask
 from tasks.shield import ShieldTask, SHIELD_TYPES, DURATION_ALIASES
 from tasks.stamina import StaminaTask
-from tasks.skills import SkillsTask, SUPPORTED_SKILLS
+from tasks.skills import SkillsTask, SUPPORTED_SKILLS, SKILL_ALIASES
 from tasks.hero_draw import HeroDrawTask
 from tasks.treasure_pavilion import TreasurePavilionTask
 from tasks.blacksmith_forge import BlacksmithForgeTask
@@ -73,7 +73,6 @@ from tasks.building import BuildingTask, BUILDING_INFO
 from tasks.prestige import PrestigeTask
 from tasks.prestige_box import PrestigeBoxTask
 from tasks.hero_consign import HeroConsignTask
-from tasks.troy_treasure import TroyTreasureTask
 from tasks.hospital import HospitalTask
 from tasks.mail import MailTask
 from tasks.march_manager import MarchManagerTask
@@ -224,6 +223,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
     "torch_chest": {
         "enabled": False,            # تفعيل/تعطيل شراء صندوق المشعل من المتجر بالذهب
     },
+    
     "open_torch_chest": {
         "enabled": False,            # تفعيل/تعطيل فتح صندوق المشعل من الحقيبة
     },
@@ -499,19 +499,7 @@ DEFAULT_FIREBASE_USER_CONFIG: Dict[str, Any] = {
 #  قاموس وتسميات المهارات التلقائية (Skill Aliases & Resolver)
 # ════════════════════════════════════════════════════════════════════
 
-SKILL_ALIASES: Dict[str, str] = {
-    # 🌾 الحصاد الوافر (Bountiful Harvest)
-    "harvest": "harvest", "الحصاد": "harvest", "حصاد": "harvest",
-    "الحصاد الوافر": "harvest", "حصاد وافر": "harvest", "12008": "harvest",
-
-    # ⚡ الجمع السريع (Crazy Gathering)
-    "gather": "gather", "الجمع": "gather", "جمع": "gather",
-    "الجمع السريع": "gather", "جمع سريع": "gather", "12022": "gather",
-
-    # 🏛️ حصاد المخزن (Warehouse Harvest)
-    "warehouse": "warehouse", "المخزن": "warehouse", "مخزن": "warehouse",
-    "حصاد المخزن": "warehouse", "58120": "warehouse",
-}
+# يتم استخدام قاموس SKILL_ALIASES الشامل والمستورد مباشرة من tasks.skills (يدعم stamina, fast_dig, harvest, gather, warehouse)
 
 def resolve_target_skills(cfg_or_val: Any) -> List[str]:
     """

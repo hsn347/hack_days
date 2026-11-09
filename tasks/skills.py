@@ -41,7 +41,7 @@ tasks/skills.py — مهمة الاستعلام الذكي وتفعيل المه
   - محاكاة بشرية بفواصل زمنية عشوائية (Human Jitter) بين عمليات التفعيل.
 
 الاستخدام كملف مستقل:
-    python tasks/skills.py --email "johan2003@yopmail.com"
+    python tasks/skills.py --email "frankamar44@gmail.com" --skills stamina
     python tasks/skills.py --email "ossso5030@gmail.com" --check-only
     python tasks/skills.py --email "mohamedfarg6233@gmil.com" --skills stamina
 """
@@ -120,10 +120,10 @@ SKILL_ID_TO_KEY = {v["id"]: k for k, v in SUPPORTED_SKILLS.items()}
 
 # خريطة أسماء ومترادفات المهارات
 SKILL_ALIASES: Dict[str, str] = {
-    "harvest": "harvest", "الحصاد": "harvest", "حصاد": "harvest", "12008": "harvest",
-    "gather": "gather", "الجمع": "gather", "جمع": "gather", "12022": "gather",
-    "warehouse": "warehouse", "المخزن": "warehouse", "مخزن": "warehouse", "58120": "warehouse",
-    "stamina": "stamina", "الطاقة": "stamina", "طاقة": "stamina", "13021": "stamina",
+    "harvest": "harvest", "الحصاد": "harvest", "حصاد": "harvest", "الحصاد الوافر": "harvest", "حصاد وافر": "harvest", "12008": "harvest",
+    "gather": "gather", "الجمع": "gather", "جمع": "gather", "الجمع السريع": "gather", "جمع سريع": "gather", "12022": "gather",
+    "warehouse": "warehouse", "المخزن": "warehouse", "مخزن": "warehouse", "حصاد المخزن": "warehouse", "58120": "warehouse",
+    "stamina": "stamina", "الطاقة": "stamina", "طاقة": "stamina", "الطاقة الوافرة": "stamina", "طاقة وافرة": "stamina", "13021": "stamina", "second_wind": "stamina", "ikinci_ruzgar": "stamina",
     "fast_dig": "fast_dig", "fastdig": "fast_dig", "hizlikazi": "fast_dig", "hizli_kazi": "fast_dig",
     "الاستخراج": "fast_dig", "استخراج": "fast_dig", "الاستخراج السريع": "fast_dig", "استخراج سريع": "fast_dig",
     "الحفر السريع": "fast_dig", "حفر سريع": "fast_dig", "12028": "fast_dig", "quick_mining": "fast_dig",
@@ -571,11 +571,9 @@ class SkillsTask(BaseTask):
             if ok:
                 activated_count += 1
                 self.log.info(f"{skill['icon']} [{skill['name']}]: ✅ {note}")
-                print(f"  {skill['icon']} [{skill['name']}]: ✅ {note}")
             else:
                 failed_count += 1
                 self.log.warning(f"{skill['icon']} [{skill['name']}]: ❌ {note}")
-                print(f"  {skill['icon']} [{skill['name']}]: ❌ {note}")
 
         skills_word = "مهارة واحدة" if activated_count == 1 else ("مهارتين" if activated_count == 2 else f"{activated_count} مهارات")
         summary = (

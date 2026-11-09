@@ -7,7 +7,7 @@ CMD: 3148
   - Subcmd 4: بدء مهمة تكليف (Start Consign) -> {"index": int, "heroIds": [id1, id2, ...]}
   - Subcmd 5: استلام جائزة مهمة مكتملة (Award Consign) -> {"index": int}
   - Subcmd 7: استلام صندوق الهدايا التراكمي (15 مهمة)
- python hero_consign.py --email sumo-1234@hotmil.com --execute
+ python tasks/hero_consign.py --email burcudemr@gmail.com --execute
 الحد اليومي: 5 مهام يومياً
 """
 
@@ -186,6 +186,25 @@ def get_task_duration(task_id: int) -> int:
     elif tid >= 430000:
         return 18000
     return 14400
+
+
+def get_task_quality(task_id: int) -> int:
+    """
+    تعيد رتبة أولوية المهمة بناءً على معرّفها (taskID) من سورس كود اللعبة:
+      quality=4 → برتقالي (أولوية 4 — الأعلى)
+      quality=3 → بنفسجي  (أولوية 3)
+      quality=2 → أزرق    (أولوية 2)
+      غير معروف → أولوية 1 (الأدنى — احتياط لأي لون مستقبلي)
+    المصدر: hero_consign_task.lua — config_server
+    """
+    tid = int(task_id)
+    if tid >= 440000:
+        return 4  # 🟠 برتقالي
+    elif tid >= 430000:
+        return 3  # 🟣 بنفسجي
+    elif tid >= 420000:
+        return 2  # 🔵 أزرق
+    return 1      # ❓ لون غير معروف — أدنى أولوية احتياطاً
 
 
 def hero_satisfies_req(hero, req):
@@ -421,6 +440,9 @@ class HeroConsignTask(BaseTask):
                     sol = solve_task(available_heroes, cid)
                     if sol:
                         solvable_tasks.append((idx_1, t, sol))
+
+            # ترتيب المهام تنازلياً حسب لون الرتبة: 🟠 برتقالي → 🟣 بنفسجي → 🔵 أزرق → ❓ غير معروف
+            solvable_tasks.sort(key=lambda x: get_task_quality(x[1].get('id', 0)), reverse=True)
 
             if solvable_tasks:
                 self.log.info(f"🚀 بدء تنفيذ مهام التكليف المتاحة (المتبقي: {remaining})...")
@@ -780,25 +802,6 @@ def main():
     args = parser.parse_args()
 
     email = args.email
-    if not email:
-        # اختيار أول حساب مسجل في session_cache
-        cache_path = os.path.join(_ROOT_DIR, 'database', 'session_cache.json')
-        if not os.path.exists(cache_path):
-            cache_path = os.path.join(_ROOT_DIR, 'session_cache.json')
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, 'r', encoding='utf-8') as f:
-                    cache_data = json.load(f)
-                accounts = list(cache_data.get('accounts', {}).keys())
-                # نفضل الحسابات المعروفة الشغالة
-                for acc in accounts:
-                    if acc in ['hmzawyha44@gmail.com', 'daysofempire2024@gmail.com', 'samartilleli@yopmail.com']:
-                        email = acc
-                        break
-                if not email and accounts:
-                    email = accounts[0]
-            except Exception:
-                pass
 
     if not email:
         print("[!] يرجى تحديد البريد الإلكتروني للحساب عبر --email")

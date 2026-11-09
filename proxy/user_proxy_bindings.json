@@ -15,8 +15,7 @@
       "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
       "hogsgigkigwh@hoo.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
       "watarosy@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
-      "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
-      "burcudemr@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
+      "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300"
     }
   },
   "free": {
@@ -38,9 +37,8 @@
     "ayhn.gngr.17@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@108.165.1.73:6204",
     "hogsgigkigwh@hoo.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
     "watarosy@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@69.91.142.86:7578",
-    "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300",
-    "burcudemr@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@212.212.19.204:6355"
+    "f257.1@gmail.com": "socks5://znwfyyet:fo3inh6jysi0@31.98.7.122:6300"
   },
-  "active_mode": "residential",
-  "updated_at": 1794141901.076409
+  "active_mode": "direct",
+  "updated_at": 1794210275.0222101
 }
