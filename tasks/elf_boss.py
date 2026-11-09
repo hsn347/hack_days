@@ -1023,7 +1023,6 @@ class ElfBossTask(BaseTask):
                     "y": target_tile_y,
                     "x": target_tile_x,
                     "id": target_map_id,
-                    "type": boss_instance_type
                 },
                 "army": march_army
             },
