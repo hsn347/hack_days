@@ -796,14 +796,6 @@ class GatherTask(BaseTask):
         while sent_count < target_marches and attempts < max_attempts:
             self.log.debug(f"🏹 محاولة إرسال مسيرة الفيلق ({sent_count + 1}/{target_marches})...")
 
-            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
-            before_avail = await self.get_available_marches_count(force_sync=True)
-            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
-
-            if before_avail == 0:
-                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
-                last_status = "QUEUE_FULL"
-                break
 
             status = await self._send_one_march(
                 res_info=res_info,
@@ -819,12 +811,7 @@ class GatherTask(BaseTask):
                 sent_count += 1
                 consecutive_errors = 0
                 cmd_opting_retries = 0
-                # ── 🧪 اختبار: قراءة الفيالق المتاحة بعد الإرسال الناجح ──
-                after_avail = await self.get_available_marches_count(force_sync=True)
-                self.log.info(
-                    f"🔬 [MARCH_TEST] بعد الإرسال #{sent_count}: الفيالق المتاحة = {after_avail}"
-                    f" (قبل={before_avail} → بعد={after_avail} | فرق={before_avail - after_avail})"
-                )
+
                 if sent_count < target_marches:
                     # مهلة أمان مدمجة في الكود بين إطلاق المسيرات لمكافحة الحظر وتشتيت النمط
                     wait_time = round(random.uniform(9.0, 14.0), 2)

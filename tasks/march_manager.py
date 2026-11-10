@@ -52,6 +52,7 @@ from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 from tasks.stronghold import StrongholdTask
 from tasks.gather import GatherTask
+from tasks.gather_2 import GatherTask_2
 from tasks.transport import TransportTask, is_transport_daily_limit_reached, set_transport_daily_limit_reached
 from tasks.ruins import RuinsTask
 from tasks.monster import MonsterTask
@@ -1382,8 +1383,7 @@ class MarchManagerTask(BaseTask):
         """
         تنفيذ أولوية جمع الذهب في أراضي التحالفات المستهدفة:
           - تعتمد على ملف gold_gather.py المتقدم.
-          - المنسق يغلف المهمة بحلقة ذكية: إذا امتلأت الفيالق، ينتظر تفريغها ثم يستأنف 
-            إرسال مسيرات الذهب حتى استيفاء العدد المطلوب أو استنفاد الحقول.
+          - عند امتلاء الفيالق (QUEUES_FULL_SKIP)، يتم تجاوز الأولوية فوراً دون انتظار أو إعادة محاولة.
         """
         cfg = self.config.get("gold_gather", {})
         if not cfg.get("enabled", False):
@@ -1396,23 +1396,15 @@ class MarchManagerTask(BaseTask):
         requested_marches = int(cfg.get("max_marches", 0))
         self.log.info(f"💰 [جمع الذهب] بدء المسح والجمع (تحالفات: {len(locations)})")
 
+        # 1. فحص الجيش قبل أي شيء (المنسق سيتولى الانتظار إذا كانت القوات بالخارج)
+        has_army = await self.ensure_army_or_wait("لجمع الذهب")
+        if not has_army:
+            return {"status": "critical_no_army", "sent": 0}
+
         total_sent = 0
 
         while not self.is_time_expired():
-            # 1. فحص الجيش قبل أي شيء (المنسق سيتولى الانتظار إذا كانت القوات بالخارج)
-            has_army = await self.ensure_army_or_wait("لجمع الذهب")
-            if not has_army:
-                return {"status": "critical_no_army", "sent": total_sent}
-
-            # 2. فحص امتلاء الفيالق مسبقاً (المنسق سيتولى الانتظار إذا كانت الفيالق ممتلئة)
-            if getattr(self, '_max_castle_queues', 0) > 0:
-                cur_act = await self.get_active_marches_count()
-                if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue("لجمع الذهب", caused_by_queue_full=False)
-                    if not has_free_queue:
-                        return {"status": "timeout_or_no_queue", "sent": total_sent}
-
-            # 3. تجهيز الإعدادات لتشغيل المهمة
+            # 2. تجهيز الإعدادات لتشغيل المهمة
             gold_cfg = dict(cfg)
             gold_cfg["busy_heroes"] = list(self._busy_heroes)
             if requested_marches > 0:
@@ -1423,27 +1415,57 @@ class MarchManagerTask(BaseTask):
             else:
                 gold_cfg["max_marches"] = 0  # 0 تعني استغلال كافة الفيالق
 
-            # 4. تشغيل المهمة الفرعية
+            # 3. تشغيل المهمة الفرعية
             gold_task = GoldGatherTask(self.conn, gold_cfg)
             self._forward_subtask_logs(gold_task)
-            
+
             res = await gold_task.run()
             self._busy_heroes.update(gold_task._busy)
-            
-            sent_this_round = res.data.get("sent", 0) if res.data else 0
-            total_sent += sent_this_round
 
-            # 5. تقييم النتائج وتحديد الخطوة التالية
-            if res.success:
-                # إذا نجحت المهمة وأرسلت مسيرات (لكنها قد تكون توقفت بسبب امتلاء الفيالق)
-                # سنعيد الدوران: المحرك سيفحص الفيالق في بداية الحلقة، وإذا كانت ممتلئة سينتظر بذكاء!
+            res_data = res.data if (res is not None and isinstance(res.data, dict)) else {}
+            sent_this_round = res_data.get("sent", 0)
+            total_sent += sent_this_round
+            stop_reason = res_data.get("stop_reason")
+            err_msg = str(res.error) if (res is not None and res.error) else ""
+
+            is_queues_full = (
+                stop_reason in ("QUEUES_FULL_SKIP", "QUEUE_FULL")
+                or "QUEUES_FULL_SKIP" in err_msg
+                or "QUEUE_FULL" in err_msg
+            )
+
+            # 4. تقييم النتائج وتحديد الخطوة التالية
+            if res is not None and res.success and sent_this_round > 0:
+                if is_queues_full:
+                    self.log.info(f"⏭️ [أولوية 8: تجاوز جمع الذهب] امتلأت جميع الفيالق ({stop_reason}) — إنهاء الأولوية دون انتظار.")
+                    break
+                if stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
+                    has_army = await self.ensure_army_or_wait("لمتابعة جمع الذهب", is_retry=True)
+                    if not has_army:
+                        return {"status": "critical_no_army", "sent": total_sent}
+                    continue
+                if stop_reason in ("NO_HEROES", "CMD_OPTING"):
+                    self.log.info(f"⏭️ [أولوية 8] توقف جمع الذهب ({stop_reason}) — الانتقال للأولوية التالية.")
+                    break
                 await asyncio.sleep(round(random.uniform(1.8, 3.2), 2))
                 continue
-            else:
-                # إذا فشلت المهمة وأعادت (TaskResult.fail)، فهذا يعني أن sent_count = 0
-                # والسبب هو أنه "لم يتم العثور على حقول ذهب شاغرة" كما هو مبرمج في ملف gold_gather
-                self.log.info("✅ [أولوية 8] تم استنفاد حقول الذهب المتاحة في التحالفات المستهدفة بنجاح.")
+
+            if is_queues_full:
+                self.log.info(f"⏭️ [أولوية 8: تجاوز جمع الذهب] جميع الفيالق ممتلئة بالكامل ({stop_reason or 'QUEUES_FULL_SKIP'}) — تجاوز جمع الذهب بدون انتظار.")
                 break
+
+            if stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
+                has_army = await self.ensure_army_or_wait("لمتابعة جمع الذهب", is_retry=True)
+                if not has_army:
+                    return {"status": "critical_no_army", "sent": total_sent}
+                continue
+
+            if stop_reason in ("NO_HEROES", "CMD_OPTING"):
+                self.log.warning(f"⚠️ [أولوية 8] تعذر استكمال جمع الذهب ({stop_reason}) — الانتقال للأولوية التالية.")
+                break
+
+            self.log.info("✅ [أولوية 8] تم استنفاد حقول الذهب المتاحة في التحالفات المستهدفة بنجاح.")
+            break
 
         self.log.info(f"🏁 ───【 اكتمال أولوية جمع الذهب: تم إرسال {total_sent} مسيرة جمع 】───")
         return {
@@ -1503,12 +1525,6 @@ class MarchManagerTask(BaseTask):
 
         while not self.is_time_expired():
             # فحص امتلاء الفيالق مسبقاً
-            if getattr(self, '_max_castle_queues', 0) > 0:
-                cur_act = await self.get_active_marches_count()
-                if cur_act >= self._max_castle_queues:
-                    has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}", caused_by_queue_full=False)
-                    if not has_free_queue:
-                        return {"status": "timeout_or_no_queue", "sent": total_sent}
 
             gather_cfg = {
                 "res_type": res_type,
@@ -1520,7 +1536,7 @@ class MarchManagerTask(BaseTask):
                 "max_heroes": 2,
             }
 
-            gather_task = GatherTask(self.conn, gather_cfg)
+            gather_task = GatherTask_2(self.conn, gather_cfg)
             self._forward_subtask_logs(gather_task)
             
             res = await gather_task.run()
@@ -1536,6 +1552,10 @@ class MarchManagerTask(BaseTask):
             err_msg = str(res.error) if res.error else ""
 
             if res.success and sent_this_round > 0:
+                # إذا امتلأت الفيالق بعد الإرسال → تجاوز المهمة فوراً دون انتظار
+                if stop_reason == "QUEUES_FULL_SKIP":
+                    self.log.info(f"⏭️ [أولوية 9: تجاوز الجمع] امتلأت جميع الفيالق ({stop_reason}) — إنهاء الأولوية دون انتظار.")
+                    break
                 # إذا توقف بسبب نفاد القوات أثناء الإرسال → انتظر فوراً
                 if stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
                     has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {res_name}", is_retry=True)
@@ -1545,16 +1565,14 @@ class MarchManagerTask(BaseTask):
                 # وإلا: نجاح عادي، انتظر قليلاً وكمّل
                 await asyncio.sleep(round(random.uniform(4.0, 7.0), 2))
                 continue
+
+            # إذا أبلغت المهمة عن امتلاء الفيالق عبر QUEUES_FULL_SKIP → تجاوز المهمة فوراً دون انتظار
+            if stop_reason == "QUEUES_FULL_SKIP" or "QUEUES_FULL_SKIP" in err_msg:
+                self.log.info(f"⏭️ [أولوية 9: تجاوز الجمع] جميع الفيالق ممتلئة بالكامل ({stop_reason}) — تجاوز جمع {res_name} بدون انتظار.")
+                break
+
                 
-            # إذا توقف الإرسال، نحلل السبب
-            if stop_reason in ("QUEUE_FULL", "8004", "9007004") or "QUEUE_FULL" in err_msg:
-                self.log.info(f"🛑 [أولوية 9: نفاذ الفيالق] الفيالق ممتلئة بالكامل، المنسق سيتولى الانتظار لجمع {res_name}...")
-                has_free_queue = await self.wait_for_free_queue(f"لجمع {res_name}", caused_by_queue_full=True)
-                if not has_free_queue:
-                    return {"status": "timeout_or_no_queue", "sent": total_sent}
-                continue
-                
-            elif stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
+            if stop_reason in ("NO_ARMY", "8009") or "NO_ARMY" in err_msg:
                 has_army = await self.ensure_army_or_wait(f"لمتابعة جمع {res_name}", is_retry=True)
                 if not has_army:
                     return {"status": "critical_no_army", "sent": total_sent}

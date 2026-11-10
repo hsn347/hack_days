@@ -297,14 +297,6 @@ class RuinsTask(BaseTask):
                     self.log.info("🛑 تم رصد مسيرة أطلال نشطة بالخارج — إنهاء المحاولات بنجاح.")
                     break
 
-            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
-            before_avail = await self.get_available_marches_count(force_sync=True)
-            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
-            if before_avail == 0:
-                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
-                last_result = "QUEUE_FULL"
-                result_code = "QUEUE_FULL"
-                break
 
             attempts += 1
             self.log.debug(f"🚀 محاولة استكشاف الأطلال ({sent_count + 1}/{max_marches})...")

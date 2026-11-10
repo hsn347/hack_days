@@ -619,8 +619,27 @@ class BuildingTask(BaseTask):
 
     async def get_city_buildings(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """الاستعلام عن جميع مباني المدينة عبر 1001/1 مع محاولة إعادة إذا تأخر الرد."""
+
         if self.city_buildings and not force_refresh:
-            return self.city_buildings
+                    return self.city_buildings
+
+
+        init_city = self.conn.init_data.get("cityCtrl", {})
+        if isinstance(init_city, dict):
+            if not self.city_queue_data and isinstance(init_city.get("queue"), dict):
+                self.city_queue_data = init_city.get("queue", {})
+            if not self.city_reslist and "reslist" in init_city and isinstance(init_city["reslist"], dict):
+                self.city_reslist = init_city["reslist"]
+            if not self.city_saferes and "saferes" in init_city and isinstance(init_city["saferes"], dict):
+                self.city_saferes = init_city["saferes"]
+            areas = init_city.get("areaList") or init_city.get("arealist")
+            if isinstance(areas, list):
+                self.open_area_list = [int(a) for a in areas if str(a).isdigit()]
+            init_blist = init_city.get("blist", [])
+            if isinstance(init_blist, list) and init_blist:
+                self.city_buildings = init_blist
+                return init_blist
+                
 
         for attempt in range(2):
             resp = await self.conn.query("1001", "1", {}, timeout=15)
@@ -645,21 +664,7 @@ class BuildingTask(BaseTask):
                 await asyncio.sleep(round(random.uniform(0.6, 1.2), 2))
 
         # احتياطي من init_data
-        init_city = self.conn.init_data.get("cityCtrl", {})
-        if isinstance(init_city, dict):
-            if not self.city_queue_data and isinstance(init_city.get("queue"), dict):
-                self.city_queue_data = init_city.get("queue", {})
-            if not self.city_reslist and "reslist" in init_city and isinstance(init_city["reslist"], dict):
-                self.city_reslist = init_city["reslist"]
-            if not self.city_saferes and "saferes" in init_city and isinstance(init_city["saferes"], dict):
-                self.city_saferes = init_city["saferes"]
-            areas = init_city.get("areaList") or init_city.get("arealist")
-            if isinstance(areas, list):
-                self.open_area_list = [int(a) for a in areas if str(a).isdigit()]
-            init_blist = init_city.get("blist", [])
-            if isinstance(init_blist, list) and init_blist:
-                self.city_buildings = init_blist
-                return init_blist
+        
 
         return []
 

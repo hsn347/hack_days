@@ -914,9 +914,9 @@ class GoldGatherTask(BaseTask):
                     )
                     failed_attempts = 0
                     await asyncio.sleep(round(random.uniform(4.5, 7.5), 2))  # تأخير آمن عشوائي بين المسيرات لحماية الحساب من الحظر
-                elif result_code == "QUEUE_FULL":
-                    self.log.info("🛑 تم إشغال جميع الفيالق المتاحة للقلعة بنجاح (طوابير المسيرات مكتملة 100%).")
-                    stop_reason = "QUEUE_FULL"
+                elif result_code in ("QUEUES_FULL_SKIP", "QUEUE_FULL", "8004", "9007004"):
+                    self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل — تجاوز الأولوية).")
+                    stop_reason = "QUEUES_FULL_SKIP"
                     break
                 elif result_code == "NO_ARMY":
                     self.log.warning(f"⚠️ نفدت القوات المتاحة بالقلعة لإرسال مسيرات إضافية (تم إرسال {sent_count} مسيرات).")
@@ -954,7 +954,7 @@ class GoldGatherTask(BaseTask):
                     continue
 
             # إذا امتلأت الطوابير أو نفد الجيش/الأبطال أو استمر انشغال السيرفر ننهي المهمة تماماً
-            if stop_reason in ("QUEUE_FULL", "NO_ARMY", "NO_HEROES", "CMD_OPTING"):
+            if stop_reason in ("QUEUES_FULL_SKIP", "QUEUE_FULL", "NO_ARMY", "NO_HEROES", "CMD_OPTING"):
                 break
 
             # إذا استُنفدت حقول هذا التحالف وما زالت هناك طوابير شاغرة، ننتقل للتحالف التالي
@@ -962,11 +962,26 @@ class GoldGatherTask(BaseTask):
                 self.log.info(f"ℹ️ استُنفدت حقول التحالف [{alliance_tag}] وما زالت هناك فيالق شاغرة بالقلعة. الانتقال للتحالف التالي...")
 
         self.log.info(f"🏁 إجمالي مسيرات جمع الذهب المُرسَلة بنجاح: {sent_count}")
+        result_data = {
+            "sent": sent_count,
+            "alliances": successful_alliances,
+            "queue_full": (stop_reason in ("QUEUES_FULL_SKIP", "QUEUE_FULL")),
+            "stop_reason": stop_reason,
+        }
         if sent_count > 0:
             tags_desc = ", ".join(f"[{tag}]" for tag in successful_alliances) if successful_alliances else f"[{self.alliance_tag}]"
-            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة جمع ذهب لتحالف {tags_desc}", sent=sent_count, alliances=successful_alliances)
+            return TaskResult.ok(f"✅ تم إرسال {sent_count} مسيرة جمع ذهب لتحالف {tags_desc}", **result_data)
 
-        return TaskResult.fail("لم يتم العثور على حقول ذهب شاغرة في أي من التحالفات المحددة", retry_after=120)
+        if stop_reason in ("QUEUES_FULL_SKIP", "QUEUE_FULL"):
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (QUEUES_FULL_SKIP)", **result_data)
+        if stop_reason == "NO_ARMY":
+            return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة لإرسال مسيرة جمع ذهب", **result_data)
+        if stop_reason == "NO_HEROES":
+            return TaskResult.fail("⚠️ لا يوجد أبطال متاحون بالقلعة لجمع الذهب", **result_data)
+        if stop_reason == "CMD_OPTING":
+            return TaskResult.fail("⚠️ خادم اللعبة مشغول بعملية سابقة (كود 16001: Err_CMD_OPTING)", **result_data)
+
+        return TaskResult.fail("لم يتم العثور على حقول ذهب شاغرة في أي من التحالفات المحددة", retry_after=120, **result_data)
 
     # ── فحص إشغال وحجز المورد قبل الهجوم (حماية ضد صدام المسيرات) ───
 
@@ -1275,7 +1290,7 @@ class GoldGatherTask(BaseTask):
             active_marches = await self.get_active_marches_count(force_sync=True)
             if active_marches >= 1:
                 self.log.info(f"⏳ [القوات في المسيرة] لا تتوفر قوات بالقلعة لوجود {active_marches} مسيرة نشطة بالخارج.")
-                return "QUEUE_FULL"
+                return "QUEUES_FULL_SKIP"
             else:
                 self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة ولا توجد مسيرات بالخارج!")
                 return "NO_ARMY"
@@ -1337,13 +1352,13 @@ class GoldGatherTask(BaseTask):
             return "SUCCESS"
         elif err in ('8004', '9007004'):
             self.log.info(f"🛑 اكتملت طوابير المسيرات (كود {err})")
-            return "QUEUE_FULL"
+            return "QUEUES_FULL_SKIP"
         elif err == '8009':
             self.log.warning(f"⚠️ نقص في القوات المتاحة (كود {err})")
             active_marches = await self.get_active_marches_count(force_sync=True)
             if active_marches >= 1:
                 self.log.info(f"⏳ [القوات في المسيرة] نقص قوات عند الإرسال لوجود {active_marches} مسيرة نشطة بالخارج.")
-                return "QUEUE_FULL"
+                return "QUEUES_FULL_SKIP"
             else:
                 self.log.warning("⚠️ نقص حقيقي في القوات ولا توجد مسيرات نشطة بالخارج!")
                 return "NO_ARMY"

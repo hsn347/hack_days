@@ -953,14 +953,6 @@ class MonsterTask(BaseTask):
 
         while sent_count < max_marches:
             current_target_idx = sent_count + 1
-            
-            # ── 🧪 اختبار: قراءة الفيالق المتاحة قبل الإرسال ──
-            before_avail = await self.get_available_marches_count(force_sync=True)
-            self.log.info(f"🔬 [MARCH_TEST] قبل الإرسال #{sent_count + 1}: الفيالق المتاحة = {before_avail}")
-            if before_avail == 0:
-                self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
-                last_result = "QUEUE_FULL"
-                break
 
             self.log.debug(f"🚀 محاولة إرسال مسيرة الهجوم رقم ({current_target_idx}/{max_marches})...")
             result_code = await self._send_one_attack(map_type, sub_type, min_lv, max_lv, search_range, formation_id, troops_cfg)
