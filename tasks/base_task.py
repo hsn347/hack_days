@@ -14,6 +14,7 @@ TaskScheduler: يشغل run() بشكل دوري مع interval + offset
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -171,7 +172,6 @@ class BaseTask(ABC):
         """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة بالاعتماد على الذاكرة الحية (Zero-Request)."""
         has_local = bool(getattr(self.conn, 'local_queues', None))
         if force_sync and not has_local:
-            self.log.info("😋😋😋😋😋😋")
             sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
             self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
             try:
@@ -373,6 +373,32 @@ class BaseTask(ABC):
     async def _get_active_gather_types(self, force_sync: bool = False) -> Set[int]:
         """اسم بديل للتوافق مع المهام القائمة."""
         return await self.get_active_gather_resource_types(force_sync=force_sync)
+
+    def print_local_queues(self, label: str = "") -> List[Any]:
+        """دالة تجريبية لطباعة كامل محتوى local_queues من الذاكرة الحية."""
+        conn = getattr(self, "conn", None)
+        local_queues = list(getattr(conn, "local_queues", None) or [])
+        init_data = getattr(conn, "init_data", None)
+        init_queues = init_data.get("local_queues") if isinstance(init_data, dict) else None
+        mem_engine = getattr(conn, "memory_engine", None)
+        raw_map = getattr(mem_engine, "local_queues_map", None)
+        synced = getattr(mem_engine, "local_queues_synced", None)
+
+        payload = {
+            "label": label or self.name,
+            "uid": self.uid,
+            "synced": synced,
+            "conn_local_queues_count": len(local_queues),
+            "conn_local_queues": local_queues,
+            "init_data_local_queues": init_queues,
+            "local_queues_map_count": len(raw_map) if isinstance(raw_map, dict) else None,
+            "local_queues_map": raw_map,
+        }
+        text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+        header = f"\n===== [local_queues dump | {self.email} | {label or self.name}] ====="
+        footer = "=" * len(header.strip())
+        print(f"{header}\n{text}\n{footer}", flush=True)
+        return local_queues
 
     def get_lord_stamina(self) -> int:
         """
@@ -1384,6 +1410,118 @@ class BaseTask(ABC):
             self.log.exception(f"❌ خطأ غير متوقع في المهمة [{self.name}]: {e}")
             self._state = TaskState.ERROR
             return TaskResult.fail(f"خطأ: {e}", retry_after=60)
+
+
+    # ════════════════════════════════════════════════════════════════
+    #  دوال التعامل مع ذاكرة الحية حق المسيرات
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _read_live_local_queues(conn: Any) -> List[Any]:
+        """قراءة طوابير المسيرات الحالية من مراجع الذاكرة الحية دون استعلام شبكي."""
+        queues = getattr(conn, "local_queues", None)
+        if queues:
+            return list(queues)
+        init_data = getattr(conn, "init_data", None)
+        if isinstance(init_data, dict) and init_data.get("local_queues"):
+            return list(init_data["local_queues"])
+        mem_engine = getattr(conn, "memory_engine", None)
+        if mem_engine is not None and hasattr(mem_engine, "get_own_local_queues"):
+            own_queues = mem_engine.get_own_local_queues()
+            if own_queues:
+                return list(own_queues)
+        return []
+
+    async def get_active_march_targets(
+        self,
+        force_sync: bool = False,
+        allow_network: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        قراءة الأهداف التي تسير إليها أو تتعامل معها فيالق الحساب من الذاكرة الحية،
+        مع إرسال استعلام مزامنة (1007/1000) إذا كانت local_queues فارغة ولم تُزامن بعد.
+        """
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return []
+
+        queues = self._read_live_local_queues(conn)
+        mem_engine = getattr(conn, "memory_engine", None)
+        is_synced = bool(getattr(mem_engine, "local_queues_synced", False))
+
+        if (not queues or force_sync) and allow_network and (force_sync or not is_synced):
+            if getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+                resp = None
+                try:
+                    self.log.info(f"😎😎😎😎😎")
+                    resp = await conn.query("1007", "1000", {}, timeout=3)
+                except Exception:
+                    resp = None
+
+                # انتظار قصير لوصول إشعار NOTIFY_LOCAL_QUEUE_SYNC (202) وتحديث الذاكرة الحية
+                for _ in range(5):
+                    queues = self._read_live_local_queues(conn)
+                    if queues or bool(getattr(mem_engine, "local_queues_synced", False)):
+                        break
+                    await asyncio.sleep(0.1)
+
+                if not queues and isinstance(resp, dict) and isinstance(resp.get("data"), list):
+                    queues = list(resp["data"])
+
+        if not queues:
+            return []
+
+        my_uid = str(getattr(self, "uid", "") or "").strip()
+        active_statuses = (0, 1, 2, 3, 4, 7)
+        targets_by_id: Dict[str, float] = {}
+
+        for q in queues:
+            if not isinstance(q, dict):
+                continue
+
+            q_uid = q.get("uid")
+            if my_uid and q_uid is not None and str(q_uid).strip() != my_uid:
+                continue
+
+            raw_status = q.get("status")
+            if raw_status is None:
+                continue
+            try:
+                status = int(raw_status)
+            except (TypeError, ValueError):
+                continue
+            if status not in active_statuses:
+                continue
+
+            loc_order = (q.get("from"), q.get("to")) if status == 3 else (q.get("to"), q.get("from"))
+            tid = ""
+            for loc in loc_order:
+                if not isinstance(loc, dict) or loc.get("mapType") == 4:
+                    continue
+                raw_id = str(loc.get("id") or "").strip()
+                if not raw_id or (my_uid and raw_id.endswith(f"-{my_uid}")):
+                    continue
+                tid = raw_id
+                break
+            if not tid:
+                continue
+
+            raw_ts = q.get("createTime") or q.get("startTime") or q.get("statusStartTime")
+            try:
+                ts = float(raw_ts) if raw_ts else time.time()
+            except (TypeError, ValueError):
+                ts = time.time()
+            if ts <= 0:
+                ts = time.time()
+
+            prev_ts = targets_by_id.get(tid)
+            if prev_ts is None or ts > prev_ts:
+                targets_by_id[tid] = ts
+
+        return [
+            {"id": tid, "ts": ts}
+            for tid, ts in sorted(targets_by_id.items(), key=lambda item: item[1])
+        ]
 
 
 # ════════════════════════════════════════════════════════════════════

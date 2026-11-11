@@ -755,10 +755,7 @@ class PortDelegateTask(BaseTask):
         if not targets:
             return {"bought_items": 0, "total_spent": 0, "details": []}
 
-        print("\n" + "═" * 78)
-        print("  🛒 بدء الشراء من متجر الجزيرة الغامضة (Mysterious Island Store)")
-        print("═" * 78)
-        print(f"  💰 رصيد النقاط المتاح: {current_points:,} نقطة\n")
+        self.log.info(f"🛒 بدء الشراء من متجر الجزيرة (رصيد النقاط: {current_points:,})")
 
         bought_total_items = 0
         total_points_spent = 0
@@ -773,7 +770,7 @@ class PortDelegateTask(BaseTask):
             remaining_today = max(0, meta["limit"] - bought_already)
 
             if remaining_today <= 0:
-                print(f"  ℹ️ [{meta['name']}]: تم استنفاد الحد اليومي بالفعل ({meta['limit']}/{meta['limit']}).")
+                self.log.info(f"  ℹ️ [{meta['name']}]: تم استنفاد الحد اليومي ({meta['limit']}/{meta['limit']})")
                 continue
 
             current_points = self.get_island_points()
@@ -781,7 +778,7 @@ class PortDelegateTask(BaseTask):
             affordable = current_points // price if price > 0 else remaining_today
 
             if affordable <= 0:
-                print(f"  ⚠️ [{meta['name']}]: رصيد النقاط ({current_points:,}) غير كافٍ لسعر القطعة ({price:,})!")
+                self.log.warning(f"  ⚠️ [{meta['name']}]: النقاط ({current_points:,}) غير كافية ({price:,})")
                 continue
 
             buy_qty = min(remaining_today, desired_qty, affordable)
@@ -800,12 +797,11 @@ class PortDelegateTask(BaseTask):
                 bought_total_items += actual_bought
                 spent = actual_bought * price
                 total_points_spent += spent
-                print(f"  ✅ [{meta['name']}]: تم شراء {actual_bought} قطعة بنجاح! التكلفة: {spent:,} نقطة | الرصيد المتبقي: {self.get_island_points():,} نقطة")
+                self.log.info(f"  ✅ [{meta['name']}]: شراء {actual_bought} قطعة ({spent:,} نقطة | متبقي: {self.get_island_points():,})")
                 details.append((meta["name"], actual_bought, spent))
             else:
-                print(f"  ❌ [{meta['name']}]: {msg}")
+                self.log.warning(f"  ❌ [{meta['name']}]: {msg}")
 
-        print("═" * 78 + "\n")
         return {
             "bought_items": bought_total_items,
             "total_spent": total_points_spent,
@@ -830,9 +826,8 @@ class PortDelegateTask(BaseTask):
         info = self.get_tasks_status()
         castle_heroes = self._get_castle_heroes()
 
-        self._print_status_report(info, castle_heroes)
-
         if self.check_only:
+            self._print_status_report(info, castle_heroes)
             ready_count = sum(1 for t in info["tasks"] if t["status_code"] == "ready")
             claim_count = sum(1 for t in info["tasks"] if t["status_code"] == "claimable")
             run_count = sum(1 for t in info["tasks"] if t["status_code"] == "running")
@@ -852,7 +847,7 @@ class PortDelegateTask(BaseTask):
             if ok:
                 time_reward_claimed = True
                 time_reward_pts = pts_gained
-                print(f"  🎁 [الجائزة الآلية]: {msg}")
+                self.log.info(f"  🎁 [الجائزة الآلية]: {msg}")
                 jitter = round(random.uniform(1.2, 2.0), 2)
                 await asyncio.sleep(jitter)
             else:
@@ -870,9 +865,9 @@ class PortDelegateTask(BaseTask):
                     ok, msg = await self._claim_task_reward(t["id"])
                     if ok:
                         claimed_count += 1
-                        print(f"  🎁 [{t['name']}]: {msg}")
+                        self.log.info(f"  🎁 [{t['name']}]: {msg}")
                     else:
-                        print(f"  ⚠️ [{t['name']}]: {msg}")
+                        self.log.warning(f"  ⚠️ [{t['name']}]: {msg}")
 
                 info = self.get_tasks_status()
 
@@ -905,10 +900,10 @@ class PortDelegateTask(BaseTask):
                         dispatched_count += 1
                         current_busy_heroes.add(hero1)
                         current_busy_heroes.add(hero2)
-                        print(f"  ✅ [{t['name']}]: تم الإرسال بنجاح! الأبطال: ({hero1}, {hero2}){bonus_tag}")
+                        self.log.info(f"  ✅ [{t['name']}]: تم الإرسال بنجاح! الأبطال: ({hero1}, {hero2}){bonus_tag}")
                     else:
                         failed_count += 1
-                        print(f"  ❌ [{t['name']}]: {err_msg}")
+                        self.log.warning(f"  ❌ [{t['name']}]: {err_msg}")
 
         # ── القسم الثالث: الشراء من متجر الجزيرة الغامضة ──
         shop_res = {"bought_items": 0, "total_spent": 0, "details": []}

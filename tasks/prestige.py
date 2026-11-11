@@ -510,6 +510,7 @@ class PrestigeTask(BaseTask):
                 "allow_alliance_shop": True,
             }
             watermill_task = WatermillTask(self.conn, wm_cfg)
+            self._forward_subtask_logs(watermill_task)
             await watermill_task.on_start()
             res = await watermill_task.run()
             self.log.info(f"🏁 اكتملت مهمة الساقية: {res.message if res else 'تم التنفيذ'}")
@@ -700,6 +701,7 @@ class PrestigeTask(BaseTask):
                     "count": 250,          # 250 وحدة لكل نوع
                 }
                 train_task = TrainTask(self.conn, train_cfg)
+                self._forward_subtask_logs(train_task)
                 await train_task.on_start()
                 res = await train_task.run()
                 self.log.info(f"🏁 اكتمل تدريب الجنود: {res.message if res else 'تم التنفيذ'}")
@@ -730,6 +732,7 @@ class PrestigeTask(BaseTask):
                     "count": 250,     # 250 فخ لإنجاز مهمة الهيبة
                 }
                 fortress_task = FortressTask(self.conn, fortress_cfg)
+                self._forward_subtask_logs(fortress_task)
                 await fortress_task.on_start()
                 res_f = await fortress_task.run()
                 self.log.info(f"🏁 اكتمل تصنيع الفخاخ: {res_f.message if res_f else 'تم التنفيذ'}")
@@ -768,6 +771,7 @@ class PrestigeTask(BaseTask):
                 "count": "max",   # الحد الأقصى المتاح تلقائياً
             }
             fortress_task = FortressTask(self.conn, fortress_cfg)
+            self._forward_subtask_logs(fortress_task)
             await fortress_task.on_start()
             res = await fortress_task.run()
             self.log.info(f"🏁 اكتملت مهمة حصن الحرب: {res.message if res else 'تم التنفيذ'}")
@@ -921,17 +925,17 @@ class PrestigeTask(BaseTask):
     #  دورة العمل الرئيسية للمهمة (run)
     # ════════════════════════════════════════════════════════════════
 
+    def _forward_subtask_logs(self, subtask: BaseTask) -> None:
+        """تمرير معالجات سجل مهمة الهيبة إلى المهام الفرعية لتظهر خطواتها في اللوق والتيرمنال."""
+        if hasattr(subtask, "log") and subtask.log and hasattr(self, "log") and self.log:
+            if self.log.handlers:
+                subtask.log.handlers = list(self.log.handlers)
+                subtask.log.setLevel(self.log.level)
+                subtask.log.propagate = False
+
     async def run(self) -> TaskResult:
         """تنفيذ دورة مهام الهيبة اليومية داخل القلعة حصراً."""
-        print("\n" + "═" * 70)
-        print("  🎖️ بدء مهمة مهام الهيبة اليومية (داخل القلعة حصراً)")
-        print(f"  • متجر المهربين: الشراء بالموارد العادية حصراً (المستهدف: {self.target_smuggler_buys} عمليات شراء)")
-        print(f"  • الساقية: تفعيل جميع مباني الموارد مع السماح بالشراء من متجر التحالف")
-        print(f"  • تدريب الجنود والفخاخ: 250 وحدة من كل نوع على مستوى 1 (مشاة، خيالة، أسهم، عربات، فخاخ)")
-        print(f"  • حصن الحرب: تدريب الفخاخ الإضافية تلقائياً")
-        print(f"  • وسام الحرب: تبديل القمح بوسام الحرب (مرة واحدة يومياً)")
-        print("  ℹ️ مهام الهيبة المعتمدة داخل المدينة: متجر المهربين، الساقية، تدريب الجنود والفخاخ، حصن الحرب، وسام الحرب.")
-        print("═" * 70 + "\n")
+        self.log.info(f"🎖️ خطوات مهام الهيبة: المهربين ({self.target_smuggler_buys})، الساقية، التدريب (250)، الحصن، وسام الحرب")
 
         # 0. تجديد بيانات مهام الهيبة من السيرفر للحصول على أحدث حالة
         self.log.info("🔄 [تجديد البيانات] جاري استعلام السيرفر لأحدث حالة مهام الهيبة...")

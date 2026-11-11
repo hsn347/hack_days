@@ -113,7 +113,6 @@ class CityHarvestTask(BaseTask):
         # 2. خطة احتياطية فقط إذا لم تكن البيانات متوفرة بالذاكرة الحية
         if not blist:
             try:
-                self.log.info("🛑⚠️🛑⚠️🛑⚠️🛑⚠️🛑⚠️🛑")
                 r = await self.conn.query("1001", "1", {}, timeout=8)
                 if r and isinstance(r.get("data"), dict):
                     blist = r["data"].get("blist", [])

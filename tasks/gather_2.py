@@ -794,7 +794,10 @@ class GatherTask_2(BaseTask):
         last_status = None
 
         while sent_count < target_marches and attempts < max_attempts:
+            self.print_local_queues("قبل إرسال الهجوم")
             self.log.debug(f"🏹 محاولة إرسال مسيرة الفيلق ({sent_count + 1}/{target_marches})...")
+
+      
 
             status = await self._send_one_march(
                 res_info=res_info,
@@ -889,7 +892,25 @@ class GatherTask_2(BaseTask):
         uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
 
         # 1. البحث عن حقل المورد (النزول تدريجياً من المستوى المطلوب حتى مستوى 2)
-        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
+        exclude_map = await self._exclude_mgr.get_exclude_map(
+            self.uid,
+            kingdom_id=kingdom_id,
+            x=cx,
+            y=cy,
+            target_type=res_info.get("sub_type"),
+        )
+        active_march_targets = await self.get_active_march_targets()
+
+        # دمج نتائج get_active_march_targets في البداية (لها الأولوية) ثم exclude_map في قاموس واحد
+        exclude: Dict[str, bool] = {}
+        for item in active_march_targets:
+            if isinstance(item, dict) and item.get("id"):
+                exclude[str(item["id"])] = True
+        for tid in exclude_map:
+            if tid not in exclude:
+                exclude[tid] = True
+        
+        self.log.info(f"🤣🤣🤣🤣🤣🤣{exclude}")
 
         min_fallback_lv = min(2, target_lv)
         found_target = None
@@ -902,7 +923,7 @@ class GatherTask_2(BaseTask):
                 "subType": res_info["sub_type"],
                 "y": cy,
                 "x": cx,
-                "exclude": exclude_map,
+                "exclude": exclude,
                 "minLv": cur_try_lv,
                 "maxLv": cur_try_lv,
                 "range": 100
@@ -911,7 +932,7 @@ class GatherTask_2(BaseTask):
             if r_search and r_search.get('result'):
                 cand = r_search['result'][0]
                 cand_id = cand.get('id')
-                if cand_id and str(cand_id) in exclude_map:
+                if cand_id and str(cand_id) in exclude:
                     self.log.warning(f"   ⚠️ تم تخطي الحقل {cand_id} لأن السيرفر أعاده رغم استبعاده في المملكة {kingdom_id}.")
                     continue
                 found_target = cand
@@ -919,7 +940,7 @@ class GatherTask_2(BaseTask):
                 if cur_try_lv < target_lv:
                     self.log.info(f"   ℹ️ لم يتوفر حقل لفل {target_lv} — تم العثور على بديل لفل {cur_try_lv}")
                 break
-
+        self.log.info(f"😘😘😘😘😘{found_target}")
         if not found_target:
             return "NO_TARGET"
 
@@ -944,7 +965,12 @@ class GatherTask_2(BaseTask):
         if is_busy:
             self.log.warning(f"⚠️ الحقل {target_id} مستبعد فوراً: {busy_reason}")
             # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
-            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
             return "TARGET_OCCUPIED"
 
         if ret22 and isinstance(ret22, dict):
@@ -1118,7 +1144,12 @@ class GatherTask_2(BaseTask):
         if err == '0':
             self.log.info(f"✅ [جمع الموارد] انطلقت مسيرة إلى {res_info['name']} لفل {actual_found_lv} عند ({tx}, {ty}) | حمولة: {carried_load:,}")
             # ✅ نجاح — تثبيت الاستبعاد في الملف على مستوى المملكة والـ UID
-            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
             for hid in chosen_heroes_list:
                 self._busy_heroes.add(hid)
             for item in army_list:
@@ -1154,7 +1185,12 @@ class GatherTask_2(BaseTask):
         elif err in ('8062', '8063', '8060', '9007062'):
             self.log.warning(f"   ⚠️ الحقل {target_id} مشغول أو تغيرت حالته (كود {err})")
             # الحقل مشغول فعلاً — نثبت الاستبعاد لأنه مشغول من لاعب آخر على مستوى المملكة
-            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
             return "TARGET_OCCUPIED"
         elif err in ('8041', '8042'):
             self.log.warning(f"   ⚠️ المستوى المطلوب للقلعة غير كافٍ لجمع هذا المورد (كود {err}) — تخطي.")
@@ -1190,7 +1226,12 @@ class GatherTask_2(BaseTask):
             err_retry = str(r_retry.get('err', '0')) if r_retry else 'ERROR'
             if err_retry == '0':
                 self.log.info(f"   ✅ انطلقت المسيرة بنجاح بعد ضبط القوات وفق سعة ساحة التدريب ({new_total:,} جندي)!")
-                await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+                await self._exclude_mgr.confirm(
+                    self.uid,
+                    target_id,
+                    kingdom_id=kingdom_id,
+                    target_type=res_info.get("sub_type"),
+                )
                 for hid in chosen_heroes_list:
                     self._busy_heroes.add(hid)
                 for item in army_list:
@@ -1218,7 +1259,12 @@ class GatherTask_2(BaseTask):
                 r_retry2 = await self.conn.query('1007', '2', march_payload)
                 if r_retry2 and str(r_retry2.get('err', '0')) == '0':
                     self.log.info(f"   ✅ انطلقت المسيرة بنجاح في المحاولة الثانية بعد ضبط القوات ({new_total2:,} جندي)!")
-                    await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+                    await self._exclude_mgr.confirm(
+                        self.uid,
+                        target_id,
+                        kingdom_id=kingdom_id,
+                        target_type=res_info.get("sub_type"),
+                    )
                     for hid in chosen_heroes_list:
                         self._busy_heroes.add(hid)
                     for item in army_list:

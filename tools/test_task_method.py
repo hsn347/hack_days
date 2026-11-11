@@ -8,7 +8,7 @@ tools/test_task_method.py — أداة تجربة واختبار دوال الم
 
 أمثلة الاستخدام:
   1. اختبار دالة إحداثيات القلعة:
-     python tools/test_task_method.py shook124 get_active_marches_count
+     python tools/test_task_method.py shook123@gmail.com get_active_march_targets
 
   2. اختبار دالة معرف المملكة:
      python tools/test_task_method.py shook124 get_formation

@@ -502,7 +502,7 @@ class FountainTask(BaseTask):
                 total_resources_gained[cur_res_key] += add_res
 
                 mult_str = f"🔥 (مضاعف {multiplier}x!)" if multiplier > 1 else ""
-                print(f"  ✅ [مجاني] {cur_meta['icon']} {cur_meta['name']}: +{add_res:,} مورد {mult_str} | المتبقي المجاني: {free_wishes_left}")
+                self.log.info(f"  ✅ [مجاني] {cur_meta['icon']} {cur_meta['name']}: +{add_res:,} مورد {mult_str} | المتبقي المجاني: {free_wishes_left}")
 
             self.log.info(f"🏁 انتهت المرات المجانية. تم تنفيذ {total_free_done} أمنية مجانية.")
         else:
@@ -563,7 +563,7 @@ class FountainTask(BaseTask):
                     total_resources_gained[res_key] += add_res
 
                     mult_str = f"🔥 (مضاعف {multiplier}x!)" if multiplier > 1 else ""
-                    print(f"  💎 [بالذهب] {res_meta['icon']} {res_meta['name']}: +{add_res:,} مورد {mult_str} | التكلفة: {next_cost} ذهب (المصروف: {total_gold_spent}/{self.max_gold})")
+                    self.log.info(f"  💎 [بالذهب] {res_meta['icon']} {res_meta['name']}: +{add_res:,} مورد {mult_str} | التكلفة: {next_cost} ذهب (المصروف: {total_gold_spent}/{self.max_gold})")
 
         # ── تقرير الملخص النهائي ──
         summary_lines = [

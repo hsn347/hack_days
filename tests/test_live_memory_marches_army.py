@@ -550,5 +550,532 @@ class TestArmyStateSync(unittest.TestCase):
         self.assertIn("2001", conn_local_queues_map, "conn_local_queues_map received new marches!")
 
 
+class TestNotificationTelemetryAndGatePrint(unittest.TestCase):
+    """
+    Tests notification ingestion reporting (merged/unhandled/missing/failed)
+    and GateClient terminal trace output + march status consistency.
+    """
+
+    def test_ingest_packet_with_report_local_queue_and_edge_cases(self):
+        engine = LiveMemoryEngine()
+
+        # 1. Valid NOTIFY_LOCAL_QUEUE_SYNC using string msgType and fallback queueId
+        pkt_ok = {
+            "cmd": "1009",
+            "subcmd": "1",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [
+                    {"msgType": "1", "data": {"queueId": "Q-55", "status": 1, "moveLineType": 3, "to": {"x": 222, "y": 333, "mapType": 5}}}
+                ],
+            },
+        }
+        init_ref, rep = engine.ingest_packet_with_report(pkt_ok)
+        self.assertIs(init_ref, engine.init_data)
+        self.assertEqual(rep["overall_status"], "merged")
+        self.assertEqual(rep["notify_status"], "merged")
+        self.assertTrue(rep["is_notification"])
+        self.assertTrue(rep["should_log"])
+        self.assertEqual(rep["local_queues_count"], 1)
+        self.assertIn("ADD(Q-55)", rep["notify_detail"]["ops"])
+        self.assertIn("local_queues", rep["updated_state"])
+        self.assertEqual(rep["updated_state"]["local_queues"][0]["queueId"], "Q-55")
+
+        # 2. Unhandled notifyID
+        _, rep_unhandled = engine.ingest_packet_with_report({
+            "cmd": "1009",
+            "subcmd": "1",
+            "data": {"notifyID": "NOTIFY_UNKNOWN_CUSTOM_EVENT", "notifyData": {"foo": "bar"}},
+        })
+        self.assertEqual(rep_unhandled["notify_status"], "unhandled_notify")
+        self.assertEqual(rep_unhandled["overall_status"], "unhandled_notify")
+        self.assertTrue(rep_unhandled["should_log"])
+
+        # 3. Missing notifyID on cmd=1009
+        _, rep_missing = engine.ingest_packet_with_report({
+            "cmd": "1009",
+            "subcmd": "99",
+            "data": {"someOtherKey": 123},
+        })
+        self.assertEqual(rep_missing["notify_status"], "missing_notify_id")
+        self.assertEqual(rep_missing["overall_status"], "missing_notify_id")
+        self.assertTrue(rep_missing["should_log"])
+
+        # 4. Malformed NOTIFY_CITY causing ValueError inside handler -> clean failure report
+        _, rep_fail = engine.ingest_packet_with_report({
+            "cmd": "1009",
+            "subcmd": "1",
+            "data": {"notifyID": "9", "notifyData": [{"res": {"1001": "not-a-number"}}]},
+        })
+        self.assertEqual(rep_fail["notify_status"], "failed")
+        self.assertEqual(rep_fail["overall_status"], "failed")
+        self.assertIsNotNone(rep_fail["error"])
+        self.assertIn("ValueError", rep_fail["error"])
+
+        # 5. Controller-extracted local_queues merges cleanly and stays synced with local_queues_map
+        _, rep_ctrl = engine.ingest_packet_with_report({
+            "cmd": "1007",
+            "subcmd": "1000",
+            "data": {"local_queues": [{"id": "Q-99", "status": 2, "to": {"x": 10, "y": 20}}]},
+        })
+        self.assertEqual(rep_ctrl["overall_status"], "merged")
+        self.assertTrue(rep_ctrl["local_queues_synced"])
+        self.assertIn("Q-55", engine.local_queues_map)
+        self.assertIn("Q-99", engine.local_queues_map)
+        self.assertEqual(rep_ctrl["local_queues_count"], 2)
+
+        # 6. Dict-wrapped notifyData & dict-valued ADD_ALL.data + msgType 11/21 acks
+        engine2 = LiveMemoryEngine()
+        self.assertFalse(engine2.local_queues_synced)
+        _, rep_dict = engine2.ingest_packet_with_report({
+            "cmd": "1009",
+            "subcmd": "202",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": {
+                    "1": {
+                        "msgType": "ADD_ALL",
+                        "data": {
+                            "MQ-1": {"status": 1, "to": {"x": 50, "y": 60}},
+                            "MQ-2": {"id": "MQ-2", "status": 2, "to": {"x": 70, "y": 80}},
+                        },
+                    },
+                    "2": {"msgType": 11},
+                },
+            },
+        })
+        self.assertEqual(rep_dict["overall_status"], "merged")
+        self.assertTrue(engine2.local_queues_synced)
+        self.assertIn("MQ-1", engine2.local_queues_map)
+        self.assertIn("MQ-2", engine2.local_queues_map)
+        self.assertIn("ADD_ALL(2)", rep_dict["notify_detail"]["ops"])
+        self.assertIn("ACK(11)", rep_dict["notify_detail"]["ops"])
+
+    def test_gate_client_dispatch_prints_compact_json_and_marches_status(self):
+        import contextlib
+        import io
+        import json
+        import struct
+        from core.onemt_bot import xor_crypt
+        from game_client import GateClient, GateCredentials
+
+        creds = GateCredentials(
+            kingdom_id="52",
+            server_name="koh_game_7",
+            gate_ip="127.0.0.1",
+            gate_port=4000,
+            sub_id="sub1",
+            uid="10939075",
+            secret=b"01234567",
+        )
+        creds.email = "shook124@gmail.com"
+        client = GateClient(creds)
+
+        # Giant unhandled NOTIFY_ALLIANCE packet should print just 1 short line (no huge JSON dump)
+        alliance_payload = {
+            "cmd": "1009",
+            "subcmd": "3",
+            "data": {
+                "notifyID": "NOTIFY_ALLIANCE",
+                "notifyData": [{"alliance": {"memberlist": list(range(1000, 1200))}}],
+            },
+        }
+        raw_alliance = json.dumps(alliance_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        pkt_alliance = xor_crypt(raw_alliance) + b"\x01" + struct.pack(">I", 0)
+        wire_alliance = struct.pack(">H", len(pkt_alliance)) + pkt_alliance
+
+        payload = {
+            "cmd": "1009",
+            "subcmd": "1",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [
+                    {
+                        "msgType": 1,
+                        "data": {
+                            "id": "10939075-1",
+                            "status": 1,
+                            "moveLineType": 4,
+                            "to": {"x": 512, "y": 640, "mapType": 7},
+                            "data": {"heros": [5501001]},
+                        },
+                    }
+                ],
+            },
+        }
+        raw_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        pkt_body = xor_crypt(raw_json) + b"\x01" + struct.pack(">I", 0)
+        wire_bytes = struct.pack(">H", len(pkt_body)) + pkt_body
+
+        buf_alliance = io.StringIO()
+        with contextlib.redirect_stdout(buf_alliance):
+            client._buf = wire_alliance
+            client._dispatch()
+        out_alliance = buf_alliance.getvalue().strip()
+        self.assertEqual(len(out_alliance.splitlines()), 1)
+        self.assertIn("NOTIFY_ALLIANCE", out_alliance)
+        self.assertNotIn("memberlist", out_alliance)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            client._buf = wire_bytes
+            client._dispatch()
+
+        printed = buf.getvalue()
+        self.assertIn("[shook124]", printed)
+        self.assertIn("NOTIFY_LOCAL_QUEUE_SYNC", printed)
+        self.assertIn("تم الدمج بنجاح في الذاكرة الحية", printed)
+        self.assertIn("10939075-1", printed)
+        self.assertIn("sync=✅", printed)
+        self.assertIn("مسيرات=1", printed)
+        self.assertEqual(client._notify_count, 2)
+        self.assertEqual(client._notify_merged_count, 1)
+        self.assertEqual(client._notify_unhandled_count, 1)
+
+
+class TestTaskLocalQueuesConsumers(unittest.TestCase):
+    """
+    Verifies that MarchManagerTask, ElfBossTask, GoldGatherTask, and RuinsTask
+    correctly read direct march dicts (with or without nested data dicts) from
+    conn.local_queues, avoid ghost marches from stale cached_packets, and
+    perform backup 1007/1000 sync when local_queues_synced is False.
+    """
+
+    def _make_conn(self):
+        class _FakeConn:
+            def __init__(self):
+                self.account = type("_Acc", (), {"email": "shook123@gmail.com"})()
+                self.uid = "10939075"
+                self.is_connected = True
+                self.memory_engine = LiveMemoryEngine()
+                self.init_data = self.memory_engine.init_data
+                self.cached_packets = {}
+                self.local_queues = []
+                self.query_calls = []
+
+            async def query(self, cmd, subcmd, data=None, timeout=5):
+                self.query_calls.append((str(cmd), str(subcmd), data))
+                return {"cmd": str(cmd), "subcmd": str(subcmd), "err": "0", "data": {}}
+
+        return _FakeConn()
+
+    def test_consumers_read_direct_marches_and_ignore_ghosts(self):
+        import asyncio
+        from tasks.base_task import BaseTask
+        from tasks.march_manager import MarchManagerTask
+        from tasks.elf_boss import ElfBossTask
+        from tasks.gold_gather import GoldGatherTask
+        from tasks.ruins import RuinsTask
+
+        conn = self._make_conn()
+        # Simulate live push ADD_ALL with gather march (nested data dict) + ruins march
+        pkt = {
+            "cmd": "1009",
+            "subcmd": "202",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [
+                    {
+                        "msgType": 4,
+                        "data": [
+                            {
+                                "id": "Q-GATHER-1",
+                                "status": 2,
+                                "moveLineType": 3,
+                                "to": {"id": "100-200-5-2", "x": 100, "y": 200, "mapType": 5},
+                                "data": {"resourceType": 1002, "heros": [5502001]},
+                            },
+                            {
+                                "id": "Q-RUINS-2",
+                                "status": 1,
+                                "moveLineType": 4,
+                                "to": {"id": "300-400-7-1", "x": 300, "y": 400, "mapType": 7},
+                                "data": {"heros": [5501001]},
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+        conn.memory_engine.ingest_packet(pkt)
+        conn.local_queues = list(conn.memory_engine.local_queues_map.values())
+        conn.cached_packets[("1009", "202")] = pkt
+
+        mm = MarchManagerTask(conn, {})
+        elf = ElfBossTask(conn, {})
+        gold = GoldGatherTask(conn, {})
+        ruins = RuinsTask(conn, {})
+
+        async def _verify():
+            cnt = await mm.get_active_marches_count()
+            self.assertEqual(cnt, 2)
+            # Zero-request: memory is already synced -> no extra 1007/1000 needed here
+            self.assertEqual(conn.query_calls, [])
+
+            res_types = await mm.get_active_gather_resource_types()
+            self.assertEqual(res_types, {2})
+
+            self.assertTrue(await mm.is_ruins_march_active())
+            self.assertTrue(await ruins.is_ruins_march_active())
+
+            elf._detect_busy_heroes()
+            self.assertIn(5502001, elf._busy_heroes)
+            self.assertIn(5501001, elf._busy_heroes)
+            self.assertEqual(await elf._get_queue_id(), "Q-GATHER-1")
+
+            t_ids, t_coords = gold._get_my_active_targets()
+            self.assertEqual(t_ids, {"100-200-5-2", "300-400-7-1"})
+            self.assertEqual(t_coords, {(100, 200), (300, 400)})
+            self.assertIn(5502001, gold._busy)
+
+            # Now simulate REMOVE_ALL while stale cached_packets STILL holds old packet -> NO GHOSTS!
+            conn.memory_engine.handle_notify(202, [{"msgType": 5}])
+            conn.local_queues = list(conn.memory_engine.local_queues_map.values())
+            self.assertEqual(len(BaseTask.extract_live_march_queues(conn)), 0)
+            self.assertEqual(await mm.get_active_marches_count(), 0)
+            self.assertFalse(await ruins.is_ruins_march_active())
+
+        asyncio.run(_verify())
+
+    def test_backup_sync_triggers_when_unsynced(self):
+        import asyncio
+        from tasks.march_manager import MarchManagerTask
+
+        conn = self._make_conn()
+        self.assertFalse(conn.memory_engine.local_queues_synced)
+        mm = MarchManagerTask(conn, {})
+
+        async def _verify_sync():
+            await mm.get_active_marches_count()
+            self.assertTrue(any(c == ("1007", "1000", {}) for c in conn.query_calls))
+
+        asyncio.run(_verify_sync())
+
+
+class TestOwnCastleQueueIsolation(unittest.TestCase):
+    """اختبارات عزل مسيرات القلعة (uid) عن مسيرات التحالف واللاعبين الآخرين عبر كامل المنظومة."""
+
+    def _build_gate_client_like_live(self, my_uid: str = "10939063"):
+        from core.live_memory import LiveMemoryEngine
+        from game_client import GateClient
+
+        gate = object.__new__(GateClient)
+        gate.creds = type("C", (), {"email": "shook123@gmail.com", "uid": my_uid})()
+        gate.uid = my_uid
+        gate.subid = "1"
+        gate.secret = ""
+        gate.host = "127.0.0.1"
+        gate.port = 4000
+        gate.memory_engine = LiveMemoryEngine(owner_uid=my_uid)
+        gate.memory_engine.ingest_packet(
+            {
+                "cmd": "1001",
+                "subcmd": "1",
+                "err": "0",
+                "data": {"lordInfoCtrl": {"base": {"uid": int(my_uid)}}},
+            }
+        )
+        gate.init_data = gate.memory_engine.init_data
+        gate.local_queues_map = gate.memory_engine.local_queues_map
+        gate.heroes = []
+        gate.army_troops = []
+        gate.all_troops = {}
+        gate.troops = {}
+        gate.local_queues = []
+        gate.queued_events = []
+        gate.cached_packets = {}
+        gate._pending = {}
+        gate._listeners = []
+        gate._packet_listeners = []
+        gate._notifies = {}
+        gate._buf = b""
+        gate.spy_mode = False
+        gate.memory_terminal_trace = True
+        gate._last_notify_at = 0.0
+        gate._notify_count = 0
+        gate._notify_merged_count = 0
+        gate._notify_failed_count = 0
+        gate._notify_unhandled_count = 0
+        gate._printed_lines = []
+        gate._safe_terminal_print = gate._printed_lines.append
+        return gate
+
+    @staticmethod
+    def _feed_gate_packet(gate, packet):
+        _, report = gate.memory_engine.ingest_packet_with_report(packet)
+        gate.local_queues = gate.memory_engine.get_own_local_queues()
+        return report
+
+    def test_live_scenario_filters_alliance_marches_across_engine_and_tasks(self):
+        import asyncio
+        import time
+        from tasks.base_task import BaseTask
+        from tasks.march_manager import MarchManagerTask
+        from tasks.march_coordinator import MarchCoordinatorTask
+        from tasks.gold_gather import GoldGatherTask
+        from tasks.ruins import RuinsTask
+
+        now = int(time.time())
+        gate = self._build_gate_client_like_live("10939063")
+
+        # نفس سيناريو التيرمنال الحقيقي: 2 للقلعة + 3 للاعبين آخرين بالتحالف
+        notify_packet = {
+            "cmd": "1009",
+            "err": "0",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [
+                    {
+                        "msgType": 4,
+                        "data": [
+                            {
+                                "id": "9048282-10432",
+                                "status": 1,
+                                "type": 3,
+                                "moveLineType": 4,  # مسيرة أطلال للاعب آخر
+                                "to": {"x": 281, "y": 352, "mapType": 5},
+                                "endTime": now + 10,
+                                "heros": [99001],
+                            },
+                            {
+                                "id": "10939063-610",
+                                "status": 2,
+                                "type": 3,
+                                "to": {"id": "7771", "x": 370, "y": 310, "mapType": 5, "subMapType": 5},
+                                "endTime": now + 150,
+                                "from": {"uid": "10939063", "heros": {"10939063": [{"id": 5501001}, {"id": 5501002}]}},
+                            },
+                            {
+                                "id": "2488608-30375",
+                                "status": 1,
+                                "type": 3,
+                                "to": {"id": "8882", "x": 281, "y": 352, "mapType": 5, "subMapType": 4},
+                                "endTime": now + 20,
+                            },
+                            {
+                                "id": "2469590-77439",
+                                "status": 2,
+                                "type": 3,
+                                "to": {"id": "8883", "x": 281, "y": 352, "mapType": 5, "subMapType": 1},
+                                "endTime": now + 30,
+                            },
+                            {
+                                "id": "10939063-613",
+                                "status": 1,
+                                "type": 1,
+                                "to": {"id": "7772", "x": 395, "y": 319, "mapType": 6},
+                                "endTime": now + 120,
+                                "heros": [5501009, 5501010],
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+        report = self._feed_gate_packet(gate, notify_packet)
+        gate._print_live_memory_report(notify_packet, "1009", "202", 0, report)
+
+        # 1. الذاكرة الحية و GateClient يعرضان مسيرتي قلعتنا فقط رغم وجود 5 ببث السيرفر
+        own_q, other_q = gate.memory_engine.get_local_queues_breakdown()
+        self.assertEqual(len(own_q), 2)
+        self.assertEqual(len(other_q), 3)
+        self.assertEqual(len(gate.local_queues), 2)
+        self.assertEqual(len(gate.local_queues_map), 5)
+        self.assertEqual(
+            {q["id"] for q in gate.local_queues},
+            {"10939063-610", "10939063-613"},
+        )
+        summary_lines = gate._format_march_summary_lines(gate.local_queues, report)
+        self.assertIn("مسيرات قلعتي (2, بث كلي=5 (لغيري=3))", summary_lines[0])
+        self.assertTrue(all("9048282" not in ln and "2488608" not in ln and "2469590" not in ln for ln in summary_lines))
+        self.assertTrue(any("10939063-610" in ln for ln in summary_lines))
+        self.assertTrue(gate._printed_lines and "مسيرات=2 (لغيري=3)" in gate._printed_lines[0])
+
+        # بناء غلاف اتصال خفيف للمهام
+        class _TaskConn:
+            def __init__(self, g):
+                self._gate = g
+                self.account = type("Acc", (), {"email": "shook123@gmail.com", "uid": g.uid})()
+                self.uid = g.uid
+                self.init_data = g.init_data
+                self.memory_engine = g.memory_engine
+                self.cached_packets = {1: notify_packet}
+                self.kingdom_id = 52
+
+            @property
+            def local_queues(self):
+                return self._gate.local_queues
+
+            def add_packet_listener(self, cb):
+                pass
+
+            def remove_packet_listener(self, cb):
+                pass
+
+            async def query(self, cmd, subcmd, data=None, timeout=10.0):
+                return {"err": "0", "data": {}}
+
+        conn = _TaskConn(gate)
+
+        # 2. MarchManagerTask يحسب مسيرتين فقط ومورد 5 فقط
+        mm = MarchManagerTask(conn, {})
+        count = asyncio.run(mm.get_active_marches_count())
+        gather_types = asyncio.run(mm.get_active_gather_resource_types())
+        self.assertEqual(count, 2)
+        self.assertEqual(gather_types, {5})
+
+        # 3. MarchCoordinatorTask يتجاهل مسيرة اللاعب الآخر الأقصر (10ث) ويأخذ أقرب مسيرة لقلعتنا (~120ث)
+        mc = MarchCoordinatorTask(conn, {})
+        nearest = mc._get_nearest_march_remaining_seconds()
+        self.assertGreaterEqual(nearest, 100.0)
+        self.assertLessEqual(nearest, 125.0)
+
+        # 4. GoldGatherTask يستخرج أهدافنا فقط وأبطال from.heros دون أبطال أو أهداف اللاعبين الآخرين
+        gg = GoldGatherTask(conn, {})
+        gg._busy = set()
+        target_ids, target_coords = gg._get_my_active_targets()
+        self.assertEqual(target_ids, {"7771", "7772"})
+        self.assertEqual(target_coords, {(370, 310), (395, 319)})
+        self.assertEqual(gg._busy, {5501001, 5501002, 5501009, 5501010})
+
+        # 5. RuinsTask لا تعتبر مسيرة اللاعب الآخر moveLineType=4 مسيرة أطلال خاصة بنا
+        ruins = RuinsTask(conn, {})
+        self.assertFalse(asyncio.run(ruins.is_ruins_march_active()))
+
+        # وعند إضافة مسيرة أطلال تابعة لقلعتنا تصبح True
+        self._feed_gate_packet(gate, {
+            "cmd": "1009",
+            "err": "0",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [
+                    {
+                        "msgType": 1,
+                        "data": {"id": "10939063-614", "status": 1, "moveLineType": 4, "to": {"x": 300, "y": 300, "mapType": 7}},
+                    }
+                ],
+            },
+        })
+        self.assertTrue(asyncio.run(ruins.is_ruins_march_active()))
+        self.assertEqual(BaseTask.extract_queue_hero_ids({"from": {"heros": {"10939063": [{"id": 5501001}]}}}), {5501001})
+
+    def test_synthetic_queues_without_owner_uid_remain_compatible(self):
+        from core.live_memory import LiveMemoryEngine, is_own_march_queue
+
+        engine = LiveMemoryEngine(owner_uid="10939063")
+        engine.ingest_packet({
+            "cmd": "1009",
+            "err": "0",
+            "data": {
+                "notifyID": "NOTIFY_LOCAL_QUEUE_SYNC",
+                "notifyData": [{"msgType": 4, "data": [{"id": "q_synthetic", "status": 1}]}],
+            },
+        })
+        self.assertTrue(is_own_march_queue({"id": "q_synthetic", "status": 1}, "10939063"))
+        self.assertFalse(is_own_march_queue({"id": "q_other", "uid": 9048282, "status": 1}, "10939063"))
+        self.assertFalse(is_own_march_queue({"id": "q_other_from", "from": {"uid": "9048282"}, "status": 1}, "10939063"))
+        self.assertEqual(len(engine.get_own_local_queues()), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

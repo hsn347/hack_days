@@ -586,6 +586,7 @@ class MarchManagerTask(BaseTask):
             abra_cfg = {}
 
         if not bool(abra_cfg.get("enabled", False)):
+            self.log.info("⏭️ تخطي: وحش ابرا (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         # فحص اليوم والحدث (إثنين وأربعاء) بنظام UTC
@@ -593,12 +594,13 @@ class MarchManagerTask(BaseTask):
         now_utc = datetime.now(timezone.utc)
         is_event_day = bool(abra_cfg.get("force", False)) or (now_utc.weekday() in (0, 2))
         if not is_event_day:
+            self.log.info("⏭️ تخطي: وحش ابرا (خارج يوم الحدث)")
             return {"status": "skipped", "reason": "not_event_day"}
 
         target_x = int(abra_cfg.get("x", 0) or 0)
         target_y = int(abra_cfg.get("y", 0) or 0)
         if target_x <= 0 or target_y <= 0:
-            self.log.warning(f"⚠️ [أولوية 0: Abra] إحداثيات الوحش غير محددة ({target_x}, {target_y}) — تخطي.")
+            self.log.warning(f"⏭️ تخطي: وحش ابرا (إحداثيات غير محددة)")
             return {"status": "skipped", "reason": "invalid_coords"}
 
         # فحص مسبق لطاقة اللورد (الحالة 6)
@@ -657,10 +659,12 @@ class MarchManagerTask(BaseTask):
 
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
+            self.log.info("⏭️ تخطي: غزاة الهيبة (الهيبة معطلة)")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
         cfg = self.config.get("prestige_invaders", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: غزاة الهيبة (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -668,12 +672,13 @@ class MarchManagerTask(BaseTask):
 
         merit_lv = self.get_merit_level()
         if merit_lv < 1:
-            self.log.info(f"👾 [غزاة الهيبة] تم التخطي: نظام الهيبة غير مفتوح للقلعة بعد (meritLv = {merit_lv}).")
+            self.log.info(f"⏭️ تخطي: غزاة الهيبة (هيبة {merit_lv}<1)")
             return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
 
         q_info = self.get_quest_info("invaders")
 
         if q_info.get("is_done"):
+            self.log.info("⏭️ تخطي: غزاة الهيبة (مكتملة)")
             return {"status": "already_done", "c_num": q_info["c_num"]}
 
         # حساب عدد الهجمات المتبقية لإنجاز المهمة بدقة
@@ -767,10 +772,12 @@ class MarchManagerTask(BaseTask):
 
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
+            self.log.info("⏭️ تخطي: معقل الهيبة (الهيبة معطلة)")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
         cfg = self.config.get("prestige_stronghold", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: معقل الهيبة (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -778,11 +785,12 @@ class MarchManagerTask(BaseTask):
 
         merit_lv = self.get_merit_level()
         if merit_lv < 5:
-            self.log.info(f"🏰 [معقل الهيبة] تم التخطي: مستوى الهيبة الحالي ({merit_lv}) أقل من 5 المطلوب.")
+            self.log.info(f"⏭️ تخطي: معقل الهيبة (هيبة {merit_lv}<5)")
             return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
         q_info = self.get_quest_info("stronghold")
 
         if q_info.get("is_done"):
+            self.log.info("⏭️ تخطي: معقل الهيبة (مكتملة)")
             return {"status": "already_done", "c_num": q_info["c_num"]}
 
         # مهمة المعقل باللعبة تتطلب مرتين كحد أقصى (وليس 5)
@@ -874,10 +882,12 @@ class MarchManagerTask(BaseTask):
 
         # 1. التحقق من تفعيل قسم الهيبة الرئيسي
         if not self.config.get("is_main_prestige_enabled", True):
+            self.log.info("⏭️ تخطي: جمع موارد الهيبة (الهيبة معطلة)")
             return {"status": "skipped", "reason": "main_prestige_disabled"}
 
         cfg = self.config.get("prestige_gather", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: جمع موارد الهيبة (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         # استعلام أحدث بيانات الهيبة
@@ -885,7 +895,7 @@ class MarchManagerTask(BaseTask):
 
         merit_lv = self.get_merit_level()
         if merit_lv < 6:
-            self.log.info(f"🌾 [جمع موارد الهيبة] تم التخطي: مستوى الهيبة الحالي ({merit_lv}) أقل من 5 المطلوب.")
+            self.log.info(f"⏭️ تخطي: جمع موارد الهيبة (هيبة {merit_lv}<6)")
             return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
 
         # فحص الفيالق النشطة بالخارج للتأكد من عدم وجود مسيرة جمع قائمة لأي مورد
@@ -902,6 +912,7 @@ class MarchManagerTask(BaseTask):
                 uncompleted.append((item, q_info))
 
         if not uncompleted:
+            self.log.info("⏭️ تخطي: جمع موارد الهيبة (مكتملة)")
             return {"status": "already_done", "remaining": 0}
 
         self.log.info(f"🌾 [جمع موارد الهيبة] بدء الجمع (متبقي: {len(uncompleted)} مهام)")
@@ -1027,16 +1038,18 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("transport", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: نقل الموارد (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         target_x = cfg.get("target_x")
         target_y = cfg.get("target_y")
         if target_x is None or target_y is None or (int(target_x) == 0 and int(target_y) == 0):
-            self.log.warning("⚠️ [أولوية 4] لم يتم تحديد إحداثيات القلعة الهدف...")
+            self.log.warning("⏭️ تخطي: نقل الموارد (بدون إحداثيات)")
             return {"status": "skipped", "reason": "no_target_coords"}
 
         account_id = getattr(self.conn, 'email', '') or str(self.uid)
         if is_transport_daily_limit_reached(account_id, int(target_x), int(target_y)):
+            self.log.info("⏭️ تخطي: نقل الموارد (بلغ الحد اليومي)")
             return {"status": "skipped", "reason": "daily_limit_reached"}
 
         self.log.info(f"🚚 [نقل الموارد] بدء النقل إلى ({target_x}, {target_y})")
@@ -1119,15 +1132,16 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("ruins", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: الأطلال (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
-
-        self.log.info("🏛️ [الأطلال] بدء استكشاف الأطلال")
 
         # 1. فحص مسبق وحاسم: هل توجد مسيرة أطلال بالخارج بالفعل؟
         is_active = await self.is_ruins_march_active()
         if is_active:
-            self.log.info("🏛️ [أولوية 5] توجد مسيرة استكشاف أطلال نشطة بالخارج بالفعل — سيتم التخطي والانتقال للأولوية التالية مباشرة.")
+            self.log.info("⏭️ تخطي: الأطلال (مسيرة نشطة)")
             return {"status": "already_active"}
+
+        self.log.info("🏛️ [الأطلال] بدء استكشاف الأطلال")
 
         # 2. فحص توفر الجيش بالقلعة
         has_army = await self.ensure_army_or_wait("لاستكشاف الأطلال")
@@ -1180,6 +1194,7 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("combat", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: القتال الشامل (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         choice = str(cfg.get("choice", "elf")).strip().lower()
@@ -1316,6 +1331,7 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("stronghold", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: المعاقل (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         needed = int(cfg.get("count", 2))
@@ -1387,10 +1403,12 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("gold_gather", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: جمع الذهب (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         locations = cfg.get("locations", [])
         if not locations:
+            self.log.info("⏭️ تخطي: جمع الذهب (بدون مواقع)")
             return {"status": "skipped", "reason": "no_locations"}
 
         requested_marches = int(cfg.get("max_marches", 0))
@@ -1486,6 +1504,7 @@ class MarchManagerTask(BaseTask):
         """
         cfg = self.config.get("gather", {})
         if not cfg.get("enabled", False):
+            self.log.info("⏭️ تخطي: الجمع المفتوح (غير مفعل)")
             return {"status": "skipped", "reason": "disabled"}
 
         res_type = cfg.get("res_type", 2)
@@ -1498,10 +1517,10 @@ class MarchManagerTask(BaseTask):
         # فحص شرط مستوى القلعة لموارد الحديد (10) والفضة (15) لتفادي الأخطاء 8041 و 8042
         castle_lv = self.get_castle_level()
         if int(res_type) == 4 and castle_lv < 10:
-            self.log.warning(f"🛑 [الجمع المفتوح] جمع الحديد يتطلب قلعة لفل 10 على الأقل — تخطي.")
+            self.log.info(f"⏭️ تخطي: الجمع المفتوح (الحديد يتطلب قلعة لفل 10)")
             return {"status": "skipped", "reason": "castle_level_low"}
         elif int(res_type) == 5 and castle_lv < 15:
-            self.log.warning(f"🛑 [الجمع المفتوح] جمع الفضة يتطلب قلعة لفل 15 على الأقل — تخطي.")
+            self.log.info(f"⏭️ تخطي: الجمع المفتوح (الفضة تتطلب قلعة لفل 15)")
             return {"status": "skipped", "reason": "castle_level_low"}
 
         self.log.info(f"🌾 [الجمع المفتوح] بدء جمع ({res_name}) لفل {target_lv}")

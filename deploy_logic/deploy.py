@@ -207,7 +207,7 @@ def _should_exclude_file(file_name: str) -> bool:
         return True
     if any(fn.endswith(ext) for ext in EXCLUDE_EXTENSIONS):
         return True
-    if fn.endswith(".sqlite3") or fn.endswith(".db"):
+    if fn.endswith(".sqlite3") or fn.endswith(".db") or fn.endswith(".db-wal") or fn.endswith(".db-shm"):
         return True
     return False
 

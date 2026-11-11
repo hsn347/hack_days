@@ -890,8 +890,25 @@ class GatherTask(BaseTask):
         uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
 
         # 1. البحث عن حقل المورد (النزول تدريجياً من المستوى المطلوب حتى مستوى 2)
-        exclude_map = await self._exclude_mgr.get_exclude_map(self.uid, kingdom_id=kingdom_id)
+        exclude_map = await self._exclude_mgr.get_exclude_map(
+            self.uid,
+            kingdom_id=kingdom_id,
+            x=cx,
+            y=cy,
+            target_type=res_info.get("sub_type"),
+        )
+        active_march_targets = await self.get_active_march_targets()
 
+        # دمج نتائج get_active_march_targets في البداية (لها الأولوية) ثم exclude_map في قاموس واحد
+        exclude: Dict[str, bool] = {}
+        for item in active_march_targets:
+            if isinstance(item, dict) and item.get("id"):
+                exclude[str(item["id"])] = True
+        for tid in exclude_map:
+            if tid not in exclude:
+                exclude[tid] = True
+        
+        self.log.info(f"🤣🤣🤣🤣🤣🤣{exclude}")
         min_fallback_lv = min(2, target_lv)
         found_target = None
         actual_found_lv = target_lv
@@ -903,7 +920,7 @@ class GatherTask(BaseTask):
                 "subType": res_info["sub_type"],
                 "y": cy,
                 "x": cx,
-                "exclude": exclude_map,
+                "exclude": exclude,
                 "minLv": cur_try_lv,
                 "maxLv": cur_try_lv,
                 "range": 100
@@ -1119,7 +1136,12 @@ class GatherTask(BaseTask):
         if err == '0':
             self.log.info(f"✅ [جمع الموارد] انطلقت مسيرة إلى {res_info['name']} لفل {actual_found_lv} عند ({tx}, {ty}) | حمولة: {carried_load:,}")
             # ✅ نجاح — تثبيت الاستبعاد في الملف على مستوى المملكة والـ UID
-            await self._exclude_mgr.confirm(self.uid, target_id, kingdom_id=kingdom_id)
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
             for hid in chosen_heroes_list:
                 self._busy_heroes.add(hid)
             for item in army_list:

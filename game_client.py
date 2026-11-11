@@ -462,11 +462,12 @@ class GateClient:
         self._cmd_pending: Dict[Tuple[str, str], asyncio.Future] = {}
 
         # ── محرك الذاكرة الحية المركزي وقفل التزامن ────────────────────
+        owner_uid = getattr(creds, 'uid', '') if creds is not None else ''
         if LiveMemoryEngine is not None:
-            self.memory_engine = LiveMemoryEngine()
+            self.memory_engine = LiveMemoryEngine(owner_uid=owner_uid)
         else:
             from core.live_memory import LiveMemoryEngine as _LME
-            self.memory_engine = _LME()
+            self.memory_engine = _LME(owner_uid=owner_uid)
         self.init_data: dict = self.memory_engine.init_data
 
         self.heroes: list = []
@@ -487,6 +488,14 @@ class GateClient:
         self._explicit_close: bool = False
         self._last_query_time: float = 0.0  # توقيت آخر طلب API
         self.log_callback: Optional[Callable[[str], Any]] = None
+        self.memory_terminal_trace: bool = True
+        self._connect_started_at: float = 0.0
+        self._last_notify_at: float = 0.0
+        self._last_idle_notify_log_at: float = 0.0
+        self._notify_count: int = 0
+        self._notify_merged_count: int = 0
+        self._notify_failed_count: int = 0
+        self._notify_unhandled_count: int = 0
 
     @property
     def is_connected(self) -> bool:
@@ -534,6 +543,9 @@ class GateClient:
             return False
 
         self.active_connection_info: Dict[str, Any] = {}
+        now_ts = time.time()
+        self._connect_started_at = now_ts
+        self._last_idle_notify_log_at = now_ts
         self._alive = True
         self._recv_task = asyncio.create_task(self._recv_loop())
         self._init_flow_task = asyncio.create_task(self._init_flow())
@@ -570,6 +582,141 @@ class GateClient:
         return True
 
 
+    _MARCH_STATUS_LABELS: Dict[Any, str] = {
+        0: "حشد/انتظار",
+        1: "سائرة للهدف",
+        2: "تجمع/تعمل",
+        3: "عائدة للقلعة",
+        4: "مرابطة",
+        7: "دفاع/مشاركة",
+    }
+
+    _MEMORY_STATUS_BADGES: Dict[str, str] = {
+        "merged": "✅ تم الدمج بنجاح في الذاكرة الحية",
+        "failed": "❌ فشل الدمج في الذاكرة الحية",
+        "unhandled_notify": "⚠️ وصل إشعار غير معرّف في LiveMemoryEngine (لم يُدمج)",
+        "missing_notify_id": "⚠️ وصلت حزمة 1009 بدون notifyID (لم يُدمج)",
+        "empty_notify_data": "⚠️ وصل إشعار بدون notifyData (لم يُدمج)",
+        "skipped_empty": "⚠️ وصل إشعار بلا تغييرات قابلة للتطبيق (فارغ/غير مطابق)",
+        "ignored": "ℹ️ استجابة بدون حقول ذاكرة مسموح بها",
+    }
+
+    def _terminal_prefix(self) -> str:
+        ts = time.strftime("%H:%M:%S")
+        raw_email = getattr(self.creds, "email", "") or ""
+        uid = getattr(self.creds, "uid", "") or ""
+        label = raw_email.split("@")[0] if "@" in raw_email else (raw_email or str(uid) or "account")
+        return f"[{ts}][{label}]"
+
+    @staticmethod
+    def _safe_terminal_print(text: str) -> None:
+        try:
+            print(text, flush=True)
+        except UnicodeEncodeError:
+            try:
+                encoded = (text + "\n").encode("utf-8", errors="replace")
+                if hasattr(sys.stdout, "buffer"):
+                    sys.stdout.buffer.write(encoded)
+                    sys.stdout.buffer.flush()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    @staticmethod
+    def _safe_json(obj: Any, max_len: int = 160) -> str:
+        try:
+            raw = json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str)
+        except Exception:
+            raw = repr(obj)
+        if max_len > 0 and len(raw) > max_len:
+            return raw[:max_len] + "...(مختصر)"
+        return raw
+
+    def _march_sync_label(self, report: Optional[Dict[str, Any]] = None) -> str:
+        synced = report.get("local_queues_synced") if report is not None else getattr(self.memory_engine, "local_queues_synced", False)
+        return "sync=✅" if synced else "sync=❌ لم يصل 202"
+
+    def _format_march_summary_lines(self, queues: List[Any], report: Optional[Dict[str, Any]] = None) -> List[str]:
+        own_cnt = len(queues)
+        list_cnt = len(self.local_queues)
+        init_q = self.init_data.get("local_queues")
+        init_cnt = len(init_q) if isinstance(init_q, list) else -1
+        all_cnt = report.get("all_local_queues_count") if report and "all_local_queues_count" in report else len(self.local_queues_map)
+        other_cnt = max(0, int(all_cnt) - own_cnt)
+        sync_note = "" if (own_cnt == list_cnt == init_cnt) else f" ⚠️ عدم تطابق(own={own_cnt},list={list_cnt},init={init_cnt})"
+        extra_other = f", بث كلي={all_cnt} (لغيري={other_cnt})" if other_cnt > 0 else ""
+        lines = [f"   ├─ 🐎 مسيرات قلعتي ({own_cnt}{extra_other}) [{self._march_sync_label(report)}]{sync_note}:"]
+        for q in queues:
+            if not isinstance(q, dict):
+                continue
+            qid = q.get("id") or q.get("queueId") or "?"
+            st = q.get("status")
+            st_lbl = self._MARCH_STATUS_LABELS.get(st, f"status={st}")
+            mlt = q.get("moveLineType", "?")
+            to_info = q.get("to") if isinstance(q.get("to"), dict) else {}
+            tx, ty, mt = to_info.get("x", "?"), to_info.get("y", "?"), to_info.get("mapType", "?")
+            lines.append(
+                f"   │  • {qid}: {st_lbl} (st={st}, type={mlt}) -> ({tx},{ty}) mType={mt}"
+            )
+        return lines
+
+    def _emit_log(self, line: str) -> None:
+        """إرسال السطر إلى log_callback للظهور في اللوق وتيرمنال api_server، أو طباعته في CLI."""
+        if not line:
+            return
+        if hasattr(self, "log_callback") and callable(self.log_callback):
+            try:
+                self.log_callback(line)
+                return
+            except Exception:
+                pass
+        self._safe_terminal_print(f"{self._terminal_prefix()} {line}")
+
+    def _print_live_memory_report(
+        self, packet: Dict[str, Any], cmd: str, sub: str, sess: int, report: Dict[str, Any]
+    ) -> None:
+        # طباعة الإشعارات فقط (إخفاء تحديثات الذاكرة الناتجة عن استعلامات عادية)
+        if not report.get("is_notification"):
+            return
+
+        status_key = report.get("overall_status", "ignored")
+        nid = report.get("notify_id")
+
+        # 1. إشعار غير معرّف لدينا — طباعة بسيطة جداً جداً
+        if status_key in ("unhandled_notify", "missing_notify_id"):
+            if nid is not None and str(nid).strip() != "":
+                self._emit_log(f"📨 إشعار غير معرّف: {nid}")
+            else:
+                self._emit_log(f"📨 إشعار غير معرّف ({cmd}/{sub})")
+            return
+
+        # 2. إشعار معرّف لدينا — ذكر المتحكم، نجاح/فشل الدمج، والقيمة الجديدة باختصار
+        ctrls = report.get("notify_controllers") or report.get("updated_keys") or []
+        ctrl_str = ", ".join(ctrls) if ctrls else "غير محدد"
+
+        if status_key == "merged":
+            merge_str = "نجح ✅"
+        elif status_key == "failed":
+            err_txt = report.get("error") or "خطأ"
+            merge_str = f"فشل ❌ ({err_txt})"
+        elif status_key == "skipped_empty":
+            merge_str = "لم يُدمج ⚠️"
+        elif status_key == "empty_notify_data":
+            merge_str = "فشل ❌ (بيانات فارغة)"
+        else:
+            merge_str = str(status_key)
+
+        val_summary = report.get("new_value_summary") or ""
+        if val_summary:
+            self._emit_log(f"📨 إشعار {nid} [{ctrl_str}] | الدمج: {merge_str} | الجديد: {val_summary}")
+        else:
+            self._emit_log(f"📨 إشعار {nid} [{ctrl_str}] | الدمج: {merge_str}")
+
+    def _maybe_report_idle_notifications(self) -> None:
+        """صامت — لا يطبع تنبيه الخمول كل 30 ثانية لتقليل الضجيج."""
+        return
+
     async def _heartbeat_loop(self):
         """إرسال نبضات القلب الدورية (Heartbeat 1037/1) المطابقة لبروتوكول اللعبة الرسمي كل 15 ثانية"""
         # انتظار انتهاء _init_flow أولاً
@@ -582,6 +729,7 @@ class GateClient:
                 # بروتوكول اللعبة الرسمي: CMD_HEARTBEAT_MODULE (1037) / REQ_HEARTBEAT (1)
                 now_ms = int(time.time() * 1000)
                 self.send_nowait('1037', '1', {'time': now_ms})
+                self._maybe_report_idle_notifications()
                 # فاصل زمني 15 ثانية مطابق لـ HEARTBEAT_INV في اللعبة مع نوم متقطع للاستجابة السريعة
                 for _ in range(15):
                     if not self._alive:
@@ -599,11 +747,8 @@ class GateClient:
             pkt_init = pack_request('1000', '1', {}, session=0)
             self._writer.write(pkt_init)
             await self._writer.drain()
-            for _ in range(6):
-                await asyncio.sleep(0.5)
-                if not self._alive: break
-                self.send_nowait('1009', '36', {})
-                self.send_nowait('1005', '1', {})
+            self._log_sent_request('1000', '1')
+            await asyncio.sleep(1)
         except Exception:
             pass
 
@@ -671,11 +816,25 @@ class GateClient:
                     self.cached_packets.pop(oldest_k, None)
 
             # ── 2. تمرير فوري للحزمة إلى محرك الذاكرة الحية المركزي ────────────
+            mem_report = None
             if isinstance(c, dict):
                 try:
-                    self.memory_engine.ingest_packet(c)
+                    _, mem_report = self.memory_engine.ingest_packet_with_report(c)
+                    if mem_report.get("is_notification"):
+                        self._last_notify_at = time.time()
+                        self._notify_count += 1
+                        n_st = mem_report.get("notify_status")
+                        if n_st == "merged":
+                            self._notify_merged_count += 1
+                        elif n_st == "failed":
+                            self._notify_failed_count += 1
+                        elif n_st == "unhandled_notify":
+                            self._notify_unhandled_count += 1
                 except Exception as _e:
+                    self._notify_failed_count += 1
                     log.debug(f"[LiveMemory] ingest error: {_e}")
+                    if self.memory_terminal_trace:
+                        self._emit_log(f"❌ فشل قراءة الحزمة {cmd}/{sub}: {_e}")
 
             # ── 3. تحديث مراجع التوافقية السريعة (heroes, local_queues) ───────
             h_ctrl = self.init_data.get('heroCtrl')
@@ -684,7 +843,10 @@ class GateClient:
             elif isinstance(h_ctrl, dict) and 'heroes' in h_ctrl and isinstance(h_ctrl['heroes'], list):
                 self.heroes = h_ctrl['heroes']
 
-            self.local_queues = list(self.local_queues_map.values())
+            self.local_queues = self.memory_engine.get_own_local_queues()
+
+            if self.memory_terminal_trace and mem_report and mem_report.get("should_log"):
+                self._print_live_memory_report(c, cmd, sub, sess, mem_report)
 
             # ── 4. فحص حالات انقطاع أو تجميد الحساب من السيرفر ────────────────
             if isinstance(c, dict):
@@ -821,52 +983,34 @@ class GateClient:
                     self.send_nowait('1005', '1', {})
                 if any(k.startswith("backpackCtrl") for k in missing_set):
                     self.send_nowait('1004', '1', {})
-                if not self.local_queues_map:
+                if not getattr(self.memory_engine, 'local_queues_synced', False) or not self.local_queues_map:
                     self.send_nowait('1007', '1000', {})
 
             await asyncio.sleep(0.25)
 
         # فحص أخير عند انتهاء المهلة
         res = self.memory_engine.is_memory_ready()
-        return res[0] if isinstance(res, tuple) else bool(res)
+        ready_final = res[0] if isinstance(res, tuple) else bool(res)
+        missing_final = res[1] if (isinstance(res, tuple) and len(res) > 1) else []
+        if self.memory_terminal_trace and not ready_final:
+            self._emit_log(f"❌ مهلة الذاكرة ({timeout:.0f}ث) ناقص={missing_final}")
+        return ready_final
 
-    def _log_network_action(self, cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False):
-        """توثيق آمن ومعزول تماماً لأحداث الشبكة دون التأثير على عمل المقابس."""
+    def _log_sent_request(self, cmd: str, subcmd: str) -> None:
+        """طباعة مبسطة جداً لكل طلب شبكي مرسل (الرقم الأساسي والفرعي فقط) باستثناء نبض القلب 1037/1."""
         try:
-            cmd_s = str(cmd)
-            sub_s = str(subcmd)
-            cmd_pair = (cmd_s, sub_s)
-
-            # 1. كتم أوامر التهيئة والنبض الصامت تماماً
-            if cmd_pair in SILENT_NETWORK_COMMANDS or (cmd_s, "") in SILENT_NETWORK_COMMANDS:
+            cmd_s = str(cmd).strip()
+            sub_s = str(subcmd).strip()
+            if (cmd_s, sub_s) in {('1037', '1'), ('1037', '')}:
                 return
-
-            line = _format_network_event(cmd_s, sub_s, data, content, elapsed, error, is_nowait)
-            if not line:
-                return
-
-            # فحص كود الرد للتمييز
-            err_code = "0"
-            if isinstance(content, dict):
-                err_code = str(content.get("err", content.get("code", "0")))
-
-            # 2. استعلامات القراءة والمزامنة الروتينية (Routine Read Queries)
-            # إذا نجحت أو أعادت حالة طبيعية دون أخطاء شبكية حقيقية:
-            # تُسجل في debug فقط لعدم حشو تيرمنال المستخدم وسجلات الحساب.
-            is_routine_read = (cmd_pair in ROUTINE_READ_COMMANDS or (cmd_s, "") in ROUTINE_READ_COMMANDS)
-            is_clean_status = (not error) and (err_code in BENIGN_STATUS_CODES)
-
-            if is_routine_read and is_clean_status and not is_nowait:
-                log.debug(line)
-                return
-
-            # 3. الطلبات الإجرائية الحقيقية أو الأخطاء الفعلية تُرسل للـ callback والتيرمنال
-            if hasattr(self, "log_callback") and callable(self.log_callback):
-                self.log_callback(line)
-            else:
-                log.info(line)
+            req_txt = f"🌐 {cmd_s}/{sub_s}" if sub_s else f"🌐 {cmd_s}"
+            self._emit_log(req_txt)
         except Exception:
             pass
+
+    def _log_network_action(self, cmd: str, subcmd: str, data: Any, content: Any, elapsed: float, error: str = "", is_nowait: bool = False):
+        """مُعطّل لصالح _log_sent_request المبسطة."""
+        return
 
     async def query(self, cmd: str, subcmd: str, data: dict = None, timeout: float = 15, client_data: list = None) -> Optional[dict]:
         """إرسال أمر والانتظار للرد — مع حماية تلقائية من السرعة الزائدة."""
@@ -898,21 +1042,13 @@ class GateClient:
         async with self._lock:
             self._writer.write(pkt)
             await self._writer.drain()
+        self._log_sent_request(str_cmd, str_sub)
 
-        t_start = time.time()
         try:
             result = await asyncio.wait_for(fut, timeout=timeout)
             content = result.get('content') if (result and result.get('ok')) else None
-            try:
-                self._log_network_action(str_cmd, str_sub, data, content, time.time() - t_start)
-            except Exception:
-                pass
             return content
-        except (asyncio.TimeoutError, ConnectionError) as ex:
-            try:
-                self._log_network_action(str_cmd, str_sub, data, None, time.time() - t_start, error=str(ex))
-            except Exception:
-                pass
+        except (asyncio.TimeoutError, ConnectionError):
             return None
         finally:
             self._pending.pop(sess, None)
@@ -927,10 +1063,7 @@ class GateClient:
         if self.spy_mode:
             print(f"🚀 [SPY C2S] NOWAIT CMD={cmd}/{subcmd} (session={sess}) | data={data}")
         self._writer.write(pack_request(cmd, str(subcmd), data or {}, sess))
-        try:
-            self._log_network_action(str(cmd), str(subcmd), data, None, 0.0, is_nowait=True)
-        except Exception:
-            pass
+        self._log_sent_request(str(cmd), str(subcmd))
 
     def on_notify(self, notify_id: str, handler: Callable):
         self._notifies[notify_id] = handler

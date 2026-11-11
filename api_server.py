@@ -913,7 +913,7 @@ def _bot_thread(req: StartBotRequest):
 
         display_line = line
 
-        # 2. تحليل أحداث البوت الموجهة لتحديث الحالة وتنسيقها بشرياً
+        # 2. تحليل أحداث البوت الموجهة لتحديث الحالة فقط دون تكرار الطباعة في السجل والتيرمنال
         if "[FIREBASE_EVENT]" in line or "[BOT_EVENT]" in line:
             try:
                 tag = "[FIREBASE_EVENT]" if "[FIREBASE_EVENT]" in line else "[BOT_EVENT]"
@@ -931,19 +931,14 @@ def _bot_thread(req: StartBotRequest):
                     if prev_ev != ev_state:
                         bs = "idle" if ev_state == "idle" else ("waiting" if ev_state == "waiting" else "running")
                         update_castle_status_db(user_id, castle_id, bs, ev_msg or line, ev_state, next_run_time=ev_nr)
-                if ev_msg:
-                    display_line = ev_msg
             except Exception as ex:
                 log.debug(f"Bot event parse error: {ex}")
+            return
 
         # 3. طباعة السجلات إلى الكونسول ببادئة مدمجة مع منع الازدواجية
         short_user = email.split('@')[0] if '@' in email else email
         if not already_printed:
-            should_print = any(
-                k in display_line for k in ("منسق", "مسيرة", "مسيرات", "فيالق", "فيلق", "جمع", "غزاة", "معقل", "أولوية", "🚨", "🎉", "⚠️", "❌", "🎖️", "⚔️", "🌾", "🏰", "🏗️", "البناء", "building", "march_manager", "gather", "monster", "stronghold", "✅", "⏭️", "نجاح", "فشل", "كود الخطأ", "🐉", "Abra", "وحش", "🌐")
-            )
-            if should_print:
-                print(f"[{datetime.now():%H:%M:%S}][{short_user}] {display_line}", flush=True)
+            print(f"[{datetime.now():%H:%M:%S}][{short_user}] {display_line}", flush=True)
 
         # 4. كتابة السجل النظيف في ملف القرص
         if _log_file_handle:
