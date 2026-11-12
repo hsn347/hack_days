@@ -150,6 +150,8 @@ EXCLUDE_DIRS = {
     "scratch",
     "tests",
     "test",
+    "game_listener",
+    "tcp_learning",
     # مجلدات الواجهة والتطوير والتوثيق المحلي:
     "dashboard",
     "docs",

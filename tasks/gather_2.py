@@ -4,27 +4,6 @@ tasks/gather.py — مهمة جمع الموارد الذكية التلقائي
 ═════════════════════════════════════════════════════════════════════════════
 python tasks/gather.py --email "shook123@gmail.com" --res 2 --level 5 --range 100
 
-الميزات المطورة:
-  1. لا تعتمد على أي تشكيلة مسبقة من المستخدم (تحديد ذاتي كامل 100%).
-  2. اختيار القوات الأفضل للموارد:
-     - أولوية قصوى لعربات النقل والحصار (عربات القمح 701..714) من الرتبة الأعلى للأدنى.
-     - استكمال باقي الحمولة من المشاة (4xx) ثم الفرسان (5xx) ثم الرماة (6xx).
-     - حساب عدد القوات المطلوب بدقة بناءً على سعة حمولة الحقل الهدف (cur_res).
-     - استبعاد كامل لأسلحة الجدار والفخاخ (800 فما فوق) لحماية المسيرة من خطأ 8062.
-  3. اختيار الأبطال الأنسب للجمع تلقائياً (محاكاة واجهة اللعبة الأصلية):
-     - أولوية لأبطال الجمع والتنمية (5502xxx) الذين يمتلكون مهارات الجمع (5620xxx).
-     - الترتيب بالأعلى نجوماً ومستوى.
-     - إمكانية الإرسال بدون بطل عند نفاد الأبطال لاستغلال كافة الفيالق الشاغرة.
-  4. اختيار الحيوان الأليف الأفضل تلقائياً من petCtrl (الأعلى مستوى).
-  5. إرسال المسيرات متتالية حتى امتلاء كافة فيالق القلعة (QUEUE_FULL).
-  6. دعم مورد الذهب (subType = 1) ومستوى محدد واحد للحقل المستهدف.
-
-أنواع الموارد المدعومة:
-  - 1 أو gold أو ذهب  → الذهب (Gold / Mithril) [subType = 1]
-  - 2 أو food أو قمح  → مزارع القمح (Food)      [subType = 2]
-  - 3 أو wood أو خشب  → مناشر الخشب (Wood)      [subType = 3]
-  - 4 أو stone أو حجر → مناجم الحجر/الكوارنز       [subType = 4]
-  - 5 أو iron أو حديد → مناجم الحديد (Iron)     [subType = 5]
 """
 
 from __future__ import annotations
@@ -878,6 +857,30 @@ class GatherTask_2(BaseTask):
             return TaskResult.fail(f"⚠️ لم يتم العثور على حقول {res_info['name']} متاحة في النطاق المحدد", **result_data)
         return TaskResult.fail("لم يتم إرسال أي مسيرة جمع", retry_after=120, **result_data)
 
+    # ── جلب قوات القلعة المتاحة ──────────────────────────────────
+
+    async def _get_castle_army(self) -> Dict[int, int]:
+        """جلب قوات القلعة المتاحة من الذاكرة الحية (armyCtrl) أو عبر استعلام 1005/1 احتياطياً."""
+        available: Dict[int, int] = {}
+        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+        if isinstance(army_ctrl, dict):
+            for k, v in army_ctrl.get('totalArmy', {}).items():
+                if str(k).isdigit() and str(v).isdigit():
+                    available[int(k)] = int(v)
+
+        if not available:
+            try:
+                self.log.debug("🛑🛑🛑🛑🛑🛑🛑")
+                r_army = await self.conn.query('1005', '1', {}, timeout=5)
+                if r_army and 'data' in r_army:
+                    for k, v in r_army['data'].get('totalArmy', {}).items():
+                        if str(k).isdigit() and str(v).isdigit():
+                            available[int(k)] = int(v)
+            except Exception as e:
+                self.log.debug(f"استعلام قوات القلعة 1005/1 لم يكتمل: {e}")
+
+        return available
+
     # ── إرسال مسيرة فيلق واحدة ───────────────────────────────────
 
     async def _send_one_march(
@@ -889,7 +892,6 @@ class GatherTask_2(BaseTask):
         kingdom_id: int,
         search_range: int
     ) -> str:
-        uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
 
         # 1. البحث عن حقل المورد (النزول تدريجياً من المستوى المطلوب حتى مستوى 2)
         exclude_map = await self._exclude_mgr.get_exclude_map(
@@ -934,12 +936,14 @@ class GatherTask_2(BaseTask):
                 cand_id = cand.get('id')
                 if cand_id and str(cand_id) in exclude:
                     self.log.warning(f"   ⚠️ تم تخطي الحقل {cand_id} لأن السيرفر أعاده رغم استبعاده في المملكة {kingdom_id}.")
+                    await asyncio.sleep(round(random.uniform(0.6, 1.2), 2))
                     continue
                 found_target = cand
                 actual_found_lv = cur_try_lv
                 if cur_try_lv < target_lv:
                     self.log.info(f"   ℹ️ لم يتوفر حقل لفل {target_lv} — تم العثور على بديل لفل {cur_try_lv}")
                 break
+
         self.log.info(f"😘😘😘😘😘{found_target}")
         if not found_target:
             return "NO_TARGET"
@@ -962,6 +966,7 @@ class GatherTask_2(BaseTask):
             kingdom_id=kingdom_id,
             is_stronghold=False
         )
+        
         if is_busy:
             self.log.warning(f"⚠️ الحقل {target_id} مستبعد فوراً: {busy_reason}")
             # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
@@ -989,51 +994,26 @@ class GatherTask_2(BaseTask):
 
         # خطة بديلة عبر 1006/15
         if cur_res <= 0:
-            try:
-                r_build = await self.conn.query('1006', '15', {
-                    "x": tx, "y": ty, "kingdomId": kingdom_id, "id": target_id
-                }, timeout=3.0)
-                if r_build and 'retData' in r_build:
-                    res_node = r_build['retData'].get('resource', {})
-                    cur_res = int(res_node.get('currentSourceNum', 0))
-                    if res_node.get('resourceType'):
-                        try:
-                            actual_res_code = int(res_node.get('resourceType'))
-                        except Exception:
-                            pass
-            except Exception as e:
-                self.log.debug(f"استعلام 1006/15 لم يكتمل: {e}")
+            self.log.warning(f"⚠️ الحقل فارغ ⛔⛔⛔⛔")
+            # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
+            return "TARGET_OCCUPIED"
+
+
 
         # حساب مضاعف الحمولة وسعة النقل المطلوبة وفق كود اللعبة الأصلي (worldDispatchArmyView.lua)
         multiplier = get_resource_multiplier(actual_res_code, res_info["sub_type"])
-        if cur_res > 0:
-            target_load = int(cur_res * multiplier)
-            self.log.debug(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} | مطلوب: {target_load:,}")
-        else:
-            def_cap = DEFAULT_NODE_CAPACITY.get(res_info["sub_type"], {}).get(actual_found_lv, 50000)
-            target_load = int(def_cap * multiplier)
-            cur_res = def_cap
-            self.log.debug(f"   📦 تقدير حمولة الحقل: {def_cap:,} | مطلوب: {target_load:,}")
 
-        # 3. جلب القوات المتوفرة بالقلعة من الذاكرة الحية مباشرة (Zero-Request)
-        available: Dict[int, int] = {}
-        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
-        if isinstance(army_ctrl, dict):
-            for k, v in army_ctrl.get('totalArmy', {}).items():
-                if str(k).isdigit() and str(v).isdigit():
-                    available[int(k)] = int(v)
+        target_load = int(cur_res * multiplier)
+        self.log.debug(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} | مطلوب: {target_load:,}")
 
-        if not available:
-            try:
-                self.log.debug("🛑🛑🛑🛑🛑🛑🛑")
-                r_army = await self.conn.query('1005', '1', {}, timeout=5)
-                if r_army and 'data' in r_army:
-                    for k, v in r_army['data'].get('totalArmy', {}).items():
-                        if str(k).isdigit() and str(v).isdigit():
-                            available[int(k)] = int(v)
-            except Exception:
-                pass
-
+        # 3. جلب القوات المتوفرة بالقلعة وخصم المستخدم منها
+        available = await self._get_castle_army()
 
         for tid, used in self._used_army.items():
             if tid in available:
@@ -1100,18 +1080,10 @@ class GatherTask_2(BaseTask):
         army_list = enforce_safe_march_troops(army_list, max_march_troops)
 
         total_troops = sum(item['num'] for item in army_list)
-        carts_troops = sum(item['num'] for item in army_list if 700 <= item['id'] < 800)
-        eff_cart1_w = calculate_unit_capacity(701, load_bonus=load_bonus)
-        eff_cart9_w = calculate_unit_capacity(709, load_bonus=load_bonus)
-        coverage_pct = (carried_load / target_load * 100) if target_load > 0 else 100.0
-        march_note = f" (مسيرة جزئية: تغطي {coverage_pct:.1f}% من الحقل)" if coverage_pct < 98.0 else " (مسح كامل 100%)"
-        cap_note = f" [سقف معسكر التجمع: {max_march_troops:,}]" if (max_march_troops and total_troops >= max_march_troops) else ""
+
         self.log.debug(f"   🛡️ القوات المختارة: {total_troops:,} جندي | حمولة: {carried_load:,}/{target_load:,}")
 
-        # محاكاة بشرية طبيعية قبل إطلاق المسيرة (تجهيز الجيش والعتاد 2.0 - 3.5 ثانية)
-        prep_wait = round(random.uniform(2.2, 3.8), 2)
-        self.log.debug(f"   ⏳ تجهيز تفاصيل المسيرة ({prep_wait} ثانية)...")
-        await asyncio.sleep(prep_wait)
+        await asyncio.sleep(round(random.uniform(2.2, 3.8), 2))
 
         # 7. إرسال حزمة المسيرة 1007/2
         march_payload = {

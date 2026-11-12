@@ -36,6 +36,144 @@ HERO_QUALITY_MODULUS = {
     6: 1.0,   # ذهبي / أحمر
 }
 
+# جدول الجودة الرسمي للأبطال من heroinfodes.lua
+HERO_QUALITY_MAP = {
+    5501001: 5, 5501002: 5, 5501003: 5, 5501004: 5, 5501005: 5, 5501006: 4, 5501007: 4, 5501008: 4, 5501009: 5, 5501010: 4,
+    5501011: 4, 5501012: 5, 5501013: 5, 5501014: 5, 5501015: 5, 5501016: 5, 5501017: 5, 5501018: 5, 5501019: 5, 5501020: 5,
+    5501021: 5, 5501022: 4, 5501023: 4, 5501024: 5, 5501025: 4, 5501026: 5, 5501027: 5, 5501028: 5, 5501029: 5, 5501030: 5,
+    5501031: 5, 5501032: 5, 5501033: 6, 5501034: 4, 5501035: 5, 5501036: 6, 5501037: 6, 5501038: 6, 5501039: 6, 5501040: 6,
+    5501041: 6, 5501042: 6, 5501043: 6,
+    5502001: 5, 5502002: 4, 5502003: 4, 5502004: 4, 5502005: 4, 5502006: 3, 5502007: 4, 5502008: 3, 5502009: 3, 5502010: 3,
+    5502011: 5, 5502012: 5, 5502013: 5,
+    5503001: 5, 5503002: 4, 5503003: 4, 5503004: 4, 5503005: 4, 5503006: 4, 5503007: 4, 5503008: 3, 5503009: 3, 5503010: 3,
+    5503011: 3, 5503012: 5, 5503013: 5, 5503014: 5, 5503015: 5, 5503016: 5, 5503017: 5, 5503018: 5, 5503019: 5, 5503020: 6,
+    5503021: 6, 5503022: 6, 5503023: 5, 5503024: 6, 5503025: 6, 5503026: 6, 5503027: 6
+}
+
+# جدول عناصر وبوفات زيادة المسيرة النشطة (effectType 19 - MARCH_LIMIT_BOOST) من buff.lua
+ACTIVE_MARCH_BUFF_PERCENT = {
+    4006: 0.10,
+    4506: 0.10,
+    4569: 0.10,
+    4570: 0.15,
+    5010: 0.25,
+    5044: 0.35,
+    5055: 0.50,
+    5091: 0.20,
+    5120: 0.25,
+    5302: 0.20,
+    5305: 0.15,
+    5347: 0.50,
+    5348: 0.70,
+    5349: 0.90,
+}
+
+
+def get_weapon_strengthen_base(slv: int) -> int:
+    """إرجاع الزيادة الأساسية لتقوية السلاح من equipment_strengthen.lua"""
+    if slv <= 0:
+        return 0
+    if slv <= 10:
+        return slv * 10
+    if slv <= 30:
+        return 100 + (slv - 10) * 20
+    if slv <= 50:
+        return 500 + (slv - 30) * 40
+    if slv <= 70:
+        return 1300 + (slv - 50) * 60
+    if slv <= 90:
+        return 2500 + (slv - 70) * 80
+    if slv <= 100:
+        return 4100 + (slv - 90) * 90
+    return 5000 + (slv - 100) * 100
+
+
+def get_weapon_refine_values(rlv: int) -> tuple:
+    """إرجاع (refineAddBaseValue, refineAddSkillValue) لصقل السلاح من equipment_refine.lua"""
+    if rlv <= 0:
+        return 0, 0
+    base = rlv * 200 - 100
+    if rlv <= 20:
+        skill = rlv * 9
+    else:
+        skill = 180 + (rlv - 20) * 18
+    return base, skill
+
+
+def get_lord_weapon_march_bonus(init_data: dict) -> int:
+    """
+    حساب الزيادة في سعة المسيرة من سلاح اللورد (EID 6110000) خاصية 41 (MARCH_VALUE_LIMIT_BOOST).
+    وفق دالة equipmentCell:getCurEquipRefineSkillResult في كود اللعبة الأصلي.
+    """
+    if not isinstance(init_data, dict):
+        return 0
+    equip_ctrl = init_data.get("equipmentCtrl", {})
+    if not isinstance(equip_ctrl, dict):
+        return 0
+    eq_list = equip_ctrl.get("equipment_array", [])
+    if not isinstance(eq_list, list):
+        return 0
+
+    for eq in eq_list:
+        if isinstance(eq, dict) and eq.get("eid") == 6110000:
+            slv = int(eq.get("slv", 0))
+            rlv = int(eq.get("rlv", 0))
+            # Base value from equipment_info (100) + strengthen + refine
+            base_val = 100 + get_weapon_strengthen_base(slv) + get_weapon_refine_values(rlv)[0]
+            # Skill value from equipment_info (180) + refine skill addition
+            skill_val = 180 + get_weapon_refine_values(rlv)[1]
+            # Result: math.floor(baseValue / 100 * skillValue)
+            return math.floor(base_val / 100.0 * skill_val)
+    return 0
+
+
+def get_vip_march_bonus(init_data: dict) -> int:
+    """
+    حساب امتيازات سعة المسيرة من VIP للخاصية 96 (MARCH_VALUE_LIMIT_BOOST) من جدول vip.lua:
+      - VIP 13: +10,000 جندي
+      - VIP 14: +20,000 جندي
+      - VIP 15+: +30,000 جندي
+    """
+    if not isinstance(init_data, dict):
+        return 0
+    vip_ctrl = init_data.get("vipCtrl", {})
+    if not isinstance(vip_ctrl, dict):
+        return 0
+    vlv = int(vip_ctrl.get("vipLv", 0))
+    if vlv >= 15:
+        return 30000
+    elif vlv == 14:
+        return 20000
+    elif vlv == 13:
+        return 10000
+    return 0
+
+
+def get_active_march_buff_multiplier(init_data: dict) -> float:
+    """
+    فحص البوفات النشطة في buffCtrl وحساب المضاعف الإضافي لسعة المسيرة (effectType 19).
+    """
+    if not isinstance(init_data, dict):
+        return 0.0
+    buff_ctrl = init_data.get("buffCtrl", [])
+    extra_mult = 0.0
+    buff_items = []
+    if isinstance(buff_ctrl, list):
+        buff_items = buff_ctrl
+    elif isinstance(buff_ctrl, dict):
+        buff_items = list(buff_ctrl.values())
+
+    for b in buff_items:
+        if isinstance(b, dict):
+            bid = b.get("id")
+            try:
+                bid_int = int(bid)
+                if bid_int in ACTIVE_MARCH_BUFF_PERCENT:
+                    extra_mult = max(extra_mult, ACTIVE_MARCH_BUFF_PERCENT[bid_int])
+            except Exception:
+                pass
+    return extra_mult
+
 
 def get_castle_level(conn_or_init: Any) -> int:
     """
@@ -60,10 +198,16 @@ def get_castle_level(conn_or_init: Any) -> int:
     return castle_lv
 
 
-def get_castle_base_march_capacity(init_data: dict) -> int:
+def get_castle_base_march_capacity(conn_or_init: Any) -> int:
     """
-    استخراج سعة مسيرة ساحة التدريب للقلعة بدون أبطال بمطابقة 100% لواجهة اللعبة.
+    استخراج سعة مسيرة ساحة التدريب للقلعة بدون أبطال بمطابقة 100% لواجهة وكود اللعبة:
+      Total = floor((Base + Default + Tech + BuffValueAdd + BoeCount) * (1 + Multiplier))
     """
+    if hasattr(conn_or_init, "init_data"):
+        init_data = getattr(conn_or_init, "init_data", {})
+    else:
+        init_data = conn_or_init if isinstance(conn_or_init, dict) else {}
+
     if not isinstance(init_data, dict):
         return 300
 
@@ -119,30 +263,36 @@ def get_castle_base_march_capacity(init_data: dict) -> int:
                 elif tid == 110027:
                     tech_add += tlv * 2000
 
+    # بونص سلاح اللورد (EID 6110000 property 41 MARCH_VALUE_LIMIT_BOOST)
+    weapon_bonus = get_lord_weapon_march_bonus(init_data)
+
+    # بونص امتيازات الـ VIP (خاصية 96 MARCH_VALUE_LIMIT_BOOST)
+    vip_bonus = get_vip_march_bonus(init_data)
+
     # خصائص اللورد boeAttributeCtrl
     boe_ctrl = init_data.get("boeAttributeCtrl", {})
-    boe_flat_add = 0
-    if isinstance(boe_ctrl, dict):
-        val_5 = boe_ctrl.get("1", {}).get("1", {}).get("5", {})
-        if isinstance(val_5, dict):
-            boe_flat_add += float(val_5.get("2", 0))
-
-    flat_total = default_cap + tech_add + int(boe_flat_add)
-
-    # حساب البوف المئوي الحقيقي من boeAttributeCtrl إن وُجد بدلاً من المضاعفات الوهمية (كود 8035)
+    boe_flat_add = 0.0
     multiplier = 0.0
     if isinstance(boe_ctrl, dict):
         val_5 = boe_ctrl.get("1", {}).get("1", {}).get("5", {})
         if isinstance(val_5, dict):
             multiplier = float(val_5.get("1", 0)) / 1000.0
+            boe_flat_add = float(val_5.get("2", 0))
 
-    # الحد الأدنى للإضافات لقلاع البداية (مثل 1R228: +280 بإجمالي 580)
-    flat_total = max(280, flat_total)
+    # بوفات زيادة المسيرة النشطة (effectType 19)
+    active_buff_mult = get_active_march_buff_multiplier(init_data)
+    total_multiplier = multiplier + active_buff_mult
 
-    buff_add = round((base_cap + flat_total) * multiplier)
-    add_cap = flat_total + buff_add
+    # إجمالي الإضافات الثابتة داخل القوس وفق كود buildLogic.getExpArmyCount:
+    # total_add = math.floor(default + tech_add + pet_add + buff_value_add + boeBuffValueCount)
+    buff_value_add = weapon_bonus + vip_bonus
+    inner_total = math.floor(default_cap + tech_add + buff_value_add + boe_flat_add)
 
-    return int(base_cap + add_cap)
+    # تطبيق المضاعف المئوي
+    buff_add = math.floor((base_cap + inner_total) * total_multiplier)
+    final_cap = base_cap + inner_total + buff_add
+
+    return int(max(300, final_cap))
 
 
 def get_hero_march_bonus(hero_data: dict, castle_buff_multiplier: float = 0.0) -> int:
@@ -156,19 +306,12 @@ def get_hero_march_bonus(hero_data: dict, castle_buff_multiplier: float = 0.0) -
     hlv = int(hero_data.get("lv", 1))
     hid = int(hero_data.get("id", 0))
 
-    # تحديد جودة البطل من الآيدي أو الرتبة
-    # الأنماط القياسية للآيدي باللعبة:
-    # 5501xxx = برتقالي/ذهبي (quality 5/6)
-    # 5502xxx = بنفسجي (quality 4)
-    # 5503xxx = أزرق (quality 3)
-    if str(hid).startswith("5501"):
-        quality = 5
-    elif str(hid).startswith("5502"):
-        quality = 4
-    elif str(hid).startswith("5503"):
-        quality = 3
+    # جلب الجودة الحقيقية للبطل من جدول heroinfodes.lua الرسمي
+    quality = hero_data.get("quality")
+    if quality is None or int(quality) <= 0:
+        quality = HERO_QUALITY_MAP.get(hid, 4)
     else:
-        quality = int(hero_data.get("quality", 4))
+        quality = int(quality)
 
     modulus = HERO_QUALITY_MODULUS.get(quality, 0.8)
     base_hero_troops = int(hlv * 100 * modulus)
@@ -202,13 +345,15 @@ def get_castle_march_capacity(conn_or_init: Any, chosen_heroes: Optional[List[in
 
     base_castle_cap = get_castle_base_march_capacity(init_data)
 
-    # استخراج معامل البوف المئوي الحقيقي من boeAttributeCtrl إن وُجد بدلاً من المضاعفات الوهمية (كود 8035)
+    # استخراج معامل البوف المئوي الحقيقي من boeAttributeCtrl وبوفات العناصر النشطة
     boe_ctrl = init_data.get("boeAttributeCtrl", {}) if isinstance(init_data, dict) else {}
     multiplier = 0.0
     if isinstance(boe_ctrl, dict):
         val_5 = boe_ctrl.get("1", {}).get("1", {}).get("5", {})
         if isinstance(val_5, dict):
             multiplier = float(val_5.get("1", 0)) / 1000.0
+
+    multiplier += get_active_march_buff_multiplier(init_data)
 
     # إضافة سعة الأبطال المختارين
     heroes_total_bonus = 0
@@ -218,7 +363,18 @@ def get_castle_march_capacity(conn_or_init: Any, chosen_heroes: Optional[List[in
         if isinstance(hero_ctrl, list):
             for h in hero_ctrl:
                 if isinstance(h, dict) and "id" in h:
-                    heroes_lookup[int(h["id"])] = h
+                    try:
+                        heroes_lookup[int(h["id"])] = h
+                    except Exception:
+                        pass
+        elif isinstance(hero_ctrl, dict):
+            for k, h in hero_ctrl.items():
+                if isinstance(h, dict):
+                    hid = h.get("id", k)
+                    try:
+                        heroes_lookup[int(hid)] = h
+                    except Exception:
+                        pass
 
         for hid in chosen_heroes:
             if not hid or int(hid) <= 0:
@@ -227,8 +383,11 @@ def get_castle_march_capacity(conn_or_init: Any, chosen_heroes: Optional[List[in
             if h_data:
                 heroes_total_bonus += get_hero_march_bonus(h_data, multiplier)
             else:
-                # بطل لم يُعثر على بياناته الكاملة — تقدير قياسي آمن لفل 40 بنفسجي
-                heroes_total_bonus += int(40 * 80 * (1.0 + multiplier))
+                # بطل غير مسجل في heroCtrl للحساب — حساب دقيق بمستوى 1 وفق جودته الرسمية
+                quality = HERO_QUALITY_MAP.get(int(hid), 4)
+                modulus = HERO_QUALITY_MODULUS.get(quality, 0.8)
+                base_hero_troops = int(1 * 100 * modulus)
+                heroes_total_bonus += round(base_hero_troops * (1.0 + max(0.0, multiplier)))
 
     total_capacity = base_castle_cap + heroes_total_bonus
 
