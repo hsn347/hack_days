@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather.py --email "shook123@gmail.com" --res 2 --level 5 --range 100
+python tasks/gather_2.py --email "burcudemr@gmail.com" --res 3 --level 7 --range 100
 
 """
 
@@ -914,35 +914,56 @@ class GatherTask_2(BaseTask):
         
         self.log.info(f"🤣🤣🤣🤣🤣🤣{exclude}")
 
+        # تشتيت زمني متناهي الصغر لكسر التزامن اللحظي بين القلاع في نفس الخلية
+        await asyncio.sleep(round(random.uniform(0.12, 0.55), 2))
+
         min_fallback_lv = min(2, target_lv)
         found_target = None
         actual_found_lv = target_lv
 
-        for cur_try_lv in range(target_lv, min_fallback_lv - 1, -1):
-            r_search = await self.conn.query('2011', '3', {
-                "mapType": 5,
-                "num": 1,
-                "subType": res_info["sub_type"],
-                "y": cy,
-                "x": cx,
-                "exclude": exclude,
-                "minLv": cur_try_lv,
-                "maxLv": cur_try_lv,
-                "range": 100
-            }, timeout=6)
+        for search_attempt in range(4):
+            found_target = None
+            for cur_try_lv in range(target_lv, min_fallback_lv - 1, -1):
+                r_search = await self.conn.query('2011', '3', {
+                    "mapType": 5,
+                    "num": 1,
+                    "subType": res_info["sub_type"],
+                    "y": cy,
+                    "x": cx,
+                    "exclude": exclude,
+                    "minLv": cur_try_lv,
+                    "maxLv": cur_try_lv,
+                    "range": 100
+                }, timeout=6)
 
-            if r_search and r_search.get('result'):
-                cand = r_search['result'][0]
-                cand_id = cand.get('id')
-                if cand_id and str(cand_id) in exclude:
-                    self.log.warning(f"   ⚠️ تم تخطي الحقل {cand_id} لأن السيرفر أعاده رغم استبعاده في المملكة {kingdom_id}.")
-                    await asyncio.sleep(round(random.uniform(0.6, 1.2), 2))
-                    continue
-                found_target = cand
-                actual_found_lv = cur_try_lv
-                if cur_try_lv < target_lv:
-                    self.log.info(f"   ℹ️ لم يتوفر حقل لفل {target_lv} — تم العثور على بديل لفل {cur_try_lv}")
+                if r_search and r_search.get('result'):
+                    cand = r_search['result'][0]
+                    cand_id = cand.get('id')
+                    if cand_id and str(cand_id) in exclude:
+                        self.log.warning(f"   ⚠️ تم تخطي الحقل {cand_id} لأن السيرفر أعاده رغم استبعاده في المملكة {kingdom_id}.")
+                        await asyncio.sleep(round(random.uniform(0.4, 0.8), 2))
+                        continue
+                    found_target = cand
+                    actual_found_lv = cur_try_lv
+                    if cur_try_lv < target_lv:
+                        self.log.info(f"   ℹ️ لم يتوفر حقل لفل {target_lv} — تم العثور على بديل لفل {cur_try_lv}")
+                    break
+
+            if not found_target:
                 break
+
+            target_id = found_target.get('id')
+            # حجز مؤقت حصري في الذاكرة المشتركة للمملكة — يمنع أي قلعة أخرى من استهدافه تزامناً
+            reserved = await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
+            if not reserved:
+                self.log.warning(f"   ⚠️ الحقل {target_id} محجوز لقلعة أخرى في المملكة قبل لحظات — استبعاده والبحث عن بديل...")
+                exclude[str(target_id)] = True
+                found_target = None
+                await asyncio.sleep(round(random.uniform(0.2, 0.5), 2))
+                continue
+
+            # تم الحجز الحصري بنجاح
+            break
 
         self.log.info(f"😘😘😘😘😘{found_target}")
         if not found_target:
@@ -952,8 +973,6 @@ class GatherTask_2(BaseTask):
         target_id = target.get('id')
         tx, ty    = target.get('x'), target.get('y')
         self.log.debug(f"🎯 تم العثور على حقل {res_info['name']} لفل {actual_found_lv}: {target_id} عند ({tx}, {ty})")
-        # حجز مؤقت في الذاكرة المشتركة للمملكة — لن يُثبت في الملف إلا بعد نجاح الإرسال
-        await self._exclude_mgr.reserve(self.uid, target_id, kingdom_id=kingdom_id)
 
         # 2. فحص أمني شامل ومباشر للحقل (1006/22 + مزامنة مسيرات الخريطة 1006/1000 واعتراض 1009/201)
         cur_res = 0
@@ -1005,12 +1024,13 @@ class GatherTask_2(BaseTask):
             return "TARGET_OCCUPIED"
 
 
-
+        self.log.info(f"💥💥💥💥💥💥💥💥💥💥{cur_res}")
         # حساب مضاعف الحمولة وسعة النقل المطلوبة وفق كود اللعبة الأصلي (worldDispatchArmyView.lua)
         multiplier = get_resource_multiplier(actual_res_code, res_info["sub_type"])
-
+        self.log.info(f"💨💨💨💨💨{multiplier} ")
         target_load = int(cur_res * multiplier)
-        self.log.debug(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} | مطلوب: {target_load:,}")
+        self.log.info(f"💞💞💞💞💞💞{target_load} ")
+        self.log.info(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} | مطلوب: {target_load:,}")
 
         # 3. جلب القوات المتوفرة بالقلعة وخصم المستخدم منها
         available = await self._get_castle_army()
@@ -1075,12 +1095,11 @@ class GatherTask_2(BaseTask):
                 self.log.warning("⚠️ لا توجد أي قوات متاحة بالقلعة ولا توجد مسيرات بالخارج!")
                 return "NO_ARMY"
 
-        # صمام أمان صارم: فرض سقف سعة المسيرة لمنع تجاوز طاقة الفيلق أو خطأ 8035
-        from tasks.march_capacity import enforce_safe_march_troops
-        army_list = enforce_safe_march_troops(army_list, max_march_troops)
+        self.log.info(f"⭕⭕⭕⭕⭕{army_list} ")
+        self.log.info(f"💚💚💚💚💚{carried_load} ")
 
         total_troops = sum(item['num'] for item in army_list)
-
+        self.log.info(f"💦💦💦💦💦{total_troops} ")
         self.log.debug(f"   🛡️ القوات المختارة: {total_troops:,} جندي | حمولة: {carried_load:,}/{target_load:,}")
 
         await asyncio.sleep(round(random.uniform(2.2, 3.8), 2))

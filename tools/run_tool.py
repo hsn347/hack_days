@@ -14,7 +14,7 @@ run_tool.py — أداة تشغيل الدوال الشاملة في مشروع 
      python run_tool.py -e "user@example.com" -t tasks.gather_2.GatherTask.run --params '{"res_type": 1, "level": 6}'
 
 
-python run_tool.py -e "shook124@gmail.com" -f get_castle_march_capacity
+python tools/run_tool.py -e "shook124@gmail.com" -f get_castle_march_capacity
 
 python run_tool.py -e "burcudemr@gmail.com" -f get_castle_march_capacity  -k chosen_heroes="[5502009,5502006]"
 

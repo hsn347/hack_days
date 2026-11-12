@@ -496,14 +496,16 @@ def _restart_service_and_wait(client):
     _run(client, "systemctl daemon-reload; pkill -9 -f 'api_server.py' 2>/dev/null || true; systemctl restart empire-bot.service; sleep 2")
     status = _run(client, "systemctl is-active empire-bot.service")
     print(f"   حالة الخدمة: {status}")
-    print("🔍 انتظار اكتمال إقلاع الخدمة...")
-    for _ in range(8):
+    print("🔍 انتظار اكتمال إقلاع الخدمة (تنظيف السجلات وفتح المنفذ 8000)...")
+    for sec in range(1, 36):
         time.sleep(1)
         health = _run(client, "curl -s -m 10 http://127.0.0.1:8000/api/health || true", timeout=12)
         if health and "online" in health:
-            print(f"   ✅ الخدمة جاهزة: {health}")
+            print(f"   ✅ الخدمة جاهزة ومستقرة بعد {sec}ث: {health}")
             return True
-    print("   ⚠️ الخدمة لم تستجب بعد — جاري المتابعة...")
+        if sec % 5 == 0:
+            print(f"   ⏳ جاري انتظار إقلاع الخادم وتنظيف السجلات... ({sec}/35ث)")
+    print("   ❌ الخدمة لم تستجب بعد 35 ثانية.")
     return False
 
 
@@ -512,7 +514,11 @@ def resume_all_castles():
     print("🚀 تشغيل/استئناف جميع الحسابات الموافق عليها تدريجياً وبأمان...")
     print("=" * 65)
     client = get_ssh_client()
-    _restart_service_and_wait(client)
+    ok = _restart_service_and_wait(client)
+    if not ok:
+        print("❌ تعذر التأكد من جاهزية الخدمة — لم يتم إرسال أمر التشغيل التدريجي.")
+        client.close()
+        return
     resp = _run(client, "curl -s -X POST http://127.0.0.1:8000/api/internal/gradual-start")
     print(f"   الرد: {resp}")
     client.close()
@@ -594,7 +600,11 @@ def gradual_start_all():
     print("🔄 يعيد تشغيل الخدمة لتحميل آخر كود من القرص")
     print("=" * 65)
     client = get_ssh_client()
-    _restart_service_and_wait(client)
+    ok = _restart_service_and_wait(client)
+    if not ok:
+        print("❌ تعذر التأكد من جاهزية الخدمة — لم يتم إرسال أمر التشغيل التدريجي.")
+        client.close()
+        return
     resp = _run(client, 'curl -s -X POST http://127.0.0.1:8000/api/internal/gradual-start', timeout=30)
     print(f"   الرد: {resp}")
     client.close()

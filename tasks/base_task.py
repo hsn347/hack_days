@@ -102,6 +102,53 @@ PRESTIGE_QUEST_IDS: Dict[str, int] = {
 
 
 # ════════════════════════════════════════════════════════════════════
+#  سعات حقول ومناجم الموارد على الخريطة وفق كود اللعبة الأصلي
+#  (E:\osmanli\game file\lua_src\src\src\app\localtb\config_server\resource.lua)
+# ════════════════════════════════════════════════════════════════════
+
+RESOURCE_NODE_CAPACITIES: Dict[int, Dict[int, int]] = {
+    # 🪙 1. الذهب (Gold / Mithril) [subType = 1 | outputId = 1001]
+    1: {1: 12, 2: 22, 3: 35, 4: 55, 5: 75, 6: 105, 7: 135, 8: 170, 9: 205, 10: 250},
+    # 🌾 2. مزارع القمح (Food) [subType = 2 | outputId = 1002]
+    2: {1: 126000, 2: 252000, 3: 378000, 4: 504000, 5: 630000, 6: 756000, 7: 882000, 8: 1008000, 9: 1134000, 10: 1260000},
+    # 🪵 3. مناشر الخشب (Wood) [subType = 3 | outputId = 1003]
+    3: {1: 126000, 2: 252000, 3: 378000, 4: 504000, 5: 630000, 6: 756000, 7: 882000, 8: 1008000, 9: 1134000, 10: 1260000},
+    # ⛏️ 4. مناجم الحديد (Iron) [subType = 4 | outputId = 1004]
+    4: {1: 21000, 2: 42000, 3: 63000, 4: 84000, 5: 105000, 6: 126000, 7: 147000, 8: 168000, 9: 189000, 10: 210000},
+    # 💎 5. مناجم الكوارنز / الفضة (Silver / Mithril) [subType = 5 | outputId = 1005]
+    5: {1: 5250, 2: 10500, 3: 15750, 4: 21000, 5: 26250, 6: 31500, 7: 36750, 8: 42000, 9: 47250, 10: 52500},
+}
+
+RESOURCE_TYPE_ALIASES: Dict[str, int] = {
+    "1": 1, "gold": 1, "ذهب": 1, "الذهب": 1, "mithril": 1,
+    "2": 2, "food": 2, "قمح": 2, "القمح": 2, "مزرعة": 2, "مزارع": 2,
+    "3": 3, "wood": 3, "خشب": 3, "الخشب": 3, "منشرة": 3, "مناشر": 3,
+    "4": 4, "iron": 4, "حديد": 4, "الحديد": 4, "منجم": 4, "مناجم": 4,
+    "5": 5, "silver": 5, "فضة": 5, "الفضة": 5, "كوارنز": 5, "الكوارنز": 5, "stone": 5, "حجر": 5, "الحجر": 5, "diamond": 5, "الماس": 5, "ألماس": 5,
+}
+
+def get_resource_node_capacity(res_type: int | str, level: int) -> int:
+    """
+    استرجاع السعة القصوى لحقل المورد على الخريطة وفق كود اللعبة الأصلي (config_server/resource.lua).
+    
+    :param res_type: نوع المورد (1/gold, 2/food, 3/wood, 4/iron, 5/silver أو المسميات العربية/الإنجليزية).
+    :param level: مستوى الحقل (من 1 إلى 10).
+    :return: سعة الحقل الإجمالية، أو 0 إذا كان النوع أو المستوى غير صالح.
+    """
+    sub_type: Optional[int] = None
+    if isinstance(res_type, int):
+        sub_type = res_type
+    elif isinstance(res_type, str):
+        sub_type = RESOURCE_TYPE_ALIASES.get(res_type.strip().lower(), None)
+        if sub_type is None and res_type.strip().isdigit():
+            sub_type = int(res_type.strip())
+
+    if sub_type not in RESOURCE_NODE_CAPACITIES:
+        return 0
+    return RESOURCE_NODE_CAPACITIES[sub_type].get(int(level), 0)
+
+
+# ════════════════════════════════════════════════════════════════════
 #  الـ interface المشترك لجميع المهام (BaseTask)
 # ════════════════════════════════════════════════════════════════════
 
@@ -424,6 +471,13 @@ class BaseTask(ABC):
     def _get_lord_stamina(self) -> int:
         """اسم بديل للتوافق مع المهام القائمة."""
         return self.get_lord_stamina()
+
+    def get_resource_capacity(self, res_type: int | str, level: int) -> int:
+        """
+        استرجاع سعة حقل المورد الإجمالية وفق كود اللعبة الأصلي (resource.lua).
+        متاح لكافة المهام المشتقة من BaseTask.
+        """
+        return get_resource_node_capacity(res_type, level)
 
     def get_castle_level(self) -> int:
         """
