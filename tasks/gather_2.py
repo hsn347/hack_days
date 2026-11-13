@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather_2.py --email "shook123@gmail.com" --res 2 --level 5 --range 100
+python tasks/gather_2.py --email "burcudemr@gmail.com" --res 4 --level 6 --range 100
 
 """
 
@@ -386,22 +386,18 @@ def calculate_load_bonus(
     has_gather_hero: bool = False
 ) -> float:
     """
-    حساب بونص سعة حمولة القوات الحقيقي لأي حساب وفق كود اللعبة الأصلي (kingdomMapCtrl:getArmyWeightPlus):
-    1. أبحاث المعهد (technologyCtrl):
+    حساب بونص سعة حمولة القوات الحقيقي لأي حساب وفق كود اللعبة الأصلي بالسنتيمتر (kingdomMapCtrl:getArmyWeightPlus):
+    1. أبحاث المعهد (technologyCtrl:getTechnologyPower(FORCE_LOAD)):
        - 22001 (عربة الإمداد I): +0.01 (+1%) لكل لفل (حتى +10%).
        - 22010 (عربة الإمداد II): +0.02 (+2%) لكل لفل (حتى +30%).
-    2. مهارة اللورد (lordInfoCtrl / lordSkillCtrl):
+    2. مهارة اللورد (lordInfoCtrl:getTechnologyPower(FORCE_LOAD)):
        - 11001 (الحمولة القسرية): +0.02 (+2%) لكل لفل في شجرة اللورد العسكرية (حتى +10%).
-    3. امتيازات الـ VIP (vipCtrl):
-       - التأثير 117 (SOLDIER_LOAD_BOOST): يمنح 20 في الألف (+2%) لكل مستوى VIP.
-    4. عتاد اللورد المرتدى (equipmentCtrl):
-       - أحذية النقل EID 6520000 تمنح السمة 32 (SOLDIER_LOAD) بنسبة مئوية محسوبة بدقة من
-         مستوى التعزيز (slv) ومستوى الصقل (rlv) وفق صيغة اللعبة الأصلية (equipmentCell:getCurEquipRefineSkillResult).
-    5. بونصات العناصر والتعزيزات النشطة (buffCtrl):
-       - التأثير 117 (SOLDIER_LOAD_BOOST مقسوماً على 1000).
-    6. بونص السمات العامة للحرب (boeAttributeCtrl):
+    3. بونصات العناصر والتعزيزات النشطة (buffCtrl:getBuffEffect(SOLDIER_LOAD_BOOST)):
+       - التأثير 117 مقسوماً على 1000.
+    4. بونص السمات العامة للحرب والأبطال (boeAttributeCtrl:query(ALL_WAR, ALL_ARMY, P_LOAD, heroList)):
        - سمة P_LOAD (11) تحت الشرط ALL_WAR (1) والهدف ALL_ARMY (1) مقسومة على 1000.
-    7. بونص أبطال المسيرة المختارين (مهارة الحمولة 5620001 تمنح حتى +14.312% عند لفل 40).
+       - ملاحظة سورس اللعبة: السيرفر يدمج العتاد وVIP ضمن boeAttributeCtrl ولا تُجمع منفصلة لمنع التكرار.
+       - بونص أبطال المسيرة المختارين (مهارة الحمولة 5620001 تمنح حتى +14.312% عند لفل 40).
     """
     init_data = getattr(conn, "init_data", {})
     if not isinstance(init_data, dict):
@@ -431,6 +427,8 @@ def calculate_load_bonus(
     lv_22010 = _get_tech_lv(22010)
     if lv_22010 > 0:
         tech_bonus += lv_22010 * 0.02
+
+    print(f"🔬🔬🔬🔬🔬 [tech] lv_22001={lv_22001}, lv_22010={lv_22010} -> tech_bonus={tech_bonus:.5f}")
 
     # 2. مهارات اللورد (lordSkillCtrl / lordInfoCtrl)
     lord_bonus = 0.0
@@ -464,27 +462,10 @@ def calculate_load_bonus(
     if lv_11001 > 0:
         lord_bonus += lv_11001 * 0.02
 
-    # 3. امتيازات الـ VIP (vipCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
-    # كل مستوى VIP يمنح 20 في الألف (0.02) لحمولة القوات
-    vip_lv = int(init_data.get('vipCtrl', {}).get('vipLv', 0))
-    vip_bonus = (vip_lv * 20.0) / 1000.0
+    print(f"👑👑👑👑👑 [lord] lv_11001={lv_11001} -> lord_bonus={lord_bonus:.5f}")
 
-    # 4. عتاد اللورد المرتدى (equipmentCtrl - السمة 32 SOLDIER_LOAD)
-    equip_bonus = 0.0
-    eq_ctrl = init_data.get('equipmentCtrl', {})
-    if isinstance(eq_ctrl, dict):
-        for item in eq_ctrl.get('equipment_array', []):
-            if isinstance(item, dict) and item.get('isWear') and item.get('eid') == 6520000:
-                slv = int(item.get('slv', 0))
-                rlv = int(item.get('rlv', 0))
-                st_val = STRENGTHEN_6520000[min(max(slv, 0), len(STRENGTHEN_6520000) - 1)]
-                rf_base, rf_skill = REFINE_6520000.get(min(max(rlv, 0), 25), (0, 0))
-                all_prop = 100 + st_val + rf_base
-                skill_val = 400 + rf_skill
-                res_val = math.floor(all_prop / 100.0 * skill_val) / 100.0  # في الألف
-                equip_bonus += res_val / 1000.0
-
-    # 5. بونصات العناصر النشطة (buffCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    # 3. بونصات العناصر والتعزيزات النشطة (buffCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    # armyWeightPlus = buffCtrl:getBuffEffect(gBuffEffect.SOLDIER_LOAD_BOOST)
     buff_bonus = 0.0
     buffs = init_data.get('buffCtrl', [])
     if isinstance(buffs, list):
@@ -493,25 +474,50 @@ def calculate_load_bonus(
                 try: buff_bonus += float(b.get('val', 0)) / 1000.0
                 except Exception: pass
 
-    # 6. بونص سمات الحرب boeAttributeCtrl (السمة 11 - P_LOAD تحت الشرط 1)
+    print(f"⚡⚡⚡⚡⚡ [buff] buff_bonus={buff_bonus:.5f}")
+
+    # 4. بونص سمات الحرب المشتركة boeAttributeCtrl (السمة 11 - P_LOAD تحت الشرط 1 والهدف 1)
+    # boeAttribute_add = boeAttributeCtrl:query(gAttrCondDef.ALL_WAR, gAttrTargetDef.ALL_ARMY, gAttributeDef.P_LOAD, heroList)
+    # ملاحظة حاسمة من سورس اللعبة: سيرفر اللعبة يقوم مسبقاً بدمج عتاد الأحذية وبونص VIP ضمن boeAttributeCtrl
+    # ولذلك يُمنع جمع VIP والعتاد يدوياً مرة أخرى منعاً لتكرار ومضاعفة البونص
     boe_bonus = 0.0
-    cached_boe = getattr(conn, "_cached_boe_pload", None)
-    if cached_boe is not None and isinstance(cached_boe, (int, float)) and cached_boe > 0:
-        boe_bonus = float(cached_boe)
-    else:
-        boe = init_data.get('boeAttributeCtrl', {})
-        if isinstance(boe, dict):
-            c1 = boe.get('1', {}).get('1', {}).get('11', {})
-            if isinstance(c1, dict) and '1' in c1:
-                try:
-                    raw = float(c1['1'])
-                    boe_bonus = raw / 1000.0
-                except Exception: pass
+    
+    boe = init_data.get('boeAttributeCtrl', {})
+    print(f"🎃🎃🎃🎃🎃 [boe_raw] {boe.get('1', {}).get('1', {}).get('11') if isinstance(boe, dict) else None}")
+    if isinstance(boe, dict):
+        c1 = boe.get('1', {}).get('1', {}).get('11', {})
+        if isinstance(c1, dict) and '1' in c1:
+            try:
+                raw = float(c1['1'])
+                boe_bonus = raw / 1000.0
+            except Exception: pass
+    print(f"👁‍🗨👁‍🗨👁‍🗨👁‍🗨👁‍🗨 [boe_bonus_raw] {boe_bonus:.5f}")
 
-    # الحساب الديناميكي الدقيق الخالي من أي أرقام تخمينية ثابتة (kingdomMapCtrl:getArmyWeightPlus)
-    base_bonus = tech_bonus + lord_bonus + vip_bonus + equip_bonus + buff_bonus + boe_bonus
+    # في حال انعدام الاتصال المباشر وفراغ الذاكرة تماماً من boeAttributeCtrl (مثل محاكاة بدون نت)،
+    # نحسب تقدير العتاد والـ VIP فقط كاحتياط طوارئ (Fallback) لكي لا يكون boe_bonus صفراً
+    if boe_bonus <= 0.0:
+        vip_lv = int(init_data.get('vipCtrl', {}).get('vipLv', 0))
+        vip_est = (vip_lv * 20.0) / 1000.0
+        print(f"🎖️🎖️🎖️🎖️🎖️ [fallback_vip] vip_lv={vip_lv} -> vip_est={vip_est:.5f}")
+        equip_est = 0.0
+        eq_ctrl = init_data.get('equipmentCtrl', {})
+        if isinstance(eq_ctrl, dict):
+            for item in eq_ctrl.get('equipment_array', []):
+                if isinstance(item, dict) and item.get('isWear') and item.get('eid') == 6520000:
+                    slv = int(item.get('slv', 0))
+                    rlv = int(item.get('rlv', 0))
+                    st_val = STRENGTHEN_6520000[min(max(slv, 0), len(STRENGTHEN_6520000) - 1)]
+                    rf_base, rf_skill = REFINE_6520000.get(min(max(rlv, 0), 25), (0, 0))
+                    all_prop = 100 + st_val + rf_base
+                    skill_val = 400 + rf_skill
+                    res_val = math.floor(all_prop / 100.0 * skill_val) / 100.0
+                    equip_est = res_val / 1000.0
+                    break
+        print(f"🥾🥾🥾🥾🥾 [fallback_equip] equip_est={equip_est:.5f}")
+        boe_bonus = vip_est + equip_est
+        print(f"🛡️🛡️🛡️🛡️🛡️ [fallback_boe_total] boe_bonus={boe_bonus:.5f}")
 
-    # 5. بونص أبطال الجمع والتنمية المختارين للمسيرة (مهارة 5620001 - سعة الحمولة)
+    # 5. بونص مهارات أبطال المسيرة المختارين (5620001) المدمجة عبر boeAttributeCtrl:query(..., heroList)
     hero_bonus = 0.0
     h_ctrl = init_data.get('heroCtrl', {})
     h_map: Dict[Any, dict] = {}
@@ -544,7 +550,13 @@ def calculate_load_bonus(
     elif has_gather_hero:
         hero_bonus = 0.143123
 
-    return max(0.0, base_bonus + hero_bonus)
+    print(f"🦸🦸🦸🦸🦸 [hero] hero_list={hero_list} -> hero_bonus={hero_bonus:.5f}")
+
+    # المجموع المطابق تماماً لـ kingdomMapCtrl:getArmyWeightPlus في سورس اللعبة الأصلي بالسنتيمتر:
+    # ret = technologyPower + lordTechnologyPower + buffEffect/1000 + boeAttribute/1000
+    ret = tech_bonus + lord_bonus + buff_bonus + boe_bonus + hero_bonus
+    print(f"🏁🏁🏁🏁🏁 [ret_total_bonus] tech={tech_bonus:.5f} + lord={lord_bonus:.5f} + buff={buff_bonus:.5f} + boe={boe_bonus:.5f} + hero={hero_bonus:.5f} = {ret:.5f}")
+    return max(0.0, ret)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -557,7 +569,7 @@ def select_gathering_army(
     load_bonus: float = 0.0,
     hero_bonus: float = 0.0,
     max_march_troops: Optional[int] = None,
-    headroom_ratio: float = 0.03,
+    headroom_ratio: float = 0.05,
     log: Optional[Any] = None,
 ) -> Tuple[List[Dict[str, int]], int]:
     """
@@ -565,10 +577,11 @@ def select_gathering_army(
     1. الأولوية المطلقة لعربة نقل المستوى 1 (701) أولاً دائماً.
     2. فرز باقي القوات والورشة تنازلياً حسب سعة الحمولة الحرة (freeWeight):
        - عربات الإمداد الأعلى (711، 709، 707، 705، 703) تأتي مباشرة لتغطية أي نقص.
-       - ثم المنجنيق وعربات الهجوم (712..702) والمشاة والفرسان والرماة عند الحاجة.
+       - ثم المنجنيق وعربات الهجوم (712..702) والمشاة والفرسان والرماة عند الحاجة وفق أولويات اللعبة الرسمية.
     3. حساب سعة كل وحدة بدقة بالغة عبر calculate_unit_capacity ديناميكياً لكل حساب وفق عتاده ومستوى VIP وأبحاثه.
-    4. تطبيق هامش أمان ذكي (+3.0% افتراضياً) لمنع بقاء أي بقايا (Zero Tile Leftovers) وضمان مسح الحقل حتى الصفر.
-    5. إرسال أي قوات متاحة لتغطية حمولة الحقل بدون أي شرط مانع للسعة.
+    4. تطبيق هامش أمان ذكي (+5.0% افتراضياً) لمنع بقاء أي بقايا (Zero Tile Leftovers) وضمان مسح الحقل حتى الصفر.
+    5. صمام الأمان (Full-Clear Safety Guard): يكمل النقص من جنود القلعة المتاحين وفق أولويات اللعبة الرسمية،
+       وإذا نفدت القوات أو بلغت سعة المسيرة حدها يرسل الفيلق المتاح لإتمام الجمع قدر المستطاع ("كأن شيئاً لم يكن").
     6. الالتزام الصارم بسقف سعة معسكر التجمع ومسيرة اللورد (max_march_troops) لمنع تجاوز السعة وتجنب خطأ 8035.
     """
     # الترتيب المطابق تماماً لدالة sortArmyListByWeight في worldDispatchArmyView.lua
@@ -587,7 +600,7 @@ def select_gathering_army(
         key=_troop_sort_key
     )
 
-    # حساب سعة الحمولة المطلوبة مع هامش الأمان الذكي (+1.5%) لضمان التفريغ التام
+    # حساب سعة الحمولة المطلوبة مع هامش الأمان الذكي (+5.0%) لضمان التفريغ التام
     rem_load = float(target_load) * (1.0 + max(0.0, float(headroom_ratio)))
     total_carried = 0.0
     army_list: List[Dict[str, int]] = []
@@ -621,6 +634,21 @@ def select_gathering_army(
             current_total_troops += needed
             if rem_load <= 0:
                 break
+
+    _logger = log or logging.getLogger("gather_2")
+    if target_load > 0:
+        coverage_pct = (total_carried / float(target_load)) * 100.0
+        if total_carried >= target_load:
+            _logger.info(
+                f"🛡️ [صمام الأمان] تم تأمين حمولة الحقل بنجاح 100% (+{headroom_ratio*100:.0f}% أمان) "
+                f"وفق أولويات اللعبة الرسمية | حمولة: {int(round(total_carried)):,}/{target_load:,}"
+            )
+        else:
+            deficit = target_load - total_carried
+            _logger.warning(
+                f"⚠️ [صمام الأمان] الفيلق ناقص (تغطية {coverage_pct:.1f}%) — عجز: {int(round(deficit)):,} حمولة | "
+                f"المتابعة وإرسال الفيلق المتاح وفق أولويات اللعبة الرسمية لعدم وجود جنود إضافيين أو لبلوغ سقف المسيرة ({current_total_troops}/{max_march_troops or '∞'})."
+            )
 
     return army_list, int(round(total_carried))
 
@@ -1031,16 +1059,16 @@ class GatherTask_2(BaseTask):
             )
             return "TARGET_OCCUPIED"
 
-        # فحص محتوى الحقل: إذا كان أقل من ثلث سعته الأصلية (33.3%)، يتم استبعاده والبحث عن هدف آخر
+        # فحص محتوى الحقل: إذا كان أقل من 15% من سعته الأصلية، يتم استبعاده والبحث عن هدف آخر
         node_cap = int(ret22.get('totalSourceNum', 0)) if (ret22 and isinstance(ret22, dict)) else 0
         if node_cap <= 0:
             node_cap = RESOURCE_NODE_CAPACITIES.get(res_info.get("sub_type", 1), {}).get(actual_found_lv, 0)
 
-        if node_cap > 0 and cur_res < (node_cap / 3.0):
+        if node_cap > 0 and cur_res < (node_cap * 0.15):
             pct = (cur_res / node_cap) * 100.0
             self.log.warning(
                 f"⚠️ الحقل {target_id} يحتوي على {cur_res:,} مورد ({pct:.1f}%) "
-                f"وهو أقل من ثلث سعته القصوى ({node_cap:,}) — استبعاده والبحث عن هدف آخر ⛔"
+                f"وهو أقل من 15% من سعته القصوى ({node_cap:,}) — استبعاده والبحث عن هدف آخر ⛔"
             )
             # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
             await self._exclude_mgr.confirm(
@@ -1083,12 +1111,6 @@ class GatherTask_2(BaseTask):
         if pets_list:
             self.log.debug(f"   🐾 الحيوان: #{pets_list[0]}")
 
-        # استعلام سمات الحرب للحمولة من السيرفر وتحديث الكاش إن لم تكن متوفرة
-        try:
-            await fetch_war_boe_pload(self.conn)
-        except Exception:
-            pass
-
         # 5. حساب بونص سعة الحمولة الحقيقي وتشكيل الجيش
         load_bonus = calculate_load_bonus(
             self.conn,
@@ -1108,6 +1130,7 @@ class GatherTask_2(BaseTask):
             target_load=target_load,
             load_bonus=load_bonus,
             max_march_troops=max_march_troops,
+            headroom_ratio=0.05,
             log=self.log
         )
         if not army_list:

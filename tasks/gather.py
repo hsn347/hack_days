@@ -386,22 +386,18 @@ def calculate_load_bonus(
     has_gather_hero: bool = False
 ) -> float:
     """
-    حساب بونص سعة حمولة القوات الحقيقي لأي حساب وفق كود اللعبة الأصلي (kingdomMapCtrl:getArmyWeightPlus):
-    1. أبحاث المعهد (technologyCtrl):
+    حساب بونص سعة حمولة القوات الحقيقي لأي حساب وفق كود اللعبة الأصلي بالسنتيمتر (kingdomMapCtrl:getArmyWeightPlus):
+    1. أبحاث المعهد (technologyCtrl:getTechnologyPower(FORCE_LOAD)):
        - 22001 (عربة الإمداد I): +0.01 (+1%) لكل لفل (حتى +10%).
        - 22010 (عربة الإمداد II): +0.02 (+2%) لكل لفل (حتى +30%).
-    2. مهارة اللورد (lordInfoCtrl / lordSkillCtrl):
+    2. مهارة اللورد (lordInfoCtrl:getTechnologyPower(FORCE_LOAD)):
        - 11001 (الحمولة القسرية): +0.02 (+2%) لكل لفل في شجرة اللورد العسكرية (حتى +10%).
-    3. امتيازات الـ VIP (vipCtrl):
-       - التأثير 117 (SOLDIER_LOAD_BOOST): يمنح 20 في الألف (+2%) لكل مستوى VIP.
-    4. عتاد اللورد المرتدى (equipmentCtrl):
-       - أحذية النقل EID 6520000 تمنح السمة 32 (SOLDIER_LOAD) بنسبة مئوية محسوبة بدقة من
-         مستوى التعزيز (slv) ومستوى الصقل (rlv) وفق صيغة اللعبة الأصلية (equipmentCell:getCurEquipRefineSkillResult).
-    5. بونصات العناصر والتعزيزات النشطة (buffCtrl):
-       - التأثير 117 (SOLDIER_LOAD_BOOST مقسوماً على 1000).
-    6. بونص السمات العامة للحرب (boeAttributeCtrl):
+    3. بونصات العناصر والتعزيزات النشطة (buffCtrl:getBuffEffect(SOLDIER_LOAD_BOOST)):
+       - التأثير 117 مقسوماً على 1000.
+    4. بونص السمات العامة للحرب والأبطال (boeAttributeCtrl:query(ALL_WAR, ALL_ARMY, P_LOAD, heroList)):
        - سمة P_LOAD (11) تحت الشرط ALL_WAR (1) والهدف ALL_ARMY (1) مقسومة على 1000.
-    7. بونص أبطال المسيرة المختارين (مهارة الحمولة 5620001 تمنح حتى +14.312% عند لفل 40).
+       - ملاحظة سورس اللعبة: السيرفر يدمج العتاد وVIP ضمن boeAttributeCtrl ولا تُجمع منفصلة لمنع التكرار.
+       - بونص أبطال المسيرة المختارين (مهارة الحمولة 5620001 تمنح حتى +14.312% عند لفل 40).
     """
     init_data = getattr(conn, "init_data", {})
     if not isinstance(init_data, dict):
@@ -464,27 +460,8 @@ def calculate_load_bonus(
     if lv_11001 > 0:
         lord_bonus += lv_11001 * 0.02
 
-    # 3. امتيازات الـ VIP (vipCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
-    # كل مستوى VIP يمنح 20 في الألف (0.02) لحمولة القوات
-    vip_lv = int(init_data.get('vipCtrl', {}).get('vipLv', 0))
-    vip_bonus = (vip_lv * 20.0) / 1000.0
-
-    # 4. عتاد اللورد المرتدى (equipmentCtrl - السمة 32 SOLDIER_LOAD)
-    equip_bonus = 0.0
-    eq_ctrl = init_data.get('equipmentCtrl', {})
-    if isinstance(eq_ctrl, dict):
-        for item in eq_ctrl.get('equipment_array', []):
-            if isinstance(item, dict) and item.get('isWear') and item.get('eid') == 6520000:
-                slv = int(item.get('slv', 0))
-                rlv = int(item.get('rlv', 0))
-                st_val = STRENGTHEN_6520000[min(max(slv, 0), len(STRENGTHEN_6520000) - 1)]
-                rf_base, rf_skill = REFINE_6520000.get(min(max(rlv, 0), 25), (0, 0))
-                all_prop = 100 + st_val + rf_base
-                skill_val = 400 + rf_skill
-                res_val = math.floor(all_prop / 100.0 * skill_val) / 100.0  # في الألف
-                equip_bonus += res_val / 1000.0
-
-    # 5. بونصات العناصر النشطة (buffCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    # 3. بونصات العناصر والتعزيزات النشطة (buffCtrl - التأثير 117 SOLDIER_LOAD_BOOST)
+    # armyWeightPlus = buffCtrl:getBuffEffect(gBuffEffect.SOLDIER_LOAD_BOOST)
     buff_bonus = 0.0
     buffs = init_data.get('buffCtrl', [])
     if isinstance(buffs, list):
@@ -493,7 +470,10 @@ def calculate_load_bonus(
                 try: buff_bonus += float(b.get('val', 0)) / 1000.0
                 except Exception: pass
 
-    # 6. بونص سمات الحرب boeAttributeCtrl (السمة 11 - P_LOAD تحت الشرط 1)
+    # 4. بونص سمات الحرب المشتركة boeAttributeCtrl (السمة 11 - P_LOAD تحت الشرط 1 والهدف 1)
+    # boeAttribute_add = boeAttributeCtrl:query(gAttrCondDef.ALL_WAR, gAttrTargetDef.ALL_ARMY, gAttributeDef.P_LOAD, heroList)
+    # ملاحظة حاسمة من سورس اللعبة: سيرفر اللعبة يقوم مسبقاً بدمج عتاد الأحذية وبونص VIP ضمن boeAttributeCtrl
+    # ولذلك يُمنع جمع VIP والعتاد يدوياً مرة أخرى منعاً لتكرار ومضاعفة البونص
     boe_bonus = 0.0
     cached_boe = getattr(conn, "_cached_boe_pload", None)
     if cached_boe is not None and isinstance(cached_boe, (int, float)) and cached_boe > 0:
@@ -508,10 +488,28 @@ def calculate_load_bonus(
                     boe_bonus = raw / 1000.0
                 except Exception: pass
 
-    # الحساب الديناميكي الدقيق الخالي من أي أرقام تخمينية ثابتة (kingdomMapCtrl:getArmyWeightPlus)
-    base_bonus = tech_bonus + lord_bonus + vip_bonus + equip_bonus + buff_bonus + boe_bonus
+    # في حال انعدام الاتصال المباشر وفراغ الذاكرة تماماً من boeAttributeCtrl (مثل محاكاة بدون نت)،
+    # نحسب تقدير العتاد والـ VIP فقط كاحتياط طوارئ (Fallback) لكي لا يكون boe_bonus صفراً
+    if boe_bonus <= 0.0:
+        vip_lv = int(init_data.get('vipCtrl', {}).get('vipLv', 0))
+        vip_est = (vip_lv * 20.0) / 1000.0
+        equip_est = 0.0
+        eq_ctrl = init_data.get('equipmentCtrl', {})
+        if isinstance(eq_ctrl, dict):
+            for item in eq_ctrl.get('equipment_array', []):
+                if isinstance(item, dict) and item.get('isWear') and item.get('eid') == 6520000:
+                    slv = int(item.get('slv', 0))
+                    rlv = int(item.get('rlv', 0))
+                    st_val = STRENGTHEN_6520000[min(max(slv, 0), len(STRENGTHEN_6520000) - 1)]
+                    rf_base, rf_skill = REFINE_6520000.get(min(max(rlv, 0), 25), (0, 0))
+                    all_prop = 100 + st_val + rf_base
+                    skill_val = 400 + rf_skill
+                    res_val = math.floor(all_prop / 100.0 * skill_val) / 100.0
+                    equip_est = res_val / 1000.0
+                    break
+        boe_bonus = vip_est + equip_est
 
-    # 5. بونص أبطال الجمع والتنمية المختارين للمسيرة (مهارة 5620001 - سعة الحمولة)
+    # 5. بونص مهارات أبطال المسيرة المختارين (5620001) المدمجة عبر boeAttributeCtrl:query(..., heroList)
     hero_bonus = 0.0
     h_ctrl = init_data.get('heroCtrl', {})
     h_map: Dict[Any, dict] = {}
@@ -544,7 +542,10 @@ def calculate_load_bonus(
     elif has_gather_hero:
         hero_bonus = 0.143123
 
-    return max(0.0, base_bonus + hero_bonus)
+    # المجموع المطابق تماماً لـ kingdomMapCtrl:getArmyWeightPlus في سورس اللعبة الأصلي بالسنتيمتر:
+    # ret = technologyPower + lordTechnologyPower + buffEffect/1000 + boeAttribute/1000
+    ret = tech_bonus + lord_bonus + buff_bonus + boe_bonus + hero_bonus
+    return max(0.0, ret)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -557,7 +558,7 @@ def select_gathering_army(
     load_bonus: float = 0.0,
     hero_bonus: float = 0.0,
     max_march_troops: Optional[int] = None,
-    headroom_ratio: float = 0.03,
+    headroom_ratio: float = 0.05,
 ) -> Tuple[List[Dict[str, int]], int]:
     """
     اختيار تشكيلة الجيش تلقائياً لجمع الموارد وفق كود اللعبة الأصلي (worldDispatchArmyView:sortArmyListByWeight):
@@ -566,7 +567,7 @@ def select_gathering_army(
        - عربات الإمداد الأعلى (711، 709، 707، 705، 703) تأتي مباشرة لتغطية أي نقص.
        - ثم المنجنيق وعربات الهجوم (712..702) والمشاة والفرسان والرماة عند الحاجة.
     3. حساب سعة كل وحدة بدقة بالغة عبر calculate_unit_capacity ديناميكياً لكل حساب وفق عتاده ومستوى VIP وأبحاثه.
-    4. تطبيق هامش أمان ذكي (+3.0% افتراضياً) لمنع بقاء أي بقايا (Zero Tile Leftovers) وضمان مسح الحقل حتى الصفر.
+    4. تطبيق هامش أمان ذكي (+5.0% افتراضياً) لمنع بقاء أي بقايا (Zero Tile Leftovers) وضمان مسح الحقل حتى الصفر.
     5. إرسال أي قوات متاحة لتغطية حمولة الحقل بدون أي شرط مانع للسعة.
     6. الالتزام الصارم بسقف سعة معسكر التجمع ومسيرة اللورد (max_march_troops) لمنع تجاوز السعة وتجنب خطأ 8035.
     """
@@ -586,7 +587,7 @@ def select_gathering_army(
         key=_troop_sort_key
     )
 
-    # حساب سعة الحمولة المطلوبة مع هامش الأمان الذكي (+1.5%) لضمان التفريغ التام
+    # حساب سعة الحمولة المطلوبة مع هامش الأمان الذكي (+5.0%) لضمان التفريغ التام
     rem_load = float(target_load) * (1.0 + max(0.0, float(headroom_ratio)))
     total_carried = 0.0
     army_list: List[Dict[str, int]] = []

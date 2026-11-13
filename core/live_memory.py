@@ -199,10 +199,14 @@ DEFAULT_KEY_MAPS: Dict[str, KeySpec] = {
 
     # Alliance help list
     "allianceCtrl.helplist": ("id", "helpId"),
+
+    # Equipment items: match by eid (equipment ID)
+    "equipmentCtrl.equipment_array": ("eid", "id"),
+    "equipment_array": ("eid", "id"),
 }
 
 GENERIC_CANDIDATE_KEYS = (
-    "index", "id", "bid", "qtype", "queuetype", "queueId",
+    "index", "id", "eid", "bid", "qtype", "queuetype", "queueId",
     "heroId", "buffId", "taskId", "helpId", "itemId", "uid", "key"
 )
 
