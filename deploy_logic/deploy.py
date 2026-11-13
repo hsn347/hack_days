@@ -193,6 +193,10 @@ EXCLUDE_EXACT_FILES = {
     "sniffer_log.txt",
     "exclude_history.json",
     "shared_gather_history.json",
+    "user_proxy_bindings.json",
+    "static_residential_proxies.json",
+    "webshare_free_proxies.json",
+    "webshare_proxies.json",
     "backend_dist.tar.gz",
     "dist.tar.gz",
 }
@@ -246,6 +250,10 @@ def create_backend_bundle() -> tuple[str, int]:
                 # تحقق مضاعف لضمان عدم تمرير أي ملف يقع تحت مسار مستثنى
                 path_parts = rel_path.split("/")
                 if any(_should_exclude_dir(p) for p in path_parts[:-1]):
+                    continue
+
+                # حظر رفع أي ملفات كاش أو ارتباطات للبروكسي من البيئة المحلية
+                if rel_path.startswith("proxy/") and rel_path.endswith(".json"):
                     continue
 
                 tar.add(full_path, arcname=rel_path)

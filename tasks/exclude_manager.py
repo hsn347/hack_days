@@ -70,7 +70,7 @@ class ExcludeManager:
     RESERVED_TTL_SECONDS    = 90.0       # صلاحية الحجز المؤقت في الذاكرة لمنع Race Condition بين القلاع الشقيقة
     MAX_EXCLUDE_AGE_SECONDS = 5 * 3600   # 5 ساعات — أقصى عمر مقلوب للأهداف في الاستبعاد (لا يُستبعد ما هو أقدم من 5 ساعات)
     MAX_QUERY_EXCLUDES      = 60         # الحد الأقصى للأهداف المعادة في get_exclude_map
-    MAX_QUERY_DISTANCE      = 120.0      # أقصى مسافة دائرية مقبولة عن موقع القلعة (x, y)
+    MAX_QUERY_DISTANCE      = 150.0      # أقصى مسافة مربعة مقبولة عن موقع القلعة (x, y)
 
     def __init__(self, db_path: str | None = None):
         self._lock = threading.Lock()
@@ -479,9 +479,9 @@ class ExcludeManager:
             params.append(cutoff_ts)
 
             if x is not None and y is not None:
-                dist_sq = max_distance * max_distance
-                where_clauses.append("(x IS NULL OR y IS NULL OR ((x - ?) * (x - ?) + (y - ?) * (y - ?)) <= ?)")
-                params.extend([x, x, y, y, dist_sq])
+                max_dist = float(max_distance)
+                where_clauses.append("(x IS NULL OR y IS NULL OR (abs(x - ?) <= ? AND abs(y - ?) <= ?))")
+                params.extend([x, max_dist, y, max_dist])
 
             query = f"""
                 SELECT target_id FROM excluded_targets

@@ -160,6 +160,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                     safe_iron INTEGER DEFAULT 0,
                     safe_diamond INTEGER DEFAULT 0,
                     loop_interval INTEGER DEFAULT 40,
+                    proxy_index INTEGER DEFAULT -1,
                     last_updated TEXT,
                     raw_json TEXT
                 );
@@ -254,6 +255,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                     "avatar": "TEXT DEFAULT ''",
                     "image_id": "INTEGER DEFAULT 0",
                     "loop_interval": "INTEGER DEFAULT 40",
+                    "proxy_index": "INTEGER DEFAULT -1",
                 }
                 for col_name, col_def in new_cols.items():
                     if col_name not in existing_cols:
@@ -284,6 +286,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users(LOWER(email));")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_states_created_at ON castle_states(created_at DESC);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_castle_states_proxy_index ON castle_states(proxy_index);")
 
                 conn.commit()
             _db_initialized = True
@@ -1041,6 +1044,92 @@ def save_castle(
     except Exception as e:
         log.warning(f"⚠️ تعذر حفظ القلعة ({cid}): {e}")
         return False
+
+
+def get_castle_proxy_index(email: str, db_path: Optional[str] = None) -> Optional[int]:
+    """استرجاع مؤشر البروكسي (proxy_index) المحفوظ للقلعة في قاعدة البيانات."""
+    clean_email = (email or "").strip().lower()
+    if not clean_email:
+        return None
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT proxy_index FROM castle_states WHERE lower(email) = ? LIMIT 1",
+                (clean_email,)
+            ).fetchone()
+            if row and row[0] is not None and row[0] >= 0:
+                return int(row[0])
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء قراءة proxy_index للقلعة ({clean_email}): {e}")
+    return None
+
+
+def set_castle_proxy_index(email: str, proxy_index: int, db_path: Optional[str] = None) -> bool:
+    """حفظ أو تحديث مؤشر البروكسي (proxy_index) للقلعة في قاعدة البيانات."""
+    clean_email = (email or "").strip().lower()
+    if not clean_email or proxy_index is None:
+        return False
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            cur = conn.execute(
+                "UPDATE castle_states SET proxy_index = ? WHERE lower(email) = ?",
+                (int(proxy_index), clean_email)
+            )
+            if cur.rowcount == 0 and int(proxy_index) >= 0:
+                conn.execute(
+                    """
+                    INSERT INTO castle_states (castle_id, email, proxy_index, created_at)
+                    VALUES (?, ?, ?, datetime('now'))
+                    ON CONFLICT(castle_id) DO UPDATE SET proxy_index = excluded.proxy_index
+                    """,
+                    (clean_email, clean_email, int(proxy_index))
+                )
+            conn.commit()
+            return True
+    except Exception as e:
+        log.warning(f"⚠️ تعذر حفظ proxy_index للقلعة ({clean_email}): {e}")
+        return False
+
+
+def get_user_proxy_index(user_id: str, db_path: Optional[str] = None) -> Optional[int]:
+    """استرجاع مؤشر البروكسي الخاص بأي قلعة تابعة لنفس المستخدم لتوحيد البروكسي بينهم."""
+    clean_uid = (user_id or "").strip()
+    if not clean_uid:
+        return None
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT proxy_index FROM castle_states WHERE (user_id = ? OR lower(user_id) = ?) AND proxy_index >= 0 LIMIT 1",
+                (clean_uid, clean_uid.lower())
+            ).fetchone()
+            if row and row[0] is not None and row[0] >= 0:
+                return int(row[0])
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء قراءة proxy_index للمستخدم ({clean_uid}): {e}")
+    return None
+
+
+def get_all_castle_proxy_counts(total_proxies: int, db_path: Optional[str] = None) -> Dict[int, int]:
+    """حساب عدد القلاع المربوطة بكل مؤشر بروكسي (0..total_proxies-1) لتحقيق توزيع متوازن."""
+    counts = {i: 0 for i in range(total_proxies)}
+    if total_proxies <= 0:
+        return counts
+    _ensure_init(db_path)
+    try:
+        with get_connection(db_path) as conn:
+            rows = conn.execute(
+                "SELECT proxy_index, count(*) FROM castle_states WHERE proxy_index >= 0 GROUP BY proxy_index"
+            ).fetchall()
+            for r in rows:
+                raw_idx = int(r[0])
+                safe_idx = raw_idx % total_proxies
+                counts[safe_idx] = counts.get(safe_idx, 0) + int(r[1])
+    except Exception as e:
+        log.warning(f"⚠️ خطأ أثناء حساب حمولة مؤشرات البروكسي: {e}")
+    return counts
 
 
 def get_user_castles(user_id: str, db_path: Optional[str] = None) -> List[Dict[str, Any]]:

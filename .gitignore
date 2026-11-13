@@ -33,6 +33,9 @@ _frida_session.js
 *.sqlite3
 exclude_history.json
 shared_gather_history.json
+user_proxy_bindings.json
+proxy/user_proxy_bindings.json
+proxy/*_proxies.json
 
 # Dependencies
 node_modules/

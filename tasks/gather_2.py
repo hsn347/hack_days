@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather_2.py --email "burcudemr@gmail.com" --res 3 --level 7 --range 100
+python tasks/gather_2.py --email "shook123@gmail.com" --res 2 --level 5 --range 100
 
 """
 
@@ -432,17 +432,22 @@ def calculate_load_bonus(
     if lv_22010 > 0:
         tech_bonus += lv_22010 * 0.02
 
-    # 2. مهارات اللورد (lordInfoCtrl / lordSkillCtrl)
-    lord_skills = init_data.get('lordInfoCtrl', {}).get('skill', {}).get('skillBasic', {})
+    # 2. مهارات اللورد (lordSkillCtrl / lordInfoCtrl)
     lord_bonus = 0.0
+    val_11001 = None
 
-    val_11001 = lord_skills.get('11001') or lord_skills.get(11001)
-    if not val_11001:
-        # فحص شجرة مهارات اللورد النشطة في lordSkillCtrl
-        ls_ctrl = init_data.get('lordSkillCtrl', {})
+    # فحص شجرة مهارات اللورد النشطة أولاً في lordSkillCtrl (مطابق لمنطق activeSet:queryBuff في اللعبة)
+    ls_ctrl = init_data.get('lordSkillCtrl', {})
+    if isinstance(ls_ctrl, dict):
         active_set = str(ls_ctrl.get('activeSetID', '1'))
         sdata = ls_ctrl.get('setListData', {}).get(active_set, {})
-        val_11001 = sdata.get('list', {}).get('11001')
+        if isinstance(sdata, dict):
+            val_11001 = sdata.get('list', {}).get('11001')
+
+    if not val_11001:
+        lord_skills = init_data.get('lordInfoCtrl', {}).get('skill', {}).get('skillBasic', {})
+        if isinstance(lord_skills, dict):
+            val_11001 = lord_skills.get('11001') or lord_skills.get(11001)
 
     lv_11001 = 0
     if isinstance(val_11001, list) and len(val_11001) > 1:
@@ -529,7 +534,11 @@ def calculate_load_bonus(
                             try: load_lv = int(s.get('lv', 0))
                             except Exception: pass
                 if load_lv > 0:
-                    hero_bonus += 0.143123 * (load_lv / 40.0)
+                    # معادلة مهارة الأبطال 5620001 الرسمية من كود heroSkillltCtrl.lua:
+                    # factor = (skillAttribute + (skillLv - 1) * addSkillAttribute) * (develment / 100) / 1000
+                    # حيث تبدأ المهارة من معامل 1.0 وتزداد بـ 0.2 لكل لفل حتى تصل إلى 8.8 عند لفل 40 (0.143123)
+                    skill_factor = 1.0 + (load_lv - 1) * 0.2
+                    hero_bonus += skill_factor * (0.143123 / 8.8)
             elif has_gather_hero:
                 hero_bonus += 0.143123
     elif has_gather_hero:
@@ -548,6 +557,8 @@ def select_gathering_army(
     load_bonus: float = 0.0,
     hero_bonus: float = 0.0,
     max_march_troops: Optional[int] = None,
+    headroom_ratio: float = 0.03,
+    log: Optional[Any] = None,
 ) -> Tuple[List[Dict[str, int]], int]:
     """
     اختيار تشكيلة الجيش تلقائياً لجمع الموارد وفق كود اللعبة الأصلي (worldDispatchArmyView:sortArmyListByWeight):
@@ -556,8 +567,9 @@ def select_gathering_army(
        - عربات الإمداد الأعلى (711، 709، 707، 705، 703) تأتي مباشرة لتغطية أي نقص.
        - ثم المنجنيق وعربات الهجوم (712..702) والمشاة والفرسان والرماة عند الحاجة.
     3. حساب سعة كل وحدة بدقة بالغة عبر calculate_unit_capacity ديناميكياً لكل حساب وفق عتاده ومستوى VIP وأبحاثه.
-    4. إرسال أي قوات متاحة لتغطية حمولة الحقل بدون أي شرط مانع للسعة.
-    5. الالتزام الصارم بسقف سعة معسكر التجمع ومسيرة اللورد (max_march_troops) لمنع تجاوز السعة وتجنب خطأ 8035.
+    4. تطبيق هامش أمان ذكي (+3.0% افتراضياً) لمنع بقاء أي بقايا (Zero Tile Leftovers) وضمان مسح الحقل حتى الصفر.
+    5. إرسال أي قوات متاحة لتغطية حمولة الحقل بدون أي شرط مانع للسعة.
+    6. الالتزام الصارم بسقف سعة معسكر التجمع ومسيرة اللورد (max_march_troops) لمنع تجاوز السعة وتجنب خطأ 8035.
     """
     # الترتيب المطابق تماماً لدالة sortArmyListByWeight في worldDispatchArmyView.lua
     def _troop_sort_key(tid: int):
@@ -575,8 +587,8 @@ def select_gathering_army(
         key=_troop_sort_key
     )
 
-    # حساب سعة الحمولة المطلوبة بدقة مطابقة لمحرك اللعبة (curResCount / armyWeight)
-    rem_load = float(target_load)
+    # حساب سعة الحمولة المطلوبة مع هامش الأمان الذكي (+1.5%) لضمان التفريغ التام
+    rem_load = float(target_load) * (1.0 + max(0.0, float(headroom_ratio)))
     total_carried = 0.0
     army_list: List[Dict[str, int]] = []
     current_total_troops = 0
@@ -595,6 +607,10 @@ def select_gathering_army(
             if remaining_quota <= 0:
                 break
             needed = min(needed, remaining_quota)
+
+        _logger = log or logging.getLogger("gather_2")
+        _logger.info(f"⚖️⚖️⚖️⚖️⚖️ {unit_weight}")
+        _logger.info(f"🎯🎯🎯🎯🎯 {needed}")
 
         if needed > 0:
             army_list.append({"id": tid, "num": needed})
@@ -660,6 +676,7 @@ class GatherTask_2(BaseTask):
         self._used_pets    : Set[int]      = set()
         self._exclude_mgr  = _get_exclude_manager()
         self._learned_max_march_troops: Optional[int] = None
+        self.target_lv: int = 6
 
     async def on_start(self):
         for _ in range(20):
@@ -710,12 +727,12 @@ class GatherTask_2(BaseTask):
             return TaskResult.fail(f"Silver requires Castle Lv 15 (current: {c_lv})", data={"sent": 0, "stop_reason": "CASTLE_LV_LOW"})
 
         # 2. استخراج مستوى الحقل المستهدف (مستوى واحد فقط)
-        target_lv = int(cfg.get('level') or cfg.get('lv') or cfg.get('min_lv') or 6)
+        self.target_lv = int(cfg.get('level') or cfg.get('lv') or cfg.get('min_lv') or 6)
 
         search_range = 100 # ثابت 100 كم بشكل مباشر ودائم
         max_marches_safety = int(cfg.get('max_marches') or 10)  # سقف أمان أقصى
 
-        self.log.info(f"🌾 [جمع الموارد] بدء البحث عن {res_info['name']} لفل {target_lv}")
+        self.log.info(f"🌾 [جمع الموارد] بدء البحث عن {res_info['name']} لفل {self.target_lv}")
 
         if not self._heroes:
             await self._load_heroes()
@@ -768,7 +785,7 @@ class GatherTask_2(BaseTask):
 
             status = await self._send_one_march(
                 res_info=res_info,
-                target_lv=target_lv,
+                target_lv=self.target_lv,
                 cx=cx,
                 cy=cy,
                 kingdom_id=kingdom_id,
@@ -809,7 +826,7 @@ class GatherTask_2(BaseTask):
                     self.log.warning("🏁 استمر انشغال خادم اللعبة (كود 16001) بعد المحاولات — إيقاف الدورة مؤقتاً.")
                     break
             elif status == "NO_TARGET":
-                self.log.warning(f"⚠️ لم يتم العثور على حقول {res_info['name']} من مستوى {target_lv} حتى مستوى 2 في نطاق {search_range} كم — إغلاق المهمة.")
+                self.log.warning(f"⚠️ لم يتم العثور على حقول {res_info['name']} من مستوى {self.target_lv} حتى مستوى 2 في نطاق {search_range} كم — إغلاق المهمة.")
                 break
             elif status in ("HERO_BUSY", "TARGET_OCCUPIED"):
                 consecutive_errors += 1
@@ -1032,6 +1049,9 @@ class GatherTask_2(BaseTask):
                 kingdom_id=kingdom_id,
                 target_type=res_info.get("sub_type"),
             )
+            if self.target_lv >= 3:
+                self.target_lv -= 1
+                self.log.info(f"   📉 تم خفض مستوى المورد المستهدف للمحاولة التالية إلى لفل {self.target_lv}")
             return "TARGET_OCCUPIED"
 
 
@@ -1075,14 +1095,20 @@ class GatherTask_2(BaseTask):
             sub_type=res_info["sub_type"],
             hero_list=chosen_heroes_list
         )
+        self.log.info(f"💠💠💠💠💠💠💠💠💠{chosen_heroes_list}")
+        
+        self.log.info(f"💥💢💥💢💥💢💥💢💥💢{load_bonus}")
 
-        max_march_troops = get_castle_march_capacity(getattr(self.conn, 'init_data', {}), chosen_heroes=chosen_heroes_list)
+        max_march_troops = get_castle_march_capacity(self.conn, chosen_heroes=chosen_heroes_list)
+
+        self.log.info(f"💲💲💲💲💲💲💲💲💲💲💲💲💲💲💲💲💲💲💲 {max_march_troops}")
 
         army_list, carried_load = select_gathering_army(
             available,
             target_load=target_load,
             load_bonus=load_bonus,
-            max_march_troops=max_march_troops
+            max_march_troops=max_march_troops,
+            log=self.log
         )
         if not army_list:
             active_marches = await self.get_active_marches_count(force_sync=True)

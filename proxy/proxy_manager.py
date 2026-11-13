@@ -319,7 +319,10 @@ def _resolve_user_id_for_email(email: str) -> Optional[str]:
 
 
 def get_proxy_for_account(account_key: str, user_id: Optional[str] = None) -> Optional[str]:
-    """تخصيص بروكسي دائم مع توحيد قلاع نفس المستخدم والتوزيع المتوازن على الباقة المعتمدة."""
+    """
+    تخصيص بروكسي دائم ومستقر يعتمد فهرس البروكسي (proxy_index) المسجل في قاعدة البيانات
+    مع توحيد قلاع نفس المستخدم والتوزيع المتوازن، لضمان عدم تغير موقع القلعة حتى عند تجديد البروكسيات.
+    """
     if not is_proxy_enabled():
         return None
 
@@ -333,6 +336,7 @@ def get_proxy_for_account(account_key: str, user_id: Optional[str] = None) -> Op
             log.error("[ProxyMgr] 🛑 لا توجد أي بروكسيات متاحة في الباقة النشطة!")
             return None
 
+        total_proxies = len(active_proxies)
         _load_bindings()
         mode = get_network_mode()
         pool_key = "free" if mode == "free" else "residential"
@@ -340,50 +344,87 @@ def get_proxy_for_account(account_key: str, user_id: Optional[str] = None) -> Op
         c_bindings = _castle_bindings.setdefault(pool_key, {})
         u_bindings = _user_bindings.setdefault(pool_key, {})
 
-        # استخراج العناوين الصالحة في الباقة النشطة
-        valid_urls = set()
-        proxy_urls = []
-        counts: Dict[str, int] = {}
-        for p in active_proxies:
-            url = _format_proxy_url(p)
-            if url:
-                valid_urls.add(url)
-                proxy_urls.append(url)
-                counts[url] = 0
-
-        if not proxy_urls:
-            return None
-
-        # 1. إذا كانت القلعة مرتبطة مسبقاً ببروكسي موجود في الباقة النشطة
-        if clean_email in c_bindings and c_bindings[clean_email] in valid_urls:
-            return c_bindings[clean_email]
-
-        # 2. استعلام صاحب القلعة
         effective_user_id = user_id or _resolve_user_id_for_email(clean_email)
 
-        # 3. توحيد قلاع نفس المستخدم إذا كان المستخدم مرتبطاً مسبقاً ببروكسي في الباقة النشطة
-        if effective_user_id and effective_user_id in u_bindings and u_bindings[effective_user_id] in valid_urls:
-            user_proxy = u_bindings[effective_user_id]
-            c_bindings[clean_email] = user_proxy
-            _save_bindings()
-            log.info(f"[ProxyMgr] 🔗 تم ضم القلعة {clean_email} لبروكسي المستخدم {effective_user_id} المشترك ({pool_key}).")
-            return user_proxy
+        # ── 1. فحص قاعدة البيانات: هل القلعة تمتلك proxy_index محفوظ مسبقاً؟ ──
+        db_proxy_idx: Optional[int] = None
+        try:
+            from core.database import get_castle_proxy_index
+            db_proxy_idx = get_castle_proxy_index(clean_email)
+        except Exception as e:
+            log.debug(f"[ProxyMgr] تعذرت قراءة proxy_index من قاعدة البيانات: {e}")
 
-        # 4. توزيع متوازن (Least-Loaded Balancing) على الباقة النشطة
-        for bound_url in c_bindings.values():
-            if bound_url in counts:
-                counts[bound_url] += 1
+        if db_proxy_idx is not None and db_proxy_idx >= 0:
+            safe_idx = db_proxy_idx % total_proxies
+            selected_url = _format_proxy_url(active_proxies[safe_idx])
+            if selected_url:
+                c_bindings[clean_email] = selected_url
+                if effective_user_id:
+                    u_bindings[effective_user_id] = selected_url
+                return selected_url
 
-        least_loaded_proxy = min(proxy_urls, key=lambda u: counts.get(u, 0))
-
-        c_bindings[clean_email] = least_loaded_proxy
+        # ── 2. فحص قلاع نفس المستخدم في قاعدة البيانات: توحيد البروكسي لقلاع نفس المستخدم ──
         if effective_user_id:
-            u_bindings[effective_user_id] = least_loaded_proxy
+            try:
+                from core.database import get_user_proxy_index, set_castle_proxy_index
+                user_proxy_idx = get_user_proxy_index(effective_user_id)
+                if user_proxy_idx is not None and user_proxy_idx >= 0:
+                    safe_idx = user_proxy_idx % total_proxies
+                    selected_url = _format_proxy_url(active_proxies[safe_idx])
+                    if selected_url:
+                        set_castle_proxy_index(clean_email, safe_idx)
+                        c_bindings[clean_email] = selected_url
+                        u_bindings[effective_user_id] = selected_url
+                        _save_bindings()
+                        log.info(f"[ProxyMgr] 🔗 [قاعدة البيانات] تم ضم القلعة {clean_email} لبروكسي المستخدم {effective_user_id} المشترك (فهرس: {safe_idx}).")
+                        return selected_url
+            except Exception as e:
+                log.debug(f"[ProxyMgr] تعذر استعلام proxy_index للمستخدم: {e}")
+
+        # ── 3. التوافق العكسي: فحص الارتباط المسجل مسبقاً في ملف الـ JSON إن وجد وترقيته لقاعدة البيانات ──
+        proxy_urls = [_format_proxy_url(p) for p in active_proxies]
+        valid_urls = {u for u in proxy_urls if u}
+
+        if clean_email in c_bindings and c_bindings[clean_email] in valid_urls:
+            bound_url = c_bindings[clean_email]
+            try:
+                matched_idx = proxy_urls.index(bound_url)
+                from core.database import set_castle_proxy_index
+                set_castle_proxy_index(clean_email, matched_idx)
+            except Exception:
+                pass
+            return bound_url
+
+        # ── 4. تخصيص جديد ذكي: اختيار الفهرس الأقل حمولة وحفظه نهائياً في قاعدة البيانات ──
+        counts: Dict[int, int] = {i: 0 for i in range(total_proxies)}
+        try:
+            from core.database import get_all_castle_proxy_counts
+            counts = get_all_castle_proxy_counts(total_proxies)
+        except Exception:
+            for bound_url in c_bindings.values():
+                for i, u in enumerate(proxy_urls):
+                    if u == bound_url:
+                        counts[i] = counts.get(i, 0) + 1
+
+        least_loaded_idx = min(range(total_proxies), key=lambda i: counts.get(i, 0))
+        selected_url = _format_proxy_url(active_proxies[least_loaded_idx])
+        if not selected_url:
+            return None
+
+        try:
+            from core.database import set_castle_proxy_index
+            set_castle_proxy_index(clean_email, least_loaded_idx)
+        except Exception as e:
+            log.warning(f"[ProxyMgr] تعذر حفظ proxy_index للقلعة ({clean_email}): {e}")
+
+        c_bindings[clean_email] = selected_url
+        if effective_user_id:
+            u_bindings[effective_user_id] = selected_url
 
         _save_bindings()
-        new_count = counts.get(least_loaded_proxy, 0) + 1
-        log.info(f"[ProxyMgr] ⚖️ [توزيع {pool_key}] ربط القلعة {clean_email} بالبروكسي (الحمولة: {new_count} قلعة).")
-        return least_loaded_proxy
+        new_count = counts.get(least_loaded_idx, 0) + 1
+        log.info(f"[ProxyMgr] ⚖️ [توزيع DB] ربط القلعة {clean_email} بالبروكسي رقم [{least_loaded_idx}] (الحمولة: {new_count} قلعة).")
+        return selected_url
 
 
 def get_proxy_ip_for_email(email: str) -> str:
@@ -391,7 +432,23 @@ def get_proxy_ip_for_email(email: str) -> str:
     if not is_proxy_enabled():
         return get_server_public_ip()
     clean_email = (email or "").strip().lower()
+    if not clean_email:
+        return ""
     with _manager_lock:
+        # فحص قاعدة البيانات أولاً
+        try:
+            from core.database import get_castle_proxy_index
+            db_idx = get_castle_proxy_index(clean_email)
+            if db_idx is not None and db_idx >= 0:
+                active = get_active_proxies()
+                if active:
+                    p = active[db_idx % len(active)]
+                    ip = p.get("proxy_address", "")
+                    if ip:
+                        return ip
+        except Exception:
+            pass
+
         _load_bindings()
         mode = get_network_mode()
         pool_key = "free" if mode == "free" else "residential"
@@ -408,11 +465,16 @@ def get_proxy_ip_for_email(email: str) -> str:
 
 
 def remove_castle_proxy(email: str) -> bool:
-    """إزالة ارتباط البروكسي للقلعة المحذوفة من كلا الباقتين."""
+    """إزالة ارتباط البروكسي للقلعة المحذوفة من كلا الباقتين وقاعدة البيانات."""
     clean_email = (email or "").strip().lower()
     if not clean_email:
         return False
     with _manager_lock:
+        try:
+            from core.database import set_castle_proxy_index
+            set_castle_proxy_index(clean_email, -1)
+        except Exception:
+            pass
         _load_bindings()
         changed = False
         for pool in ("residential", "free"):
@@ -502,7 +564,7 @@ def reload_proxies() -> int:
 
 
 def proxy_status() -> Dict[str, Any]:
-    """تقرير شفاف يُظهر تفاصيل الـ IPs والقلاع المربوطة لعرضها في صفحة AdminProxies.tsx."""
+    """تقرير شفاف يُظهر تفاصيل الـ IPs والقلاع المربوطة وفق قاعدة البيانات لعرضها في صفحة AdminProxies.tsx."""
     with _manager_lock:
         _ensure_loaded()
         _load_bindings()
@@ -511,16 +573,35 @@ def proxy_status() -> Dict[str, Any]:
         mode = get_network_mode()
         pool_key = "free" if mode == "free" else "residential"
         active_proxies = get_active_proxies()
+        total_p = len(active_proxies)
         c_bindings = _castle_bindings.get(pool_key, {})
         u_bindings = _user_bindings.get(pool_key, {})
 
+        # جلب قلاع قاعدة البيانات وتصنيفها حسب فهرس البروكسي (proxy_index)
+        db_castle_map: Dict[int, List[str]] = {}
+        try:
+            if os.path.exists(_DB_PATH):
+                conn = sqlite3.connect(_DB_PATH, timeout=2.0)
+                cur = conn.cursor()
+                cur.execute("SELECT lower(email), proxy_index FROM castle_states WHERE proxy_index >= 0")
+                for em_row, idx_row in cur.fetchall():
+                    if em_row and idx_row is not None and total_p > 0:
+                        safe_i = int(idx_row) % total_p
+                        db_castle_map.setdefault(safe_i, []).append(em_row)
+                conn.close()
+        except Exception:
+            pass
+
         proxies_list = []
-        for p in active_proxies:
+        for idx, p in enumerate(active_proxies):
             url = _format_proxy_url(p)
             if url:
                 host = p.get("proxy_address", "")
                 port = p.get("socks5_port") or p.get("port")
                 assigned = [em for em, u in c_bindings.items() if u == url]
+                for db_em in db_castle_map.get(idx, []):
+                    if db_em not in assigned:
+                        assigned.append(db_em)
                 users = [uid for uid, u in u_bindings.items() if u == url]
                 proxies_list.append({
                     "ip": host,
@@ -534,6 +615,10 @@ def proxy_status() -> Dict[str, Any]:
                     "full_url": url
                 })
 
+        all_bound_castles = set(c_bindings.keys())
+        for ems in db_castle_map.values():
+            all_bound_castles.update(ems)
+
         return {
             "enabled": is_proxy_enabled(),
             "network_mode": mode,
@@ -542,7 +627,7 @@ def proxy_status() -> Dict[str, Any]:
             "residential_count": len(_residential_proxies),
             "free_count": len(_free_proxies),
             "active_pool_name": "سكنية مدفوعة (Static Residential)" if mode == "residential" else ("مجانية (Free Datacenter)" if mode == "free" else "IP السيرفر المباشر"),
-            "total_bound_castles": len(c_bindings),
+            "total_bound_castles": len(all_bound_castles),
             "total_bound_users": len(u_bindings),
             "proxies_list": proxies_list
         }

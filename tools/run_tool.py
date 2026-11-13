@@ -8,13 +8,13 @@ run_tool.py — أداة تشغيل الدوال الشاملة في مشروع 
 
 أمثلة الاستخدام (Usage Examples):
   1. تشغيل دالة باسمها فقط مع البحث التلقائي وحقن الاتصال:
-     python tools/run_tool.py -e "burcudemr@gmail.com" -f get_active_marches_count
+     python tools/run_tool.py -e "shook123@gmail.com" -f get_active_marches_count
 
   2. تشغيل مهمة من كلاس محدد وتمرير قاموس باراميترات JSON:
      python run_tool.py -e "user@example.com" -t tasks.gather_2.GatherTask.run --params '{"res_type": 1, "level": 6}'
 
 
-python tools/run_tool.py -e "shook124@gmail.com" -f get_castle_march_capacity
+python tools/run_tool.py -e "shook123@gmail.com" -f get_castle_march_capacity
 
 python run_tool.py -e "burcudemr@gmail.com" -f get_castle_march_capacity  -k chosen_heroes="[5502009,5502006]"
 
