@@ -1314,12 +1314,16 @@ class LiveMemoryEngine:
                 continue
             army_info = item.get("armyInfo")
             if isinstance(army_info, dict):
+                if "totalArmy" in army_info:
+                    army_ctrl["totalArmy"] = copy.deepcopy(army_info["totalArmy"])
                 if "woundedArmy" in army_info:
                     army_ctrl["woundedArmy"] = copy.deepcopy(army_info["woundedArmy"])
                 if "trainArmy" in army_info:
                     army_ctrl["trainArmy"] = copy.deepcopy(army_info["trainArmy"])
                 smart_deep_merge(army_ctrl, army_info, in_place=True)
             else:
+                if "totalArmy" in item:
+                    army_ctrl["totalArmy"] = copy.deepcopy(item["totalArmy"])
                 if "woundedArmy" in item:
                     army_ctrl["woundedArmy"] = copy.deepcopy(item["woundedArmy"])
                 if "trainArmy" in item:

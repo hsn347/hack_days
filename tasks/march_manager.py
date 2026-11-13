@@ -310,34 +310,11 @@ class MarchManagerTask(BaseTask):
             pass
 
     async def get_active_marches_count(self, force_sync: bool = False) -> int:
-        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة مع تحديث فوري وتجنب التكرار."""
-        await self._sync_queues_if_needed(force=force_sync)
-
-        seen_ids = set()
-        active = 0
-        all_queue_data = []
-        if getattr(self.conn, 'local_queues', None):
-            all_queue_data.extend(self.conn.local_queues)
-        for p in self.conn.cached_packets.values():
-            if isinstance(p, dict):
-                d = p.get('data', {})
-                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                    nd = d.get('notifyData', [])
-                    if isinstance(nd, list):
-                        all_queue_data.extend(nd)
-
-        for item in all_queue_data:
-            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
-            for q in q_list:
-                if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
-                    qid = q.get('id') or q.get('queueId')
-                    if qid:
-                        if qid not in seen_ids:
-                            seen_ids.add(qid)
-                            active += 1
-                    else:
-                        active += 1
-        return active
+        """
+        حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة:
+        تفويض مباشر للدالة الحديثة في BaseTask المعتمدة كلياً على محرك الذاكرة الحية (LiveMemoryEngine).
+        """
+        return await super().get_active_marches_count(force_sync=force_sync)
 
     async def wait_for_free_queue(
         self, 
@@ -518,38 +495,11 @@ class MarchManagerTask(BaseTask):
         self.log.warning("⏱️ [انتهاء المهلة] انتهت الـ 20 دقيقة المحددة للمهمة أثناء انتظار عودة الجيش.")
         return False
 
-    async def is_ruins_march_active(self) -> bool:
+    async def is_ruins_march_active(self, force_sync: bool = False) -> bool:
         """
-        يفحص بشكل فوري ما إذا كانت هناك مسيرة استكشاف أطلال نشطة بالخارج حالياً.
-        يعتمد على نوع المسار (moveLineType = 4) أو نوع خريطة الهدف (mapType = 7).
+        يفحص ما إذا كانت هناك مسيرة استكشاف أطلال نشطة بالخارج حالياً بالاعتماد على الفحص الموحد في BaseTask.
         """
-
-        all_queue_data = []
-        if getattr(self.conn, 'local_queues', None):
-            all_queue_data.extend(self.conn.local_queues)
-        for p in self.conn.cached_packets.values():
-            if isinstance(p, dict):
-                d = p.get('data', {})
-                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                    nd = d.get('notifyData', [])
-                    if isinstance(nd, list):
-                        all_queue_data.extend(nd)
-
-        for item in all_queue_data:
-            q_list = item.get('data', []) if (isinstance(item, dict) and 'data' in item) else ([item] if isinstance(item, dict) else (item if isinstance(item, list) else []))
-            for q in q_list:
-                if not isinstance(q, dict):
-                    continue
-                # حالة المسيرة نشطة (تشمل حشود 0 و 7)
-                if q.get('status') in (0, 1, 2, 3, 4, 7):
-                    # استكشاف الأطلال يحمل moveLineType = 4
-                    if q.get('moveLineType') == 4:
-                        return True
-                    # أو إذا كان الهدف من نوع mapType = 7
-                    to_info = q.get('to', {})
-                    if isinstance(to_info, dict) and to_info.get('mapType') == 7:
-                        return True
-        return False
+        return await super().is_ruins_march_active(force_sync=force_sync)
         
     # ────────────────────────────────────────────────────────────────
     #  ربط سجلات المهام الفرعية بسجل المهمة الحالي
@@ -1136,9 +1086,8 @@ class MarchManagerTask(BaseTask):
             return {"status": "skipped", "reason": "disabled"}
 
         # 1. فحص مسبق وحاسم: هل توجد مسيرة أطلال بالخارج بالفعل؟
-        is_active = await self.is_ruins_march_active()
-        if is_active:
-            self.log.info("⏭️ تخطي: الأطلال (مسيرة نشطة)")
+        if await self.has_active_ruins_march():
+            self.log.info("⏭️ تخطي: الأطلال (مسيرة نشطة بالخارج)")
             return {"status": "already_active"}
 
         self.log.info("🏛️ [الأطلال] بدء استكشاف الأطلال")

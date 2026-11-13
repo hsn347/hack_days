@@ -49,7 +49,7 @@ import random
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
-
+from tasks.march_capacity import get_castle_march_capacity
 from tasks.base_task import BaseTask, TaskResult
 from game_client import GameConnection
 
@@ -284,13 +284,10 @@ def _pick_gather_heroes(heroes: list, max_count: int = 2, busy: Set[int] = None)
 # ════════════════════════════════════════════════════════════════════
 
 from tasks.gather import (
-    RESOURCE_WEIGHT_MULTIPLIERS,
     get_resource_multiplier,
-    UNIT_FREE_WEIGHTS,
     calculate_unit_capacity,
     fetch_war_boe_pload,
     calculate_load_bonus,
-    calculate_estimated_march_capacity,
     select_gathering_army,
 )
 
@@ -1264,17 +1261,7 @@ class GoldGatherTask(BaseTask):
         )
 
         # تحديد سعة مسيرة اللورد ومعسكر التجمع القصوى (لمنع خطأ 8035)
-        max_march_troops = self._learned_max_march_troops
-        if not max_march_troops:
-            cfg_troops = self.config.get("max_march_troops")
-            if cfg_troops:
-                try: max_march_troops = int(cfg_troops)
-                except Exception: pass
-        if not max_march_troops:
-            max_march_troops = calculate_estimated_march_capacity(
-                getattr(self.conn, 'init_data', {}),
-                chosen_heroes=chosen_heroes
-            )
+        max_march_troops = get_castle_march_capacity(getattr(self.conn, 'init_data', {}), chosen_heroes=chosen_heroes)
 
         if troops_cfg:
             try: max_march_troops = min(max_march_troops or 999999, int(troops_cfg))

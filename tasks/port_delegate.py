@@ -251,6 +251,11 @@ def resolve_island_goods_id(query: Any) -> Optional[int]:
     return None
 
 
+def _safe_dict(val: Any) -> Dict[str, Any]:
+    """تحصين قراءة القواميس لضمان إعادة قاموس فارغ إذا كانت القيمة قائمة أو غير ذلك."""
+    return val if isinstance(val, dict) else {}
+
+
 class PortDelegateTask(BaseTask):
     """
     مهمة الميناء العسكري: التعيين السريع للأبطال (CMD 2064) + متجر الجزيرة الغامضة (CMD 5011).
@@ -277,8 +282,14 @@ class PortDelegateTask(BaseTask):
         جلب قائمة أبطال القلعة مع مستوياتهم ونجومهم وأنواعهم.
         """
         heroes_raw = self.conn.init_data.get("heroCtrl", [])
+        if isinstance(heroes_raw, dict):
+            heroes_raw = list(heroes_raw.values())
+        elif not isinstance(heroes_raw, list):
+            heroes_raw = []
         result = []
         for h in heroes_raw:
+            if not isinstance(h, dict):
+                continue
             hid = int(h.get("id", 0))
             if hid <= 0:
                 continue
@@ -315,9 +326,9 @@ class PortDelegateTask(BaseTask):
         """
         فحص حالة جميع المهام الـ 10 من واقع بيانات السيرفر الحالية.
         """
-        pve = self.conn.init_data.get("PveBattleCtrl", {})
+        pve = _safe_dict(self.conn.init_data.get("PveBattleCtrl"))
         cur_level_id = int(pve.get("nCurLevelId", 0))
-        server_tasks = pve.get("tasks", {})
+        server_tasks = _safe_dict(pve.get("tasks"))
         now = time.time()
 
         tasks_list = []
@@ -327,7 +338,8 @@ class PortDelegateTask(BaseTask):
             unlock_req = meta["unlock_level"]
             is_unlocked = (cur_level_id >= unlock_req)
 
-            s_info = server_tasks.get(str(tid)) or server_tasks.get(tid)
+            s_raw = server_tasks.get(str(tid)) or server_tasks.get(tid)
+            s_info = s_raw if isinstance(s_raw, dict) else None
             status_code = "locked"
             status_desc = "🔒 مقفلة (تحتاج تقدم في الفصل)"
             left_seconds = 0
@@ -476,8 +488,14 @@ class PortDelegateTask(BaseTask):
             err = str(rsp.get("err", ""))
             if err == "0":
                 # تحديث حالة المهمة محلياً في tasks
-                pve = self.conn.init_data.setdefault("PveBattleCtrl", {})
-                tasks = pve.setdefault("tasks", {})
+                pve = self.conn.init_data.get("PveBattleCtrl")
+                if not isinstance(pve, dict):
+                    pve = {}
+                    self.conn.init_data["PveBattleCtrl"] = pve
+                tasks = pve.get("tasks")
+                if not isinstance(tasks, dict):
+                    tasks = {}
+                    pve["tasks"] = tasks
                 if str(task_id) in tasks:
                     tasks[str(task_id)]["state"] = 2
                 return True, "تم استلام المكافأة بنجاح"
@@ -508,8 +526,14 @@ class PortDelegateTask(BaseTask):
                 data = rsp.get("data", {})
                 task_data = data.get("taskData", {})
                 # تحديث بيانات السيرفر محلياً
-                pve = self.conn.init_data.setdefault("PveBattleCtrl", {})
-                tasks = pve.setdefault("tasks", {})
+                pve = self.conn.init_data.get("PveBattleCtrl")
+                if not isinstance(pve, dict):
+                    pve = {}
+                    self.conn.init_data["PveBattleCtrl"] = pve
+                tasks = pve.get("tasks")
+                if not isinstance(tasks, dict):
+                    tasks = {}
+                    pve["tasks"] = tasks
                 tasks[str(task_id)] = task_data
                 return True, "تم التعيين والإرسال بنجاح"
             elif err == "1002":
@@ -529,9 +553,11 @@ class PortDelegateTask(BaseTask):
         cmd: "2064", subcmd: "9", data: {}
         يرجع (نجاح/فشل, الرسالة, فارق النقاط المكتسبة).
         """
-        pve = self.conn.init_data.get("PveBattleCtrl", {})
+        pve = _safe_dict(self.conn.init_data.get("PveBattleCtrl"))
         cur_level_id = int(pve.get("nCurLevelId", 0))
         time_rwd = pve.get("timeReward")
+        if not isinstance(time_rwd, dict):
+            time_rwd = None
 
         # إذا لم يتم فتح الحرب البحرية / الميناء إطلاقاً
         if cur_level_id <= 0 and not time_rwd:
@@ -623,7 +649,7 @@ class PortDelegateTask(BaseTask):
         """
         قراءة رصيد نقاط الجزيرة الغامضة / الحرب البحرية من السيرفر.
         """
-        pve = self.conn.init_data.get("PveBattleCtrl", {})
+        pve = _safe_dict(self.conn.init_data.get("PveBattleCtrl"))
         return int(pve.get("points", 0))
 
     def get_island_shop_status(self) -> Dict[str, Any]:
@@ -631,9 +657,11 @@ class PortDelegateTask(BaseTask):
         استعلام حالة متجر الجزيرة الغامضة (الرصيد، ما تم شراؤه اليوم، والمتبقي).
         """
         points = self.get_island_points()
-        field_shop = self.conn.init_data.get("fieldShopCtrl", {})
-        shop1 = field_shop.get("1", {})
-        buy_records = shop1.get("buyRecord", {}).get("1", {}).get("records", {})
+        field_shop = _safe_dict(self.conn.init_data.get("fieldShopCtrl"))
+        shop1 = _safe_dict(field_shop.get("1"))
+        buy_rec = _safe_dict(shop1.get("buyRecord"))
+        rec1 = _safe_dict(buy_rec.get("1"))
+        buy_records = _safe_dict(rec1.get("records"))
 
         items_status = []
         for gid, meta in ISLAND_SHOP_CATALOG.items():
@@ -682,16 +710,34 @@ class PortDelegateTask(BaseTask):
                 total_cost = meta["price"] * this_bought_num
 
                 # تحديث النقاط محلياً
-                pve = self.conn.init_data.setdefault("PveBattleCtrl", {})
+                pve = self.conn.init_data.get("PveBattleCtrl")
+                if not isinstance(pve, dict):
+                    pve = {}
+                    self.conn.init_data["PveBattleCtrl"] = pve
                 cur_pts = int(pve.get("points", 0))
                 pve["points"] = max(0, cur_pts - total_cost)
 
                 # تحديث سجل المشتريات محلياً
-                field_shop = self.conn.init_data.setdefault("fieldShopCtrl", {})
-                shop1 = field_shop.setdefault("1", {})
-                buy_rec = shop1.setdefault("buyRecord", {})
-                rec1 = buy_rec.setdefault("1", {})
-                records = rec1.setdefault("records", {})
+                field_shop = self.conn.init_data.get("fieldShopCtrl")
+                if not isinstance(field_shop, dict):
+                    field_shop = {}
+                    self.conn.init_data["fieldShopCtrl"] = field_shop
+                shop1 = field_shop.get("1")
+                if not isinstance(shop1, dict):
+                    shop1 = {}
+                    field_shop["1"] = shop1
+                buy_rec = shop1.get("buyRecord")
+                if not isinstance(buy_rec, dict):
+                    buy_rec = {}
+                    shop1["buyRecord"] = buy_rec
+                rec1 = buy_rec.get("1")
+                if not isinstance(rec1, dict):
+                    rec1 = {}
+                    buy_rec["1"] = rec1
+                records = rec1.get("records")
+                if not isinstance(records, dict):
+                    records = {}
+                    rec1["records"] = records
                 if total_bought_today > 0:
                     records[str(goods_id)] = total_bought_today
                 else:
@@ -763,9 +809,11 @@ class PortDelegateTask(BaseTask):
 
         for i, (gid, desired_qty) in enumerate(targets):
             meta = ISLAND_SHOP_CATALOG[gid]
-            field_shop = self.conn.init_data.get("fieldShopCtrl", {})
-            shop1 = field_shop.get("1", {})
-            records = shop1.get("buyRecord", {}).get("1", {}).get("records", {})
+            field_shop = _safe_dict(self.conn.init_data.get("fieldShopCtrl"))
+            shop1 = _safe_dict(field_shop.get("1"))
+            buy_rec = _safe_dict(shop1.get("buyRecord"))
+            rec1 = _safe_dict(buy_rec.get("1"))
+            records = _safe_dict(rec1.get("records"))
             bought_already = int(records.get(str(gid), 0))
             remaining_today = max(0, meta["limit"] - bought_already)
 

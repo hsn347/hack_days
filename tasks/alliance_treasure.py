@@ -91,7 +91,7 @@ class AllianceTreasureTask(BaseTask):
         # التحقق الأولي من عضوية التحالف
         allianceCtrl = init_data.get("allianceCtrl", {})
         own_member = allianceCtrl.get("memberinfo") if isinstance(allianceCtrl, dict) else None
-        minfo = own_member.get("minfo", {})
+        minfo = own_member.get("minfo", {}) if isinstance(own_member, dict) else {}
         has_alliance = bool(minfo and isinstance(minfo, dict) and minfo.get("aid"))
 
         # جلب أحدث بيانات صندوق التحالف عبر 2015/1

@@ -2,7 +2,7 @@
 """
 tasks/gather.py — مهمة جمع الموارد الذكية التلقائية (Dynamic Auto-Gathering)
 ═════════════════════════════════════════════════════════════════════════════
-python tasks/gather_2.py --email "burcudemr@gmail.com" --res 2 --level 5 --range 100
+python tasks/gather.py --email "burcudemr@gmail.com" --res 2 --level 5 --range 100
 
 """
 
@@ -14,7 +14,7 @@ import os
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_DIR not in sys.path:
     sys.path.insert(0, _ROOT_DIR)
-
+from tasks.march_capacity import get_castle_march_capacity
 import asyncio
 import json
 import logging
@@ -22,7 +22,7 @@ import math
 import random
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from tasks.base_task import BaseTask, TaskResult
+from tasks.base_task import BaseTask, TaskResult, RESOURCE_NODE_CAPACITIES
 from game_client import GameConnection
 from tasks.exclude_manager import get_manager as _get_exclude_manager
 
@@ -538,19 +538,6 @@ def calculate_load_bonus(
     return max(0.0, base_bonus + hero_bonus)
 
 
-
-def calculate_estimated_march_capacity(init_data: dict, chosen_heroes: list = None) -> int:
-    """
-    سعة مسيرة اللورد وساحة التدريب (Drill Ground - bid 121) والأبطال:
-    محسوبة بدقة 100% ومطابقة لواجهة اللعبة الرسمية عبر المحرك المركزي tasks.march_capacity.
-    """
-    try:
-        from tasks.march_capacity import get_castle_march_capacity
-        return get_castle_march_capacity(init_data, chosen_heroes=chosen_heroes)
-    except Exception:
-        return 50000
-
-
 # ════════════════════════════════════════════════════════════════════
 #  اختيار تشكيلة الجيش التلقائية (محاكاة واجهة اللعبة الحقيقية 100%)
 # ════════════════════════════════════════════════════════════════════
@@ -670,7 +657,6 @@ class GatherTask(BaseTask):
         super().__init__(conn, config)
         self._heroes       : list          = []
         self._busy_heroes  : Set[int]      = set()
-        self._used_army    : Dict[int, int] = {}
         self._used_pets    : Set[int]      = set()
         self._exclude_mgr  = _get_exclude_manager()
         self._learned_max_march_troops: Optional[int] = None
@@ -767,16 +753,12 @@ class GatherTask(BaseTask):
         cmd_opting_retries = 0
 
         self._busy_heroes  = set(int(h) for h in cfg.get('busy_heroes', []))
-        self._used_army    = {}
         self._used_pets    = set(int(p) for p in cfg.get('used_pets', []))
         # الذاكرة المؤقتة للاستبعاد مدمجة الآن في ExcludeManager
         last_status = None
 
         while sent_count < target_marches and attempts < max_attempts:
-            self.print_local_queues("قبل إرسال الهجوم")
             self.log.debug(f"🏹 محاولة إرسال مسيرة الفيلق ({sent_count + 1}/{target_marches})...")
-
-      
 
             status = await self._send_one_march(
                 res_info=res_info,
@@ -798,7 +780,7 @@ class GatherTask(BaseTask):
                     wait_time = round(random.uniform(9.0, 14.0), 2)
                     self.log.debug(f"⏳ مهلة أمان قبل الفيلق التالي ({wait_time} ثانية)...")
                     await asyncio.sleep(wait_time)
-            elif status in ("QUEUE_FULL","8004", "9007004"):
+            elif status in ("QUEUE_FULL", "8004", "9007004"):
                 self.log.info("🏁 اكتملت جميع الفيالق وطوابير المسيرات للقلعة (طوابير ممتلئة بالكامل).")
                 break
             elif status in ("NO_ARMY", "8009"):
@@ -833,10 +815,11 @@ class GatherTask(BaseTask):
 
         self.log.info(f"🏁 [جمع الموارد] تم إرسال {sent_count}/{target_marches} مسيرة بنجاح")
 
+        is_queue_full = last_status in ("QUEUE_FULL", "8004", "9007004")
         result_data = {
             "sent": sent_count,
             "dispatched": sent_count,
-            "queue_full": False,
+            "queue_full": is_queue_full,
             "stop_reason": last_status,
             "busy_heroes": list(self._busy_heroes),
             "used_pets": list(self._used_pets),
@@ -847,8 +830,8 @@ class GatherTask(BaseTask):
                 f"✅ تم إرسال {sent_count} مسيرة جمع ({res_info['name']})",
                 **result_data
             )
-        if last_status in ("QUEUE_FULL", "8004", "9007004"):
-            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (QUEUE_FULL)", **result_data)
+        if is_queue_full:
+            return TaskResult.fail("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل (QUEUE_FULL)", retry_after=120, **result_data)
         if last_status in ("NO_ARMY", "8009"):
             return TaskResult.fail("🛑 نفدت القوات المتاحة بالقلعة لإرسال مسيرة جمع كاملة", **result_data)
         if last_status in ("CMD_OPTING", "16001", "CMD_OPTING_FAILED"):
@@ -1023,6 +1006,26 @@ class GatherTask(BaseTask):
             )
             return "TARGET_OCCUPIED"
 
+        # فحص محتوى الحقل: إذا كان أقل من ثلث سعته الأصلية (33.3%)، يتم استبعاده والبحث عن هدف آخر
+        node_cap = int(ret22.get('totalSourceNum', 0)) if (ret22 and isinstance(ret22, dict)) else 0
+        if node_cap <= 0:
+            node_cap = RESOURCE_NODE_CAPACITIES.get(res_info.get("sub_type", 1), {}).get(actual_found_lv, 0)
+
+        if node_cap > 0 and cur_res < (node_cap / 3.0):
+            pct = (cur_res / node_cap) * 100.0
+            self.log.warning(
+                f"⚠️ الحقل {target_id} يحتوي على {cur_res:,} مورد ({pct:.1f}%) "
+                f"وهو أقل من ثلث سعته القصوى ({node_cap:,}) — استبعاده والبحث عن هدف آخر ⛔"
+            )
+            # تثبيت الاستبعاد لمنع محاولته مجدداً خلال هذه الجلسة على مستوى المملكة
+            await self._exclude_mgr.confirm(
+                self.uid,
+                target_id,
+                kingdom_id=kingdom_id,
+                target_type=res_info.get("sub_type"),
+            )
+            return "TARGET_OCCUPIED"
+
 
         self.log.info(f"💥💥💥💥💥💥💥💥💥💥{cur_res}")
         # حساب مضاعف الحمولة وسعة النقل المطلوبة وفق كود اللعبة الأصلي (worldDispatchArmyView.lua)
@@ -1032,12 +1035,10 @@ class GatherTask(BaseTask):
         self.log.info(f"💞💞💞💞💞💞{target_load} ")
         self.log.info(f"   📦 حمولة الحقل الحقيقية: {cur_res:,} | مطلوب: {target_load:,}")
 
-        # 3. جلب القوات المتوفرة بالقلعة وخصم المستخدم منها
+        # 3. جلب القوات المتوفرة بالقلعة من الذاكرة الحية
         available = await self._get_castle_army()
 
-        for tid, used in self._used_army.items():
-            if tid in available:
-                available[tid] = max(0, available[tid] - used)
+        self.log.info(f"🟨🟨🟨🟨🟨🟨{available}")
 
         # 4. اختيار البطل الأنسب والحيوان الأليف تلقائياً
         if not self._heroes:
@@ -1067,18 +1068,7 @@ class GatherTask(BaseTask):
             hero_list=chosen_heroes_list
         )
 
-        # تحديد سعة مسيرة اللورد ومعسكر التجمع القصوى (لمنع خطأ 8035)
-        max_march_troops = self._learned_max_march_troops
-        if not max_march_troops:
-            cfg_troops = self.config.get("max_march_troops")
-            if cfg_troops:
-                try: max_march_troops = int(cfg_troops)
-                except Exception: pass
-        if not max_march_troops:
-            max_march_troops = calculate_estimated_march_capacity(
-                getattr(self.conn, 'init_data', {}),
-                chosen_heroes=chosen_heroes_list
-            )
+        max_march_troops = get_castle_march_capacity(getattr(self.conn, 'init_data', {}), chosen_heroes=chosen_heroes_list)
 
         army_list, carried_load = select_gathering_army(
             available,
@@ -1143,9 +1133,10 @@ class GatherTask(BaseTask):
             )
             for hid in chosen_heroes_list:
                 self._busy_heroes.add(hid)
-            for item in army_list:
-                self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
+            self.log.info(f"🟫🟫🟫🟫🟫🟫{await self._get_castle_army()}")
+
             return "SUCCESS"
+            
         elif err in ('8004', '9007004'):
             self.log.info(f"   🛑 طوابير الفيالق ممتلئة بالكامل (كود {err})")
             # ❌ فشل — إزالة الحجز المؤقت
@@ -1225,8 +1216,6 @@ class GatherTask(BaseTask):
                 )
                 for hid in chosen_heroes_list:
                     self._busy_heroes.add(hid)
-                for item in army_list:
-                    self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
                 return "SUCCESS"
             elif err_retry == '8035':
                 reduced_second = max(300, int(new_total * 0.85))
@@ -1258,8 +1247,6 @@ class GatherTask(BaseTask):
                     )
                     for hid in chosen_heroes_list:
                         self._busy_heroes.add(hid)
-                    for item in army_list:
-                        self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
                     return "SUCCESS"
 
             await self._exclude_mgr.release(self.uid, target_id, kingdom_id=kingdom_id)

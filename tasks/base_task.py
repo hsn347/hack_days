@@ -216,57 +216,78 @@ class BaseTask(ABC):
         return self.conn is not None and getattr(self.conn, "is_connected", False)
 
     async def get_active_marches_count(self, force_sync: bool = False) -> int:
-        """حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة بالاعتماد على الذاكرة الحية (Zero-Request)."""
-        has_local = bool(getattr(self.conn, 'local_queues', None))
-        if force_sync and not has_local:
+        """
+        حساب عدد الفيالق والمسيرات النشطة حالياً خارج القلعة بدقة بالاعتماد على الذاكرة الحية (LiveMemory):
+        - قراءة فورية خالية من الاستعلامات (Zero-Request) عبر _read_live_local_queues ومحرك LiveMemoryEngine.
+        - استعلام مزامنة 1007/1000 مشروط عند طلب force_sync أو عندما تكون الذاكرة خالية ولم تُزامن بعد.
+        - عزل تام عن الحزم القديمة cached_packets لمنع احتساب مسيرات شبحية منتهية.
+        - فلترة صارمة لمعرّف القلعة (uid) لمنع احتساب مسيرات لاعبين آخرين أو تعزيزات قادمة.
+        """
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return 0
+
+        mem_engine = getattr(conn, "memory_engine", None)
+        is_synced = bool(getattr(mem_engine, "local_queues_synced", False))
+        queues = self._read_live_local_queues(conn)
+
+        # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
+        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
             sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
             self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
+            resp = None
             try:
-                await self.conn.query('1007', '1000', {}, timeout=2)
-                await asyncio.sleep(0.3)
+                resp = await conn.query("1007", "1000", {}, timeout=2)
             except Exception:
-                pass
+                resp = None
 
+            # انتظار قصير (حتى 0.5 ثانية) لوصول إشعار NOTIFY_LOCAL_QUEUE_SYNC (cmd 202) وتحديث الذاكرة الحية
+            for _ in range(5):
+                queues = self._read_live_local_queues(conn)
+                if queues or bool(getattr(mem_engine, "local_queues_synced", False)):
+                    break
+                await asyncio.sleep(0.1)
 
+            # احتياطي: إذا لم يصل الإشعار بعد، نأخذ البيانات مباشرة من استجابة الاستعلام
+            if not queues and isinstance(resp, dict) and isinstance(resp.get("data"), list):
+                queues = list(resp["data"])
+
+        if not queues:
+            return 0
+
+        my_uid = str(getattr(self, "uid", "") or "").strip()
+        active_statuses = (0, 1, 2, 3, 4, 7)
         seen_ids = set()
         active = 0
-        all_queue_data = []
-        if getattr(self.conn, 'local_queues', None):
-            all_queue_data.extend(self.conn.local_queues)
-        if getattr(self.conn, 'cached_packets', None):
-            for p in self.conn.cached_packets.values():
-                if isinstance(p, dict):
-                    d = p.get('data', {})
-                    if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                        nd = d.get('notifyData', [])
-                        if isinstance(nd, list):
-                            all_queue_data.extend(nd)
-            all_queue_data.extend(self.conn.cached_packets.get(202, []))
 
-        queues_to_check = []
-        for item in all_queue_data:
-            if not isinstance(item, dict):
-                if isinstance(item, list):
-                    queues_to_check.extend(item)
+        for q in queues:
+            if not isinstance(q, dict):
                 continue
-            if 'status' in item or 'queueId' in item:
-                queues_to_check.append(item)
-            elif 'data' in item:
-                d = item['data']
-                if isinstance(d, list):
-                    queues_to_check.extend(d)
-                elif isinstance(d, dict):
-                    queues_to_check.append(d)
 
-        for q in queues_to_check:
-            if isinstance(q, dict) and q.get('status') in (0, 1, 2, 3, 4, 7):
-                qid = q.get('id') or q.get('queueId')
-                if qid:
-                    if qid not in seen_ids:
-                        seen_ids.add(qid)
-                        active += 1
-                else:
+            # فلترة صاحب المسيرة لضمان احتساب مسيرات هذه القلعة حصراً
+            q_uid = q.get("uid")
+            if my_uid and q_uid not in (None, "", 0, "0") and str(q_uid).strip() != my_uid:
+                continue
+
+            # فحص الحالة النشطة (0=حشد بتجمع, 1=سير, 2=جمع/تمركز, 3=عودة, 4=انتظار, 7=حشد منطلق)
+            raw_status = q.get("status")
+            if raw_status is None:
+                continue
+            try:
+                status = int(raw_status)
+            except (TypeError, ValueError):
+                continue
+            if status not in active_statuses:
+                continue
+
+            qid = str(q.get("id") or q.get("queueId") or "").strip()
+            if qid:
+                if qid not in seen_ids:
+                    seen_ids.add(qid)
                     active += 1
+            else:
+                active += 1
+
         return active
 
     async def get_max_marches_capacity(self, allow_network: bool = True) -> int:
@@ -379,23 +400,66 @@ class BaseTask(ABC):
 
     async def get_active_gather_resource_types(self, force_sync: bool = False) -> Set[int]:
         """
-        فحص أنواع الموارد التي تجمعها مسيرات نشطة بالخارج حالياً (2=قمح, 3=خشب, 4=حديد, 5=فضة, 1=ذهب):
-        - قراءة فورية من الذاكرة الحية (Zero-Request) إذا كانت local_queues محملة.
-        - استعلام 1007/1000 مشروط فقط إذا كانت الذاكرة خالية تماماً (not has_local).
+        فحص أنواع الموارد التي تجمعها مسيرات نشطة بالخارج حالياً لقلعة هذا الحساب
+        (1=ذهب, 2=قمح, 3=خشب, 4=حديد, 5=فضة):
+        - قراءة فورية من الذاكرة الحية (LiveMemoryEngine) عبر _read_live_local_queues (Zero-Request).
+        - استعلام 1007/1000 مشروط إذا كانت الذاكرة خالية أو طُلبت المزامنة force_sync=True.
+        - فلترة صارمة لمعرّف القلعة (uid) لضمان عدم احتساب مسيرات لاعبين آخرين.
         """
-        has_local = bool(getattr(self.conn, 'local_queues', None))
-        if not has_local:
-            try:
-                await self.conn.query('1007', '1000', {}, timeout=2)
-                await asyncio.sleep(0.3)
-            except Exception:
-                pass
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return set()
 
+        mem_engine = getattr(conn, "memory_engine", None)
+        is_synced = bool(getattr(mem_engine, "local_queues_synced", False))
+        queues = self._read_live_local_queues(conn)
+
+        # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
+        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+            sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
+            self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
+            resp = None
+            try:
+                resp = await conn.query("1007", "1000", {}, timeout=2)
+            except Exception:
+                resp = None
+
+            # انتظار قصير (حتى 0.5 ثانية) لوصول إشعار NOTIFY_LOCAL_QUEUE_SYNC (cmd 202) وتحديث الذاكرة الحية
+            for _ in range(5):
+                queues = self._read_live_local_queues(conn)
+                if queues or bool(getattr(mem_engine, "local_queues_synced", False)):
+                    break
+                await asyncio.sleep(0.1)
+
+            # احتياطي: إذا لم يصل الإشعار بعد، نأخذ البيانات مباشرة من استجابة الاستعلام
+            if not queues and isinstance(resp, dict) and isinstance(resp.get("data"), list):
+                queues = list(resp["data"])
+
+        if not queues:
+            return set()
+
+        my_uid = str(getattr(self, "uid", "") or "").strip()
         active: Set[int] = set()
-        queues = list(getattr(self.conn, "local_queues", []) or [])
+
         for q in queues:
-            if not isinstance(q, dict) or q.get("status") not in (0, 1, 2, 3, 4, 7):
+            if not isinstance(q, dict):
                 continue
+
+            # فلترة صاحب المسيرة لضمان احتساب مسيرات هذه القلعة حصراً
+            q_uid = q.get("uid")
+            if my_uid and q_uid not in (None, "", 0, "0") and str(q_uid).strip() != my_uid:
+                continue
+
+            raw_status = q.get("status")
+            if raw_status is None:
+                continue
+            try:
+                status = int(raw_status)
+            except (TypeError, ValueError):
+                continue
+            if status not in (0, 1, 2, 3, 4, 7):
+                continue
+
             res_sub = None
             for loc_key in ("to", "from"):
                 info = q.get(loc_key, {})
@@ -407,19 +471,128 @@ class BaseTask(ABC):
                             res_sub = int(parts[3])
                 if res_sub:
                     break
+
             if not res_sub:
                 data_obj = q.get("data", {})
                 if isinstance(data_obj, dict):
                     code = data_obj.get("resourceType")
                     if code:
                         res_sub = {1001: 1, 1002: 2, 1003: 3, 1004: 4, 1005: 5}.get(int(code))
+
             if res_sub and int(res_sub) in (1, 2, 3, 4, 5):
                 active.add(int(res_sub))
+
         return active
 
     async def _get_active_gather_types(self, force_sync: bool = False) -> Set[int]:
         """اسم بديل للتوافق مع المهام القائمة."""
         return await self.get_active_gather_resource_types(force_sync=force_sync)
+
+    async def is_ruins_march_active(self, force_sync: bool = False) -> bool:
+        """
+        فحص هل يوجد فيلق مشغول باستكشاف الأطلال حالياً (سواء في الذهاب أو الاستكشاف أو العودة):
+        - قراءة فورية من الذاكرة الحية (LiveMemoryEngine) عبر _read_live_local_queues (Zero-Request).
+        - استعلام مزامنة 1007/1000 مشروط إذا كانت الذاكرة خالية أو طُلبت المزامنة force_sync=True.
+        - فلترة صارمة لمعرّف القلعة (uid) لضمان احتساب مسيرات هذا الحساب فقط.
+        - التحقق من نوع المسار (moveLineType = 4) أو نوع خريطة الأطلال (mapType = 7) في الهدف (to) أو نقطة الانطلاق (from).
+        """
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return False
+
+        mem_engine = getattr(conn, "memory_engine", None)
+        is_synced = bool(getattr(mem_engine, "local_queues_synced", False))
+        queues = self._read_live_local_queues(conn)
+
+        # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
+        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+            sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
+            self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
+            resp = None
+            try:
+                resp = await conn.query("1007", "1000", {}, timeout=2)
+            except Exception:
+                resp = None
+
+            # انتظار قصير (حتى 0.5 ثانية) لوصول إشعار NOTIFY_LOCAL_QUEUE_SYNC (cmd 202) وتحديث الذاكرة الحية
+            for _ in range(5):
+                queues = self._read_live_local_queues(conn)
+                if queues or bool(getattr(mem_engine, "local_queues_synced", False)):
+                    break
+                await asyncio.sleep(0.1)
+
+            # احتياطي: إذا لم يصل الإشعار بعد، نأخذ البيانات مباشرة من استجابة الاستعلام
+            if not queues and isinstance(resp, dict) and isinstance(resp.get("data"), list):
+                queues = list(resp["data"])
+
+        if not queues:
+            return False
+
+        my_uid = str(getattr(self, "uid", "") or "").strip()
+        active_statuses = (0, 1, 2, 3, 4, 7)
+
+        for q in queues:
+            if not isinstance(q, dict):
+                continue
+
+            # فلترة صاحب المسيرة لضمان احتساب مسيرات هذه القلعة حصراً
+            q_uid = q.get("uid")
+            if my_uid and q_uid not in (None, "", 0, "0") and str(q_uid).strip() != my_uid:
+                continue
+
+            raw_status = q.get("status")
+            if raw_status is None:
+                continue
+            try:
+                status = int(raw_status)
+            except (TypeError, ValueError):
+                continue
+            if status not in active_statuses:
+                continue
+
+            # 1. فحص نوع مسار المسيرة (moveLineType = 4 مخصص للأطلال)
+            if q.get("moveLineType") == 4:
+                return True
+
+            # 2. فحص الهدف (to) أو نقطة الانطلاق (from في حال العودة) للأطلال (mapType = 7)
+            for loc_key in ("to", "from"):
+                info = q.get(loc_key, {})
+                if isinstance(info, dict):
+                    if info.get("mapType") == 7:
+                        return True
+                    raw_id = str(info.get("id") or "")
+                    parts = raw_id.split("-")
+                    if len(parts) >= 3 and parts[2] == "7":
+                        return True
+
+        return False
+
+    async def _get_castle_army(self) -> Dict[int, int]:
+        """جلب قوات القلعة المتاحة من الذاكرة الحية (armyCtrl) أو عبر استعلام 1005/1 احتياطياً."""
+        available: Dict[int, int] = {}
+        army_ctrl = self.conn.init_data.get('armyCtrl', {}) if hasattr(self.conn, 'init_data') else {}
+        if isinstance(army_ctrl, dict):
+            for k, v in army_ctrl.get('totalArmy', {}).items():
+                if str(k).isdigit() and str(v).isdigit():
+                    available[int(k)] = int(v)
+
+        if not available:
+            try:
+                self.log.debug("🛑🛑🛑🛑🛑🛑🛑")
+                r_army = await self.conn.query('1005', '1', {}, timeout=5)
+                if r_army and 'data' in r_army:
+                    for k, v in r_army['data'].get('totalArmy', {}).items():
+                        if str(k).isdigit() and str(v).isdigit():
+                            available[int(k)] = int(v)
+            except Exception as e:
+                self.log.debug(f"استعلام قوات القلعة 1005/1 لم يكتمل: {e}")
+
+        return available
+
+
+    async def has_active_ruins_march(self, force_sync: bool = False) -> bool:
+        """اسم بديل للدالة للتوافق مع مختلف التسميات."""
+        return await self.is_ruins_march_active(force_sync=force_sync)
 
     def print_local_queues(self, label: str = "") -> List[Any]:
         """دالة تجريبية لطباعة كامل محتوى local_queues من الذاكرة الحية."""

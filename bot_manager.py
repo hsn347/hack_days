@@ -2503,7 +2503,14 @@ class BotManager:
             return self._log_skip(label, "غير مفعلة")
 
         castle_lv = self.get_castle_level()
-        voyage_data = self.conn.init_data.get("heroVoyageAgCtrl", {}) if self.conn else {}
+        raw_voyage = self.conn.init_data.get("heroVoyageAgCtrl", {}) if self.conn else {}
+        if isinstance(raw_voyage, list):
+            voyage_data = raw_voyage[0] if (raw_voyage and isinstance(raw_voyage[0], dict)) else {}
+        elif isinstance(raw_voyage, dict):
+            voyage_data = raw_voyage
+        else:
+            voyage_data = {}
+
         is_locked = (
             (0 < castle_lv < 40)
             or (voyage_data and int(voyage_data.get("unlockTime", 0) or 0) == 0 and not isinstance(voyage_data.get("consignTasks"), list))

@@ -19,6 +19,7 @@ import random
 import re
 import sys
 import time
+from typing import Any, Dict, List, Optional, Tuple
 
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_DIR not in sys.path:
@@ -207,6 +208,18 @@ def get_task_quality(task_id: int) -> int:
     return 1      # ❓ لون غير معروف — أدنى أولوية احتياطاً
 
 
+def _is_resp_ok(resp: Any) -> bool:
+    """التحقق الآمن من نجاح استجابة السيرفر وتفادي أخطاء ردود القوائم."""
+    return isinstance(resp, dict) and str(resp.get('err', '')) in ('0', 'None', '')
+
+
+def _get_resp_err(resp: Any) -> str:
+    """استخراج كود الخطأ بأمان تام دون افتراض أن الرد قاموس دائماً."""
+    if isinstance(resp, dict):
+        return str(resp.get('err', 'Unknown'))
+    return str(resp) if resp is not None else 'Timeout'
+
+
 def hero_satisfies_req(hero, req):
     """التحقق مما إذا كان بطل معين يستوفي شرطاً محدداً"""
     num, min_lv, min_star, min_qual, req_type = req
@@ -306,31 +319,38 @@ class HeroConsignTask(BaseTask):
                 break
             await asyncio.sleep(0.5)
 
-        voyage = self.conn.init_data.get('heroVoyageAgCtrl', {})
-        if not voyage:
+        raw_voyage = self.conn.init_data.get('heroVoyageAgCtrl', {}) if self.conn else {}
+        if isinstance(raw_voyage, list):
+            voyage = raw_voyage[0] if (raw_voyage and isinstance(raw_voyage[0], dict)) else {}
+        elif isinstance(raw_voyage, dict):
+            voyage = raw_voyage
+        else:
+            voyage = {}
+
+        if not voyage or not isinstance(voyage, dict):
             msg = "لم يتم العثور على بيانات تكليف الأبطال (heroVoyageAgCtrl) في حزم التهيئة."
             self.log.warning(msg)
             return TaskResult.fail(msg)
 
-        raw_heroes = self.conn.init_data.get('heroCtrl', [])
-        player_hero_ids = [h.get('id') for h in raw_heroes if isinstance(h, dict)]
+        raw_heroes = self.conn.init_data.get('heroCtrl', []) if self.conn else []
+        player_hero_ids = [h.get('id') for h in raw_heroes if isinstance(h, dict) and h.get('id')]
 
         # ── المرحلة الأولى: رحلات الأبطال (Hero Voyage / Travel) ──
-        cur_travel_hero = voyage.get('heroId', 0)
+        cur_travel_hero = voyage.get('heroId', 0) if isinstance(voyage, dict) else 0
         if not cur_travel_hero or cur_travel_hero == 0:
             target_hero_id = 5502011 if 5502011 in player_hero_ids else (player_hero_ids[0] if player_hero_ids else 5502011)
             self.log.info(f"[*] لم يتم تحديد بطل للترحال، جاري اختيار البطل {target_hero_id}...")
             r_choose = await self.conn.query("3148", "1", {"cId": target_hero_id}, timeout=8.0)
-            if r_choose and str(r_choose.get('err', '')) in ('0', 'None', ''):
+            if _is_resp_ok(r_choose):
                 cur_travel_hero = target_hero_id
                 voyage['heroId'] = target_hero_id
                 self.log.info(f"    ✓ تم اختيار البطل {target_hero_id} للترحال بنجاح.")
                 await asyncio.sleep(random.uniform(1.5, 2.5))
             else:
-                err_c = r_choose.get('err', 'Unknown') if r_choose else 'Timeout'
+                err_c = _get_resp_err(r_choose)
                 self.log.warning(f"    ✗ فشل اختيار البطل للترحال: {err_c}")
 
-        voyage_count = voyage.get('voyageCount', {})
+        voyage_count = voyage.get('voyageCount', {}) if isinstance(voyage, dict) else {}
         used_physical = int(voyage_count.get("1", 0)) if isinstance(voyage_count, dict) else 0
         max_physical_travels = 10
         remaining_travels = max(0, max_physical_travels - used_physical)
@@ -345,15 +365,15 @@ class HeroConsignTask(BaseTask):
                     "amount": 1
                 }, timeout=8.0)
 
-                if r_travel and str(r_travel.get('err', '')) in ('0', 'None', ''):
+                if _is_resp_ok(r_travel):
                     completed_travels += 1
                     remaining_travels -= 1
-                    v_data = r_travel.get('data', {})
-                    if 'voyageCount' in v_data:
+                    v_data = r_travel.get('data', {}) if isinstance(r_travel, dict) else {}
+                    if isinstance(v_data, dict) and 'voyageCount' in v_data:
                         voyage['voyageCount'] = v_data['voyageCount']
                     self.log.info(f"    ✓ تم تنفيذ رحلة الترحال #{completed_travels} بنجاح.")
                 else:
-                    err_t = r_travel.get('err', 'Unknown') if r_travel else 'Timeout'
+                    err_t = _get_resp_err(r_travel)
                     self.log.warning(f"    ✗ توقف الترحال: {err_t}")
                     break
 
@@ -362,11 +382,20 @@ class HeroConsignTask(BaseTask):
             self.log.debug(f"ℹ️ رحلات الأبطال (الترحال): مكتملة مسبقاً ({used_physical}/10).")
 
         # ── المرحلة الثانية: استلام جوائز مهام التكليف المنجزة (Award Consign) ──
-        consign_tasks = voyage.get('consignTasks', [])
+        raw_consign_tasks = voyage.get('consignTasks', []) if isinstance(voyage, dict) else []
+        if isinstance(raw_consign_tasks, dict):
+            consign_tasks = [v for v in raw_consign_tasks.values() if isinstance(v, dict)]
+        elif isinstance(raw_consign_tasks, list):
+            consign_tasks = [t for t in raw_consign_tasks if isinstance(t, dict)]
+        else:
+            consign_tasks = []
+
         now_ts = int(time.time())
 
         ready_to_claim = []
         for idx_0, t in enumerate(consign_tasks):
+            if not isinstance(t, dict):
+                continue
             idx_1 = idx_0 + 1
             status = t.get('status', 1)
             start_time = t.get('startTime', 0)
@@ -381,44 +410,61 @@ class HeroConsignTask(BaseTask):
             self.log.info(f"🎁 تم العثور على {len(ready_to_claim)} جوائز مهام منجزة جاهزة للاستلام...")
             for idx_1, t in ready_to_claim:
                 resp = await self.conn.query("3148", "5", {"index": idx_1}, timeout=8.0)
-                if resp and str(resp.get('err', '')) in ('0', 'None', ''):
+                if _is_resp_ok(resp):
                     claimed_count += 1
                     self.log.info(f"    ✓ تم استلام جائزة الخانة #{idx_1} بنجاح.")
-                    r_data = resp.get('data', {})
-                    if 'consignTasks' in r_data:
-                        consign_tasks = r_data['consignTasks']
-                        voyage['consignTasks'] = consign_tasks
-                    if 'consignNum' in r_data:
-                        voyage['consignNum'] = r_data['consignNum']
+                    r_data = resp.get('data', {}) if isinstance(resp, dict) else {}
+                    if isinstance(r_data, dict):
+                        if 'consignTasks' in r_data:
+                            fresh_tasks = r_data['consignTasks']
+                            if isinstance(fresh_tasks, dict):
+                                consign_tasks = [v for v in fresh_tasks.values() if isinstance(v, dict)]
+                            elif isinstance(fresh_tasks, list):
+                                consign_tasks = [x for x in fresh_tasks if isinstance(x, dict)]
+                            voyage['consignTasks'] = consign_tasks
+                        if 'consignNum' in r_data:
+                            voyage['consignNum'] = r_data['consignNum']
                 else:
-                    err_c = resp.get('err', 'Unknown') if resp else 'Timeout'
+                    err_c = _get_resp_err(resp)
                     self.log.warning(f"    ✗ تعذر استلام جائزة الخانة #{idx_1}: {err_c}")
 
                 await asyncio.sleep(random.uniform(1.5, 2.7))
 
-            voyage = self.conn.init_data.get('heroVoyageAgCtrl', voyage)
-            consign_tasks = voyage.get('consignTasks', consign_tasks)
+            fresh_voyage = self.conn.init_data.get('heroVoyageAgCtrl', voyage) if self.conn else voyage
+            if isinstance(fresh_voyage, list):
+                voyage = fresh_voyage[0] if (fresh_voyage and isinstance(fresh_voyage[0], dict)) else voyage
+            elif isinstance(fresh_voyage, dict):
+                voyage = fresh_voyage
+            raw_consign_tasks = voyage.get('consignTasks', consign_tasks) if isinstance(voyage, dict) else consign_tasks
+            if isinstance(raw_consign_tasks, dict):
+                consign_tasks = [v for v in raw_consign_tasks.values() if isinstance(v, dict)]
+            elif isinstance(raw_consign_tasks, list):
+                consign_tasks = [x for x in raw_consign_tasks if isinstance(x, dict)]
         else:
             self.log.debug("ℹ️ لا توجد صناديق/جوائز مهام منجزة جاهزة للاستلام حالياً. المتابعة إلى تكليف الأبطال...")
 
         # ── المرحلة الثالثة: تكليف الأبطال (Hero Consign) ──
-        consign_count = voyage.get('consignCount', 0)
+        consign_count = int(voyage.get('consignCount', 0) or 0) if isinstance(voyage, dict) else 0
         daily_limit = 5
         remaining = max(0, daily_limit - consign_count)
 
         busy_hero_ids = set()
         for t in consign_tasks:
+            if not isinstance(t, dict):
+                continue
             if t.get('status') == 2:
                 heros = t.get('heros')
                 if isinstance(heros, list):
-                    busy_hero_ids.update(heros)
+                    busy_hero_ids.update([int(x) for x in heros if str(x).isdigit()])
                 elif isinstance(heros, dict):
-                    busy_hero_ids.update(heros.values())
+                    busy_hero_ids.update([int(x) for x in heros.values() if str(x).isdigit()])
 
         available_heroes = []
         for h in raw_heroes:
+            if not isinstance(h, dict):
+                continue
             hid = h.get('id')
-            if hid in busy_hero_ids:
+            if not hid or hid in busy_hero_ids:
                 continue
             meta = HEROES_META.get(hid, {})
             available_heroes.append({
@@ -433,6 +479,8 @@ class HeroConsignTask(BaseTask):
         if remaining > 0:
             solvable_tasks = []
             for idx_0, t in enumerate(consign_tasks):
+                if not isinstance(t, dict):
+                    continue
                 idx_1 = idx_0 + 1
                 cid = t.get('condition')
                 status = t.get('status', 1)
@@ -442,13 +490,18 @@ class HeroConsignTask(BaseTask):
                         solvable_tasks.append((idx_1, t, sol))
 
             # ترتيب المهام تنازلياً حسب لون الرتبة: 🟠 برتقالي → 🟣 بنفسجي → 🔵 أزرق → ❓ غير معروف
-            solvable_tasks.sort(key=lambda x: get_task_quality(x[1].get('id', 0)), reverse=True)
+            solvable_tasks.sort(
+                key=lambda x: get_task_quality(x[1].get('id', 0) if isinstance(x[1], dict) else 0),
+                reverse=True
+            )
 
             if solvable_tasks:
                 self.log.info(f"🚀 بدء تنفيذ مهام التكليف المتاحة (المتبقي: {remaining})...")
                 for idx_1, t, _ in solvable_tasks:
                     if remaining <= 0:
                         break
+                    if not isinstance(t, dict):
+                        continue
                     cid = t.get('condition')
                     sol = solve_task(available_heroes, cid)
                     if not sol:
@@ -459,14 +512,14 @@ class HeroConsignTask(BaseTask):
                         "heroIds": sol
                     }, timeout=8.0)
 
-                    if resp and str(resp.get('err', '')) in ('0', 'None', ''):
+                    if _is_resp_ok(resp):
                         executed_count += 1
                         remaining -= 1
                         self.log.info(f"    ✓ تم بدء مهمة التكليف #{idx_1} بنجاح بالأبطال {sol}")
                         used_set = set(sol)
                         available_heroes = [h for h in available_heroes if h['id'] not in used_set]
                     else:
-                        err_msg = resp.get('err', 'Unknown') if resp else 'No response'
+                        err_msg = _get_resp_err(resp)
                         self.log.warning(f"    ✗ فشل تنفيذ المهمة #{idx_1}: {err_msg}")
                         break
 
@@ -478,11 +531,11 @@ class HeroConsignTask(BaseTask):
 
         # فحص صندوق الهدايا التراكمي
         gift_claimed = False
-        consign_num = voyage.get('consignNum', 0)
+        consign_num = int(voyage.get('consignNum', 0) or 0) if isinstance(voyage, dict) else 0
         if (consign_num // 15) > 0:
             self.log.info(f"🎁 استلام صندوق الهدايا التراكمي ({consign_num}/15)...")
             r_gift = await self.conn.query("3148", "7", {}, timeout=6.0)
-            if r_gift and str(r_gift.get('err', '')) in ('0', 'None', ''):
+            if _is_resp_ok(r_gift):
                 gift_claimed = True
                 self.log.info("    ✓ تم استلام صندوق الهدايا التراكمي بنجاح.")
 
