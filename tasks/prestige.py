@@ -797,10 +797,45 @@ class PrestigeTask(BaseTask):
         """
         MAX_WHEAT_COST = 300000
 
+        # 1. فحص مستوى القلعة (يشترط متجر أوسمة الحرب بلوغ القلعة المستوى 30)
+        castle_lv = self.get_castle_level()
+        open_lv = 30
+        try:
+            bctrl = getattr(self.conn, 'init_data', {}).get("badgeExchangeCtrl", {})
+            if isinstance(bctrl, dict) and bctrl.get("openLv"):
+                open_lv = int(bctrl.get("openLv"))
+        except Exception:
+            open_lv = 30
+
+        if castle_lv < open_lv:
+            self.log.info(
+                f"🏰 [تبديل وسام الحرب] تم التخطي: مستوى القلعة غير كافٍ ({castle_lv} < {open_lv}) "
+                f"— متجر أوسمة الحرب غير متاح بعد."
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "status": "skipped",
+                "reason": "castle_level_too_low",
+                "castle_level": castle_lv,
+                "required_level": open_lv,
+                "exchanged": 0,
+                "message": f"مستوى القلعة غير كافٍ ({castle_lv} < {open_lv})"
+            }
+
+        # 2. فحص مستوى الهيبة (تتطلب مهمة الهيبة اليومية #4112024 هيبة 5+)
         merit_lv = self.get_merit_level()
         if merit_lv < 5:
-            self.log.info(f"👾 [غزاة الهيبة] تم التخطي: نظام الهيبة غير مفتوح للقلعة بعد (meritLv = {merit_lv}).")
-            return {"status": "skipped", "reason": "merit_level_too_low", "merit_level": merit_lv}
+            self.log.info(f"🎖️ [تبديل وسام الحرب] تم التخطي: نظام الهيبة غير مفتوح للقلعة بعد (meritLv = {merit_lv} < 5).")
+            return {
+                "success": True,
+                "skipped": True,
+                "status": "skipped",
+                "reason": "merit_level_too_low",
+                "merit_level": merit_lv,
+                "exchanged": 0,
+                "message": f"مستوى الهيبة ({merit_lv} < 5)"
+            }
 
         q_info = self.get_quest_info("badge_exchange")
         if q_info["is_done"]:

@@ -12,7 +12,7 @@ tasks/alliance.py — مهمة التحالف: التبرع لعلوم التح�
   6. التبرع بالذهب إذا حُدد عدد مرات مخصص من Firebase (donatetype: 1).
 
 الاستخدام كملف مستقل:
-    python tasks/alliance.py --email "meik.gaertner2306.MGr@gmail.com"
+    python tasks/alliance.py --email "fadeag422@gmail.com"
     python tasks/alliance.py --email "johan2003@yopmail.com" --gold 2
     python tasks/alliance.py --email "sumo-1234@hotmil.com" --gold 3 --sciid 33015
 """
@@ -132,7 +132,9 @@ class AllianceTask(BaseTask):
         alliance_ctrl = self.conn.init_data.get('allianceCtrl', {})
         alliance_id = 0
         if isinstance(alliance_ctrl, dict) and alliance_ctrl:
-            minfo = alliance_ctrl.get('memberinfo', {}).get('minfo', {})
+            # الأولوية السائدة لـ memberinfo، ثم البديل ownermemberinfo لقلاع القادة
+            member_obj = alliance_ctrl.get('memberinfo') or alliance_ctrl.get('ownermemberinfo') or {}
+            minfo = member_obj.get('minfo', {}) if isinstance(member_obj, dict) else {}
             if isinstance(minfo, dict):
                 alliance_id = int(minfo.get('aid', 0))
             if alliance_id == 0:
@@ -155,11 +157,23 @@ class AllianceTask(BaseTask):
         self.log.debug(f"🏛️ بدء مهمة التحالف (التحالف ID: {alliance_id})")
 
         alliance_ctrl = self.conn.init_data.get("allianceCtrl", {})
-        minfo = alliance_ctrl.get("memberinfo", {}).get("minfo", {}) if isinstance(alliance_ctrl, dict) else {}
+        member_obj = (alliance_ctrl.get("memberinfo") or alliance_ctrl.get("ownermemberinfo") or {}) if isinstance(alliance_ctrl, dict) else {}
+        minfo = member_obj.get("minfo", {}) if isinstance(member_obj, dict) else {}
 
         free_available = int(minfo.get("donateCount", 0))
         gold_done      = int(minfo.get("donateGlodCount", 0))
-        
+
+        # في حال كان الرصيد صفراً، نتحقق من التجدد الزمني بسيرفر اللعبة (نقطة كل 12 دقيقة / 720 ثانية)
+        if free_available == 0:
+            check_time = int(minfo.get("donateResCountCheckTime", 0))
+            if check_time > 0:
+                cur_time = int(self.conn.init_data.get("timeCtrl") or time.time())
+                elapsed = max(0, cur_time - check_time)
+                recharged = elapsed // 720
+                if recharged > 0:
+                    free_available = min(20, recharged)
+                    self.log.info(f"🔄 تم استعادة {free_available} تبرع مجاني بناءً على توقيت تجديد السيرفر (منذ {elapsed // 60} دقيقة)")
+
         self.log.debug(f"📊 رصيد التبرع الحالي: {free_available}/20 مجاني | تبرعات الذهب: {gold_done}")
 
         # 4. تحديد التقنية المستهدفة للتبرع

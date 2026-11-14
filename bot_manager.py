@@ -1896,8 +1896,11 @@ class BotManager:
             return self._log_skip(label, "غير مفعلة")
 
         alliance_ctrl = self.conn.init_data.get('allianceCtrl', {})
-        minfo = alliance_ctrl.get('memberinfo', {}).get('minfo', {})
+        member_obj = (alliance_ctrl.get('memberinfo') or alliance_ctrl.get('ownermemberinfo') or {}) if isinstance(alliance_ctrl, dict) else {}
+        minfo = member_obj.get('minfo', {}) if isinstance(member_obj, dict) else {}
         alliance_id = int(minfo.get('aid', 0))
+        if alliance_id == 0 and isinstance(alliance_ctrl, dict):
+            alliance_id = int(alliance_ctrl.get('allianceInfo', {}).get('aid', 0))
 
         if alliance_id == 0:
             return self._log_skip(label, "بدون تحالف")

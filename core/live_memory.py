@@ -47,7 +47,7 @@ logger = logging.getLogger("LiveMemory")
 # 1. Controller Whitelists & Startup Readiness Definitions
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Authoritative frozenset of exactly 43 controllers required by bot tasks & systems
+# Authoritative frozenset of exactly 44 controllers required by bot tasks & systems
 ALLOWED_CONTROLLERS: FrozenSet[str] = frozenset({
     # --- Critical Startup Core (6) ---
     "cityCtrl",
@@ -57,12 +57,13 @@ ALLOWED_CONTROLLERS: FrozenSet[str] = frozenset({
     "heroCtrl",
     "backpackCtrl",
 
-    # --- Core Subsystems & Progression (11) ---
+    # --- Core Subsystems & Progression (12) ---
     "allianceCtrl",
     "technologyCtrl",
     "vipCtrl",
     "meritoriousTaskCtrl",
     "timeRewardCtrl",
+    "timeCtrl",
     "lordSkillCtrl",
     "boeAttributeCtrl",
     "buffCtrl",
