@@ -18,7 +18,7 @@ tasks/skill_finder.py — أداة ودالة استكشاف وتحديد أطق
 الاستخدام عبر الطرفية:
     python tasks/skill_finder.py --skill stamina
     python tasks/skill_finder.py --skill 13021
-    python tasks/skill_finder.py --skill "الطاقة الوافرة" --email "mohamedfarg6233@gmil.com"
+    python tasks/skill_finder.py --skill "حصاد الموارد" --email "mohamedfarg6233@gmil.com"
     python tasks/skill_finder.py --all --email "user@gmail.com"
 """
 
@@ -80,11 +80,11 @@ KNOWN_SKILLS: Dict[str, Dict[str, Any]] = {
     },
     "warehouse": {
         "id": 58120,
-        "name": "حصاد المخزن",
+        "name": "حصاد الموارد",
         "icon": "🏛️",
         "tree": "مهارة الجارية (Maiden / Set 999)",
         "base_cd": 86400,
-        "desc": "استلام موارد مجانية مباشرة من المخزن"
+        "desc": "مكافأة إنتاج موارد حقول القلعة بنسبة 150%-200%"
     },
     "fast_dig": {
         "id": 12028,
@@ -141,9 +141,10 @@ SKILL_ALIASES: Dict[str, str] = {
     # الجمع السريع
     "gather": "gather", "جمع": "gather", "الجمع": "gather",
     "الجمع السريع": "gather", "جمع سريع": "gather", "12022": "gather",
-    # المخزن
+    # مهارة الجارية (حصاد الموارد / Tampon Hasat)
     "warehouse": "warehouse", "مخزن": "warehouse", "المخزن": "warehouse",
-    "حصاد المخزن": "warehouse", "58120": "warehouse",
+    "حصاد المخزن": "warehouse", "حصاد الموارد": "warehouse", "حصاد الموارد الوافر": "warehouse",
+    "58120": "warehouse", "58121": "warehouse", "tampon_hasat": "warehouse", "tamponhasat": "warehouse", "bumper_harvest": "warehouse",
     # الاستخراج السريع
     "fast_dig": "fast_dig", "hizlikazi": "fast_dig", "fastdig": "fast_dig",
     "استخراج": "fast_dig", "الاستخراج": "fast_dig", "الاستخراج السريع": "fast_dig",
@@ -243,12 +244,37 @@ def find_skill_location(
     set_list_data: Dict[str, Any] = lord_skill.get("setListData", {})
     cd_data: Dict[str, Any] = lord_skill.get("CDData", {})
 
+    # كشف ذكي لمهارة الجارية (حصاد الموارد - طقم 999): اختيار المستوى الأفضل المفتوح (58121 إن وُجد وإلا 58120)
+    if canonical_key == "warehouse" or target_id in (58120, 58121):
+        s_999 = set_list_data.get("999", {})
+        s_999_list = s_999.get("list", {}) if isinstance(s_999, dict) else {}
+        if str(target_id) == "58121":
+            target_id = 58121
+            target_name = "حصاد الموارد Lv. 2"
+        elif str(target_id) == "58120" and target_str == "58120":
+            target_id = 58120
+            target_name = "حصاد الموارد Lv. 1"
+        else:
+            if s_999_list.get("58121", 0) > 0:
+                target_id = 58121
+                target_name = "حصاد الموارد Lv. 2"
+            else:
+                target_id = 58120
+                target_name = "حصاد الموارد Lv. 1" if s_999_list.get("58120", 0) > 0 else "حصاد الموارد"
+
+        sid_str = str(target_id)
+        base_cd = 86400
+        target_icon = "🏛️"
+
     matching_sets: List[Dict[str, Any]] = []
     all_sets_summary: Dict[str, str] = {}
 
     # 4. فحص الأطقم والبحث عن المهارة
     for s_id, s_data in set_list_data.items():
         s_id_str = str(s_id)
+        # تخطي طقم 999 هنا لمهارة الجارية لمنع التكرار وضمان التحقق الواقعي
+        if s_id_str == "999" and target_id in (58120, 58121):
+            continue
         title = s_data.get("title") or f"طقم {s_id_str}"
         all_sets_summary[s_id_str] = title
 
@@ -263,32 +289,36 @@ def find_skill_location(
                 "used_points": s_data.get("usedPoint", 0)
             })
 
-    # حالة خاصة: مهارة الجارية (حصاد المخزن 58120) تتبع دائماً الطقم 999
-    if target_id == 58120 and not matching_sets:
+    # مهارة الجارية (حصاد الموارد 58120 / 58121) تتبع حصراً طقم 999 وتعتبر نشطة دوماً دون تبديل
+    if target_id in (58120, 58121):
         s_999 = set_list_data.get("999", {})
-        pts = s_999.get("list", {}).get(sid_str, 0)
-        matching_sets.append({
-            "set_id": "999",
-            "title": "مهارات الجارية",
-            "points": pts if pts > 0 else 1,
-            "is_active": True,
-            "power": 0,
-            "used_points": 0
-        })
+        pts = s_999.get("list", {}).get(sid_str, 0) if isinstance(s_999, dict) else 0
+        if pts > 0:
+            matching_sets.append({
+                "set_id": "999",
+                "title": "مهارات الجارية",
+                "points": pts,
+                "is_active": True,
+                "power": 0,
+                "used_points": 0
+            })
 
     is_found = len(matching_sets) > 0
     is_in_active = any(s["is_active"] for s in matching_sets)
 
     # تحديد الطقم الموصى به:
-    # 1. إذا كانت في الطقم النشط، نستخدمه لتفادي التبديل
-    # 2. وإلا نستخدم أول طقم وُجدت به المهارة
+    # 1. مهارات الجارية تتبع دائماً طقم 999
+    # 2. إذا كانت في الطقم النشط، نستخدمه لتفادي التبديل
+    # 3. وإلا نستخدم أول طقم وُجدت به المهارة
     recommended_set: Optional[str] = None
-    if is_in_active:
+    if target_id in (58120, 58121) or canonical_key == "warehouse":
+        recommended_set = "999"
+    elif is_in_active:
         recommended_set = active_set_id
     elif is_found:
         recommended_set = matching_sets[0]["set_id"]
 
-    needs_switch = (is_found and not is_in_active and target_id != 58120)
+    needs_switch = (is_found and not is_in_active and target_id not in (58120, 58121))
 
     # 5. حساب وقت التبريد (CD calculation)
     now = time.time()

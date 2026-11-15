@@ -12,7 +12,7 @@ tasks/transport.py — مهمة نقل وإمداد الموارد (Resource Tra
     1005 : 💎 ألماس / ذهب (Diamond / Gold).
 
 
-python tasks/transport.py --email "azadibrahim63@hotmail.com"
+python tasks/transport.py --email "xotabek304@gmail.com" --x 461 --y 263 --res 1002
 
 
 الإعدادات (config / Firebase):
@@ -390,25 +390,7 @@ class TransportTask(BaseTask):
 
 
         # 2. جلب معرف المملكة (kingdom_id / mapId)
-        kingdom_id = 0
-        if target_id and '-' in target_id:
-            parts = target_id.split('-')
-            if len(parts) >= 3 and parts[2].isdigit() and int(parts[2]) > 0:
-                kingdom_id = int(parts[2])
-
-        if not kingdom_id:
-            if getattr(self.conn, 'kingdom_id', None):
-                try: kingdom_id = int(self.conn.kingdom_id)
-                except Exception: pass
-
-        if not kingdom_id:
-            lord_base = self.conn.init_data.get('lordInfoCtrl', {}).get('base', {}) if hasattr(self.conn, 'init_data') else {}
-            if isinstance(lord_base, dict):
-                kingdom_id = int(lord_base.get('partition', 0))
-
-        if not kingdom_id:
-            kingdom_id = getattr(self.conn, 'server_id', 0) or 4
-
+        kingdom_id = await self.get_kingdom_id()
 
         # 3. حساب سعة الحمولة والضريبة بدقة
         if cfg.get('max_capacity'):
@@ -467,10 +449,15 @@ class TransportTask(BaseTask):
             if current_payload_weight < max_cap * 0.95:  # أقل من 95% من السعة
                 self.log.warning(f"⚠️ الحمولة ({current_payload_weight:,} وزن) أقل من سعة السوق ({max_cap:,}) — الموارد المتاحة محدودة")
 
+            self.log.info(f"{int(kingdom_id)}🎀🎀🎀🎀🎀🎀")
+            self.log.info(f"{int(actual_x)}🎉🎉🎉🎉🎉🎉")
+            self.log.info(f"{int(actual_y)}🧨🧨🧨🧨🧨🧨")
+            self.log.info(f"{str(target_id)}🎨🎨🎨🎨🎨🎨")
+            self.log.info(f"{current_march_resources}🎫🎫🎫🎫🎫🎫")
             march_payload = {
                 "matrixType": 4,      # 4 = نقل موارد
                 "moveLineType": 5,    # 5 = مسار خط النقل
-                "mapId": int(kingdom_id),
+                "mapId": 4,
                 "data": {
                     "to": {
                         "x": int(actual_x),

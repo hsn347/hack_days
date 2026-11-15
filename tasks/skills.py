@@ -19,10 +19,10 @@ tasks/skills.py — مهمة الاستعلام الذكي وتفعيل المه
      - المجموعة: مواهب الأمير (setId: "2" أو activeSetID).
      - الوظيفة: تسريع جمع الموارد من الخريطة بنسبة 100% لمدة ساعتين.
 
-  3. 🏛️ حصاد المخزن (Warehouse Harvest) — skillID: 58120
+  3. 🏛️ حصاد الموارد (Bumper Harvest / Tampon Hasat) — skillID: 58120 (Lv.1) / 58121 (Lv.2)
      - كولداون: 24 ساعة (86,400 ثانية).
      - المجموعة: مهارات الجارية / الحسناء (setId: "999").
-     - الوظيفة: الحصول على حزم موارد فورية من المخزن الملكي.
+     - الوظيفة: مضاعفة إنتاج موارد الحقول داخل القلعة بنسبة 150% إلى 200% لمدة 4 إلى 8 ساعات.
 
   4. ⚡ الطاقة الوافرة (Abundant Stamina / Second Wind) — skillID: 13021
      - كولداون: 4 ساعات (14,400 ثانية).
@@ -41,7 +41,7 @@ tasks/skills.py — مهمة الاستعلام الذكي وتفعيل المه
   - محاكاة بشرية بفواصل زمنية عشوائية (Human Jitter) بين عمليات التفعيل.
 
 الاستخدام كملف مستقل:
-    python tasks/skills.py --email "frankamar44@gmail.com" --skills stamina
+    python tasks/skills.py --email "jdjxlkdmdmjdkdm@gmail.com" --skills warehouse
     python tasks/skills.py --email "ossso5030@gmail.com" --check-only
     python tasks/skills.py --email "mohamedfarg6233@gmil.com" --skills stamina
 """
@@ -94,10 +94,10 @@ SUPPORTED_SKILLS: Dict[str, Dict[str, Any]] = {
     },
     "warehouse": {
         "id": 58120,
-        "name": "حصاد المخزن",
+        "name": "حصاد الموارد",
         "icon": "🏛️",
         "base_cd": 86400,  # 24 ساعة
-        "desc": "استلام موارد مجانية مباشرة من المخزن"
+        "desc": "مكافأة إنتاج موارد حقول القلعة بنسبة 150%-200%"
     },
     "stamina": {
         "id": 13021,
@@ -117,12 +117,15 @@ SUPPORTED_SKILLS: Dict[str, Dict[str, Any]] = {
 
 # خريطة معرف المهارة إلى المفتاح
 SKILL_ID_TO_KEY = {v["id"]: k for k, v in SUPPORTED_SKILLS.items()}
+SKILL_ID_TO_KEY[58121] = "warehouse"  # المستوى الثاني لمهارة الجارية
 
 # خريطة أسماء ومترادفات المهارات
 SKILL_ALIASES: Dict[str, str] = {
     "harvest": "harvest", "الحصاد": "harvest", "حصاد": "harvest", "الحصاد الوافر": "harvest", "حصاد وافر": "harvest", "12008": "harvest",
     "gather": "gather", "الجمع": "gather", "جمع": "gather", "الجمع السريع": "gather", "جمع سريع": "gather", "12022": "gather",
-    "warehouse": "warehouse", "المخزن": "warehouse", "مخزن": "warehouse", "حصاد المخزن": "warehouse", "58120": "warehouse",
+    "warehouse": "warehouse", "المخزن": "warehouse", "مخزن": "warehouse", "حصاد المخزن": "warehouse",
+    "حصاد الموارد": "warehouse", "حصاد الموارد الوافر": "warehouse", "58120": "warehouse", "58121": "warehouse",
+    "tampon_hasat": "warehouse", "tamponhasat": "warehouse", "bumper_harvest": "warehouse",
     "stamina": "stamina", "الطاقة": "stamina", "طاقة": "stamina", "الطاقة الوافرة": "stamina", "طاقة وافرة": "stamina", "13021": "stamina", "second_wind": "stamina", "ikinci_ruzgar": "stamina",
     "fast_dig": "fast_dig", "fastdig": "fast_dig", "hizlikazi": "fast_dig", "hizli_kazi": "fast_dig",
     "الاستخراج": "fast_dig", "استخراج": "fast_dig", "الاستخراج السريع": "fast_dig", "استخراج سريع": "fast_dig",
@@ -218,12 +221,37 @@ def find_skill_location(
     set_list_data: Dict[str, Any] = lord_skill.get("setListData", {})
     cd_data: Dict[str, Any] = lord_skill.get("CDData", {})
 
+    # كشف ذكي لمهارة الجارية (حصاد الموارد - طقم 999): اختيار المستوى الأفضل المفتوح (58121 إن وُجد وإلا 58120)
+    if canonical_key == "warehouse" or target_id in (58120, 58121):
+        s_999 = set_list_data.get("999", {})
+        s_999_list = s_999.get("list", {}) if isinstance(s_999, dict) else {}
+        if str(target_id) == "58121":
+            target_id = 58121
+            target_name = "حصاد الموارد Lv. 2"
+        elif str(target_id) == "58120" and target_str == "58120":
+            target_id = 58120
+            target_name = "حصاد الموارد Lv. 1"
+        else:
+            if s_999_list.get("58121", 0) > 0:
+                target_id = 58121
+                target_name = "حصاد الموارد Lv. 2"
+            else:
+                target_id = 58120
+                target_name = "حصاد الموارد Lv. 1" if s_999_list.get("58120", 0) > 0 else "حصاد الموارد"
+
+        sid_str = str(target_id)
+        base_cd = 86400
+        target_icon = "🏛️"
+
     matching_sets: List[Dict[str, Any]] = []
     all_sets_summary: Dict[str, str] = {}
 
     # 4. فحص الأطقم والبحث عن المهارة
     for s_id, s_data in set_list_data.items():
         s_id_str = str(s_id)
+        # تخطي طقم 999 هنا لمهارة الجارية لمنع التكرار وضمان التحقق الواقعي
+        if s_id_str == "999" and target_id in (58120, 58121):
+            continue
         title = s_data.get("title") or f"طقم {s_id_str}"
         all_sets_summary[s_id_str] = title
 
@@ -238,32 +266,36 @@ def find_skill_location(
                 "used_points": s_data.get("usedPoint", 0)
             })
 
-    # حالة خاصة: مهارة الجارية (حصاد المخزن 58120) تتبع دائماً الطقم 999
-    if target_id == 58120 and not matching_sets:
+    # مهارة الجارية (حصاد الموارد 58120 / 58121) تتبع حصراً طقم 999 وتعتبر نشطة دوماً دون تبديل
+    if target_id in (58120, 58121):
         s_999 = set_list_data.get("999", {})
-        pts = s_999.get("list", {}).get(sid_str, 0)
-        matching_sets.append({
-            "set_id": "999",
-            "title": "مهارات الجارية",
-            "points": pts if pts > 0 else 1,
-            "is_active": True,
-            "power": 0,
-            "used_points": 0
-        })
+        pts = s_999.get("list", {}).get(sid_str, 0) if isinstance(s_999, dict) else 0
+        if pts > 0:
+            matching_sets.append({
+                "set_id": "999",
+                "title": "مهارات الجارية",
+                "points": pts,
+                "is_active": True,
+                "power": 0,
+                "used_points": 0
+            })
 
     is_found = len(matching_sets) > 0
     is_in_active = any(s["is_active"] for s in matching_sets)
 
     # تحديد الطقم الموصى به:
-    # 1. إذا كانت في الطقم النشط، نستخدمه لتفادي التبديل
-    # 2. وإلا نستخدم أول طقم وُجدت به المهارة
+    # 1. مهارات الجارية تتبع دائماً طقم 999
+    # 2. إذا كانت في الطقم النشط، نستخدمه لتفادي التبديل
+    # 3. وإلا نستخدم أول طقم وُجدت به المهارة
     recommended_set: Optional[str] = None
-    if is_in_active:
+    if target_id in (58120, 58121) or canonical_key == "warehouse":
+        recommended_set = "999"
+    elif is_in_active:
         recommended_set = active_set_id
     elif is_found:
         recommended_set = matching_sets[0]["set_id"]
 
-    needs_switch = (is_found and not is_in_active and target_id != 58120)
+    needs_switch = (is_found and not is_in_active and target_id not in (58120, 58121))
 
     # 5. حساب وقت التبريد (CD calculation)
     now = time.time()
@@ -379,9 +411,9 @@ class SkillsTask(BaseTask):
 
             results.append({
                 "key": key,
-                "id": skill_id,
-                "name": meta["name"],
-                "icon": meta["icon"],
+                "id": loc.get("skill_id", skill_id),
+                "name": loc.get("skill_name", meta["name"]),
+                "icon": loc.get("icon", meta["icon"]),
                 "desc": meta["desc"],
                 "set_id": target_set,
                 "active_set": active_set,
@@ -411,9 +443,9 @@ class SkillsTask(BaseTask):
         if not skill_info.get("is_unlocked", False):
             return False, "المهارة غير مفتوحة أو لم يتم توزيع نقاط المواهب عليها في أي طقم"
 
-        target_set = str(skill_info["set_id"])
+        target_set = "999" if (skill_info["key"] == "warehouse" or int(skill_info.get("id", 0)) in (58120, 58121)) else str(skill_info["set_id"])
         active_set = str(skill_info.get("active_set", "1"))
-        need_switch = skill_info.get("needs_set_switch", False) and (target_set != active_set) and (skill_info["key"] != "warehouse")
+        need_switch = skill_info.get("needs_set_switch", False) and (target_set != active_set) and (skill_info["key"] != "warehouse") and (int(skill_info.get("id", 0)) not in (58120, 58121))
 
         vip_ctrl = self.conn.init_data.get("vipCtrl", {})
         vip_lv = int(vip_ctrl.get("vipLv", 0)) if isinstance(vip_ctrl, dict) else 0
@@ -452,7 +484,7 @@ class SkillsTask(BaseTask):
             err = str(rsp.get("err", ""))
 
             # في حال وجود خطأ 7 (طقم غير نشط) ولم نكن قد قمنا بالتبديل مسبقاً (مع التحقق من VIP 7+)
-            if err == "7" and not switched and skill_info["key"] != "warehouse" and vip_lv >= 7:
+            if err == "7" and not switched and skill_info["key"] != "warehouse" and int(skill_info.get("id", 0)) not in (58120, 58121) and vip_lv >= 7:
                 self.log.info(f"🔄 إعادة المحاولة مع تبديل طقم المواهب إلى {target_set}...")
                 sw_rsp = await self.conn.query("1002", "23", {"setID": target_set})
                 if sw_rsp and str(sw_rsp.get("err", "")) == "0":

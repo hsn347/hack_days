@@ -1649,7 +1649,7 @@ class BotManager:
             is_ready = await self.conn.wait_for_memory_ready(timeout=30.0, auto_fetch_missing=True)
             if not is_ready:
                 self._log("⚠️ الذاكرة الحية غير مكتملة، تعليق تشغيل المهام للدورة القادمة...")
-                return
+                return {}
 
         # 📋👇👇 قائمة تسلسل المهام: (الاسم، الدالة، مفتاح_الجدولة) — رتبها أو عدلها كما تشاء 👇👇📋
         # ⚠️ مفتاح_الجدولة يجب أن يطابق مفتاح المهمة في DEFAULT_FIREBASE_USER_CONFIG
@@ -2642,7 +2642,7 @@ class BotManager:
             is_ready = await self.conn.wait_for_memory_ready(timeout=30.0, auto_fetch_missing=True)
             if not is_ready:
                 self._log("⚠️ الذاكرة الحية غير مكتملة، تعليق تشغيل المهام للدورة القادمة...")
-                return True
+                return False
 
         # إنشاء كائن مهمة العفريت
         elf_task = ElfBossTask(self.conn, elf_cfg)
@@ -2794,7 +2794,7 @@ class BotManager:
             return {
                 "success": True,
                 "account": self.email,
-                "results": pipeline_results
+                "results": pipeline_results or {}
             }
 
         except Exception as e:
@@ -2875,7 +2875,7 @@ class BotManager:
 
             elapsed = (datetime.now() - start_time).total_seconds()
 
-            if cycle_res and isinstance(cycle_res, dict) and "elf_boss" in cycle_res.get("results", {}):
+            if cycle_res and isinstance(cycle_res, dict) and "elf_boss" in (cycle_res.get("results") or {}):
                 remaining = 0.0
             else:
                 extra_rand_mins = random.randint(0, 10)
