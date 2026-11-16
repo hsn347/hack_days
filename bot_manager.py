@@ -2669,14 +2669,6 @@ class BotManager:
             wait_seconds = (60 - cur_min) * 60 - now.second
             wait_mins = max(1, wait_seconds // 60)
             self._log(f"⏳ العفريت: انتظار رأس الساعة ({wait_mins}د)")
-            self._update_bot_conn_state("waiting", f"بانتظار رأس الساعة ({wait_mins}د)")
-            if self._async_stop_event is not None:
-                try:
-                    await asyncio.wait_for(self._async_stop_event.wait(), timeout=max(5, wait_seconds))
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(max(5, wait_seconds))
             return True
 
         elif cur_min >= 35:
@@ -2689,13 +2681,90 @@ class BotManager:
         self.current_task = "elf_boss"
         self.current_task_name = "🧝 بوت نخبة العفريت"
         _safe_bind_task_logger(elf_task, self._log_callback, level=logging.INFO)
-        elf_task.config["duration"] = attack_duration
+
+        session_deadline = time.time() + (attack_duration * 60.0)
 
         try:
-            elf_res = await elf_task.run()
-            self._log_task_result("نخبة العفريت", elf_res)
-        except Exception as ex:
-            self._log(f"💥 خطأ في نخبة العفريت: {ex}")
+            while time.time() < session_deadline and not self._stop_event.is_set():
+                if not self.is_connection_alive():
+                    kick_reason = self.get_disconnect_reason()
+                    self._log(f"⚠️ انقطاع الاتصال قبل بوت العفريت ({kick_reason})")
+                    reconnected = await self.wait_and_reconnect(kick_reason)
+                    if not reconnected:
+                        self._log("❌ تعذر إعادة الاتصال لبوت العفريت")
+                        break
+                    elf_task.conn = self.conn
+
+                rem_mins = max(1.0, (session_deadline - time.time()) / 60.0)
+                elf_task.config["duration"] = rem_mins
+
+                step_interrupted = False
+                elf_run_task = asyncio.create_task(elf_task.run())
+                disconnect_waiter = asyncio.create_task(self._disconnected_event.wait())
+                stop_waiter = asyncio.create_task(self._wait_for_stop_signal())
+
+                task_timeout = int(rem_mins * 60) + 15
+
+                done, pending = await asyncio.wait(
+                    [elf_run_task, disconnect_waiter, stop_waiter],
+                    timeout=task_timeout,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                for p in pending:
+                    p.cancel()
+
+                if stop_waiter in done or self._stop_event.is_set():
+                    try:
+                        await elf_task.stop()
+                    except Exception:
+                        pass
+                    elf_run_task.cancel()
+                    self._log("🛑 تم إيقاف بوت العفريت")
+                    break
+
+                if disconnect_waiter in done:
+                    kick_reason = self.get_disconnect_reason()
+                    self._log(f"⚡ انقطاع الاتصال أثناء بوت العفريت ({kick_reason})")
+                    step_interrupted = True
+                    try:
+                        await elf_task.stop()
+                    except Exception:
+                        pass
+                    elf_run_task.cancel()
+                    try:
+                        await elf_run_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+
+                else:
+                    try:
+                        elf_res = elf_run_task.result()
+                        self._log_task_result("نخبة العفريت", elf_res)
+                        if isinstance(elf_res, dict) and (elf_res.get("error") == "STAMINA_EMPTY" or elf_res.get("event_active") is False):
+                            break
+                    except Exception as e:
+                        self._log(f"💥 خطأ في نخبة العفريت: {e}")
+                        break
+
+                    if not self.is_connection_alive():
+                        kick_reason = self.get_disconnect_reason()
+                        self._log(f"⚠️ انقطع الاتصال بعد دورة العفريت ({kick_reason})")
+                        step_interrupted = True
+
+                if step_interrupted:
+                    reconnected = await self.wait_and_reconnect(kick_reason)
+                    if reconnected:
+                        self._log("🔄 استئناف بوت العفريت بعد إعادة الاتصال...")
+                        elf_task = ElfBossTask(self.conn, elf_cfg)
+                        _safe_bind_task_logger(elf_task, self._log_callback, level=logging.INFO)
+                        self._update_bot_conn_state("connected", "🧝 استئناف بوت العفريت...")
+                        continue
+                    else:
+                        self._log("❌ تعذر إعادة الاتصال لاستئناف بوت العفريت")
+                        break
+
+                break
         finally:
             _safe_unbind_task_logger(elf_task)
 
@@ -2705,14 +2774,6 @@ class BotManager:
             if remaining_wait > 30:
                 rem_mins = max(1, remaining_wait // 60)
                 self._log(f"⏳ العفريت: انتظار {rem_mins}د حتى رأس الساعة")
-                self._update_bot_conn_state("waiting", f"بانتظار رأس الساعة ({rem_mins}د)")
-                if self._async_stop_event is not None:
-                    try:
-                        await asyncio.wait_for(self._async_stop_event.wait(), timeout=remaining_wait)
-                    except asyncio.TimeoutError:
-                        pass
-                else:
-                    await asyncio.sleep(remaining_wait)
 
         return True
 
@@ -2875,8 +2936,13 @@ class BotManager:
 
             elapsed = (datetime.now() - start_time).total_seconds()
 
-            if cycle_res and isinstance(cycle_res, dict) and "elf_boss" in (cycle_res.get("results") or {}):
-                remaining = 0.0
+            is_elf_cycle = cycle_res and isinstance(cycle_res, dict) and "elf_boss" in (cycle_res.get("results") or {})
+            if is_elf_cycle:
+                now_after = datetime.now()
+                # إغلاق السوكت والانتظار الدقيق بين الدورات حتى رأس الساعة (:00) مثل البوت العادي
+                remaining = float(max(0, (60 - now_after.minute) * 60 - now_after.second))
+                if remaining < 10:
+                    remaining = 0.0
             else:
                 extra_rand_mins = random.randint(0, 10)
                 actual_wait_mins = self.loop_interval_minutes + extra_rand_mins
@@ -2891,9 +2957,14 @@ class BotManager:
             self._log(f"✅ انتهت الدورة #{iteration} ({elapsed:.0f}ث) — القادمة {next_run_str} (بعد {rem_mins}د)")
 
             if remaining > 0:
+                waiting_msg = (
+                    f"بانتظار رأس الساعة {next_run_str} (متبقي {rem_mins} دقيقة)"
+                    if is_elf_cycle else
+                    f"بانتظار الدورة القادمة الساعة {next_run_str} (متبقي {rem_mins} دقيقة)"
+                )
                 self._update_bot_conn_state(
                     "waiting",
-                    f"بانتظار الدورة القادمة الساعة {next_run_str} (متبقي {rem_mins} دقيقة)",
+                    waiting_msg,
                     next_run_time=next_run_iso
                 )
                 try:

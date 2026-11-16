@@ -33,7 +33,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-SERVER_HOST = "187.7.79.122"
+SERVER_HOST = "88.222.220.51"
 SERVER_USER = "root"
 SERVER_PASS = "hsnAsdfghjkl150#"
 REMOTE_DIR  = "/var/www/osmanli"

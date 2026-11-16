@@ -232,7 +232,7 @@ class BaseTask(ABC):
         queues = self._read_live_local_queues(conn)
 
         # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
-        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+        if (not queues and not is_synced or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
             sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
             self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
             resp = None
@@ -415,7 +415,7 @@ class BaseTask(ABC):
         queues = self._read_live_local_queues(conn)
 
         # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
-        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+        if (not queues and not is_synced or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
             sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
             self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
             resp = None
@@ -505,7 +505,7 @@ class BaseTask(ABC):
         queues = self._read_live_local_queues(conn)
 
         # استعلام المزامنة إذا طُلبت إجبارياً أو إذا كانت الذاكرة خالية تماماً ولم تُزامن بعد
-        if (not queues or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
+        if (not queues and not is_synced or force_sync) and getattr(conn, "is_connected", False) and hasattr(conn, "query"):
             sync_reason = "force_sync=True (طلب مزامنة إجباري)" if force_sync else "local_queues فارغة في الذاكرة (تهيئة أولى)"
             self.log.info(f"🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: {sync_reason}")
             resp = None

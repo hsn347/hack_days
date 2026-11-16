@@ -1,43 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-tasks/elf_boss.py — مهمة الهجوم على نخبة العفريت وزعماء الأبطال (Elf Elite / Battle Boss Attack)
-══════════════════════════════════════════════════════════════════════════════════════════════════
 
-بروتوكول البحث والهجوم على نخبة العفريت (Hero Battle Boss):
-  1. البحث عن العفريت الأقرب (Find Boss):
-     cmd: "2011", subcmd: "4", data: {"bossType": 10}
-     - يعيد السيرفر موقع العفريت: {"rspdata": {"x": bx, "y": by, "bossType": 10}}
-  2. استخراج التشكيلة المحفوظة (Get Formation):
-     cmd: "1005", subcmd: "7", data: {"compiletype": formation_id}
-     - جلب أبطال التشكيلة والحيوان والرونات والجيش المحفوظ.
-  3. فحص جاهزية الأبطال واختيار البدائل القتالية (Combat Fallback):
-     - إذا كان أبطال التشكيلة متاحين يتم إرسالهم فوراً.
-     - إذا كان أحدهما أو كلاهما مشغولاً في مسيرة أو دفاع، يتم تلقائياً اختيار أفضل أبطال
-       الحرب (5501xxx) الذين يمتلكون مهارات قتالية وهجومية (5610xxx / 5640xxx) بأعلى رتبة ومستوى.
-  4. إرسال هجوم الحشد الجماعي (Send Mass March):
-     cmd: "1007", subcmd: "2", data: {
-         "needSend": true,
-         "mapId": dynamic_map_id,
-         "moveLineType": 7,
-         "data": {
-             "data": {"mainInstanceType": 24, "massTime": 300},
-             "to": {"x": bx, "y": by, "id": f"{bx+1}-{by+1}-24-0-10"},
-             "army": [...]
-         },
-         "pets": [...],
-         "runePages": [1],
-         "matrixType": 1,
-         "heros": [...]
-     }
-
-المدخلات من المستخدم:
-  - formation_id: رقم التشكيلة الأساسية (1..6) [افتراضي: 1]
-  - max_distance: أقصى مسافة مقبولة للعفريت من القلعة (اختياري)
-  - count: عدد الفيالق المراد إرسالها [افتراضي: جميع الفيالق المتوفرة بالقلعة]
-  - all_legions: تفعيل الهجوم بكافة الفيالق المتاحة حتى امتلاء الطوابير
-
-أمر التشغيل المباشر:
-  python tasks/elf_boss.py --email "shook124@gmail.com" --formation 1
+  python tasks/elf_boss.py --email "hmzawyha44@gmail.com" --formation 2
 """
 
 from __future__ import annotations
@@ -82,7 +46,7 @@ DEFAULT_FORMATION_ID    = 1    # التشكيلة الافتراضية
 DEFAULT_TROOPS_COUNT    = 50000
 MAX_CASTLE_LEGIONS      = 6    # أقصى عدد فيالق ومسيرات ممكنة لأي قلعة
 DEFAULT_ATTACK_DELAY    = 35.0 # فترة الأمان الافتراضية الموسعة بين كل هجوم والآخر بالثواني (30 إلى 50 ثانية)
-MAX_ELF_SEARCH_DISTANCE = 150.0 # الحد الأقصى المطلق لمسافة البحث عن العفريت (150 كم)
+MAX_ELF_SEARCH_DISTANCE = 250.0 # الحد الأقصى المطلق لمسافة البحث عن العفريت (250 كم)
 _CASTLE_COORDS_CACHE: Dict[str, Tuple[int, int]] = {} # كاش إحداثيات القلعة العام لمنع الاستعلام المتكرر للسيرفر
 
 
@@ -332,9 +296,7 @@ class ElfBossTask(BaseTask):
         self.ultra_safe      : bool = bool(self.config.get('ultra_safe', False))
 
         self._heroes          : List[Dict[str, Any]] = []
-        self._busy_heroes     : Set[int] = set()
-        self._hero_busy_until : Dict[int, float] = {}
-        self._used_army       : Dict[int, int] = {}
+        self._busy_heroes     : Set[int] = set(self.config.get('busy_heroes', self.config.get('busy', [])))
         self._targeted_bosses : Set[Tuple[int, int]] = set()
         self._targeted_boss_ids: Set[str] = set()
         self._template_army   : Dict[str, int] = {}
@@ -345,6 +307,13 @@ class ElfBossTask(BaseTask):
         self._map_id          : int = 0
         self._cached_formation_data: Optional[Tuple[List[int], List[int], List[int], Dict[str, int]]] = None
         self._cached_boss_pool: List[Tuple[int, int, int, int, str, float]] = []
+
+    def _remove_from_cached_pool(self, bx: int, by: int, tid: Optional[str] = None):
+        """إزالة الزعيم المشغول أو المنتهي من كاش الذاكرة فوراً لمنع تكرار اختياره."""
+        self._cached_boss_pool = [
+            c for c in self._cached_boss_pool
+            if not (c[0] == bx and c[1] == by) and (not tid or c[4] != tid)
+        ]
 
     def disable_elf_task(self, castle_id_or_email: Optional[str] = None) -> bool:
         """
@@ -512,7 +481,7 @@ class ElfBossTask(BaseTask):
 
     async def _load_map_id(self):
         """تحديد معرف الخريطة والمملكة (mapId) تلقائياً للحساب."""
-        self._map_id = self._resolve_map_id()
+        self._map_id = await self.get_kingdom_id()
         if not self._map_id:
             uid_int = int(self.uid) if str(self.uid).isdigit() else self.uid
             try:
@@ -546,43 +515,80 @@ class ElfBossTask(BaseTask):
                             self._heroes.append({'id': int_hid, 'status': {'state': 0}, 'skillList': {}})
 
     def _detect_busy_heroes(self):
-        """استخراج الأبطال المشغولين في مسيرات الخريطة الحالية وتقدير عدد الفيالق النشطة."""
-        self._busy_heroes = set(self.config.get('busy_heroes', []))
-        all_queues = []
-        if getattr(self.conn, 'local_queues', None):
-            all_queues.extend(self.conn.local_queues)
+        """استخراج الأبطال المشغولين في مسيرات الخريطة الحالية بدقة 100% من الذاكرة الحية (Live Memory Engine)."""
+        if not hasattr(self, '_busy_heroes') or self._busy_heroes is None:
+            self._busy_heroes = set(self.config.get('busy_heroes', self.config.get('busy', [])))
+        else:
+            self._busy_heroes.update(self.config.get('busy_heroes', self.config.get('busy', [])))
 
-        for p in self.conn.cached_packets.values():
-            if isinstance(p, dict):
-                d = p.get('data', {})
-                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                    nd = d.get('notifyData', [])
-                    if isinstance(nd, list):
-                        all_queues.extend(nd)
+        queues = self._read_live_local_queues(self.conn)
+        my_uid = str(getattr(self, "uid", "") or "").strip()
 
         active_march_count = 0
-        for item in all_queues:
-            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
-            for q in q_list:
-                if not isinstance(q, dict):
-                    continue
-                # مسيرات نشطة (سائرة أو مرابطة أو حشد - 0 = Rally, 1 = Moving, 2 = Working)
-                if q.get('status') in (0, 1, 2, 3, 4, 7):
-                    active_march_count += 1
-                    h_list = q.get('heros') or q.get('data', {}).get('heros') or []
-                    if isinstance(h_list, list):
-                        for h in h_list:
-                            hid = h if isinstance(h, int) else (h.get('id') if isinstance(h, dict) else None)
-                            if hid and str(hid).isdigit():
-                                self._busy_heroes.add(int(hid))
+        for q in queues:
+            if not isinstance(q, dict):
+                continue
+            q_uid = q.get("uid")
+            if my_uid and q_uid not in (None, "", 0, "0") and str(q_uid).strip() != my_uid:
+                continue
+            # مسيرات نشطة (سائرة أو مرابطة أو حشد - 0 = Rally, 1 = Moving, 2 = Working/Battling, 3 = Returning, 4, 7)
+            if q.get('status') in (0, 1, 2, 3, 4, 7):
+                active_march_count += 1
+                h_list = q.get('heros') or q.get('data', {}).get('heros') or []
+                if isinstance(h_list, list):
+                    for h in h_list:
+                        hid = h if isinstance(h, int) else (h.get('id') if isinstance(h, dict) else None)
+                        if hid and str(hid).isdigit():
+                            self._busy_heroes.add(int(hid))
 
-        # تنظيف ودمج الأبطال المشغولين في حشود ومسيرات العفريت الزمنية
-        now = time.time()
-        self._hero_busy_until = {hid: ts for hid, ts in self._hero_busy_until.items() if ts > now}
-        self._busy_heroes.update(self._hero_busy_until.keys())
+        # فحص أبطال الذاكرة الحية من heroCtrl إذا كانت حالتهم state != 0
+        for h in self._heroes:
+            if isinstance(h, dict):
+                hid = h.get('id')
+                if hid and str(hid).isdigit():
+                    st = h.get('status', {}).get('state', 0) if isinstance(h.get('status'), dict) else 0
+                    if st != 0:
+                        self._busy_heroes.add(int(hid))
 
         if self._busy_heroes:
-            self.log.debug(f"⏳ أبطال مشغولون في مسيرات قائمة: {list(self._busy_heroes)} (عدد المسيرات النشطة: {active_march_count})")
+            self.log.debug(f"⏳ أبطال مشغولون في مسيرات قائمة (الذاكرة الحية): {list(self._busy_heroes)} (عدد المسيرات النشطة: {active_march_count})")
+
+    def _get_active_boss_targets(self) -> Tuple[Set[Tuple[int, int]], Set[str]]:
+        """
+        استخراج إحداثيات ومعرفات العفاريت التي يوجد فيلق نشط في الطريق إليها حالياً (سائر أو حشد):
+        (status in (0, 1, 2) لمنع تكرار الهجوم وخطأ 8026).
+        """
+        active_coords: Set[Tuple[int, int]] = set()
+        active_ids: Set[str] = set()
+
+        queues = self._read_live_local_queues(self.conn)
+        my_uid = str(getattr(self, "uid", "") or "").strip()
+
+        for q in queues:
+            if not isinstance(q, dict):
+                continue
+            q_uid = q.get("uid")
+            if my_uid and q_uid not in (None, "", 0, "0") and str(q_uid).strip() != my_uid:
+                continue
+            status = q.get("status")
+            if status not in (0, 1, 2):  # 0=Rally, 1=Moving to target, 2=Battling
+                continue
+            to_data = q.get("to") or q.get("data", {}).get("to") or {}
+            if isinstance(to_data, dict):
+                tid = str(to_data.get("id") or "").strip()
+                if tid:
+                    active_ids.add(tid)
+                    try:
+                        parts = tid.split("-")
+                        active_coords.add((int(parts[0]), int(parts[1])))
+                    except Exception:
+                        pass
+                tx = to_data.get("x")
+                ty = to_data.get("y")
+                if tx is not None and ty is not None:
+                    active_coords.add((int(tx) + 1, int(ty) + 1))
+
+        return active_coords, active_ids
 
     async def _find_unique_elf_boss(
         self,
@@ -619,10 +625,6 @@ class ElfBossTask(BaseTask):
         # تحديد فئات الزعماء ونوع الخريطة حسب نوع الهدف
         is_elite = (self.boss_type in (10, 6) or self.boss_type == DEFAULT_BOSS_TYPE)
         map_type = 24 if is_elite else 23
-        radar_types = [10, 6] if is_elite else [9, 5]
-        if self.boss_type in radar_types:
-            radar_types.remove(self.boss_type)
-            radar_types.insert(0, self.boss_type)
 
         # ── 0. فحص كاش الأهداف المحفوظة بالذاكرة أولاً (Target Pool Cache) ──
         if self._cached_boss_pool:
@@ -641,44 +643,33 @@ class ElfBossTask(BaseTask):
                 )
                 return best_bx, best_by, best_btype, best_itype, best_tid, best_dist, "OK"
 
-        # ── 1. الأولوية الأولى: رادار الزعماء المباشر الرسمي (2011/4) ──
-        for bt in radar_types:
-            try:
-                resp_radar = await self.conn.query('2011', '4', {"bossType": bt}, timeout=4)
-                if resp_radar and str(resp_radar.get('err', '0')) == '0':
-                    rsp = resp_radar.get('rspdata', {})
-                    rx = rsp.get('x')
-                    ry = rsp.get('y')
-                    if rx is not None and ry is not None:
-                        calc_tid = f"{rx}-{ry}-{map_type}-0-{bt}"
-                        if calc_tid not in seen_ids and (rx, ry) not in seen_coords:
-                            rdist = math.hypot(rx - cx, ry - cy)
-                            if rdist <= max_limit:
-                                seen_ids.add(calc_tid)
-                                seen_coords.add((rx, ry))
-                                candidates.append((rx, ry, bt, map_type, calc_tid, rdist))
-                                self.log.debug(f"🎯 [رادار الزعماء المباشر] تم رصد هدف نشط عند ({rx}, {ry}) | المسافة: {rdist:.1f} كم")
-                                break
-            except Exception as e:
-                self.log.debug(f"استعلام رادار 2011/4 للفئة {bt}: {e}")
-
-        # ── 2. استعلام الخريطة المباشر (2011/3) لجمع باقي الأهداف المتاحة ──
-        search_range = int(max_limit or 150)
+        # ── استعلام الخريطة الشامل (2011/3) لجمع مسبح الأهداف المتاحة ──
+        search_range = int(max_limit or 250)
         try:
+            self.log.info(f"😍😍😍😍😍😍")
             resp_map = await self.conn.query('2011', '3', {
                 "mapType": map_type,
-                "num": 20,
+                "num": 10,
                 "y": cy,
                 "x": cx,
                 "range": search_range
             }, timeout=5)
 
             if resp_map and isinstance(resp_map.get('result'), list):
+                # اعتماد بيانات 2011/3 كأهداف جديدة، وتحديث الاستبعاد ليقتصر على المسيرات النشطة فقط لمنع 8026
+                active_coords, active_ids = self._get_active_boss_targets()
+                self._targeted_bosses = set(active_coords)
+                self._targeted_boss_ids = set(active_ids)
+                self._cached_boss_pool.clear()
+
+                fresh_seen_ids = set(active_ids)
+                fresh_seen_coords = set(active_coords)
+
                 for item in resp_map['result']:
                     if not isinstance(item, dict):
                         continue
                     tid = str(item.get('id', '')).strip()
-                    if not tid or tid in seen_ids:
+                    if not tid or tid in fresh_seen_ids:
                         continue
 
                     # استخراج الإحداثيات الحقيقية المعتمدة من المعرف ID مباشرة
@@ -692,15 +683,15 @@ class ElfBossTask(BaseTask):
                         real_y = int(item.get('y', 0)) + 1
                         btype = self.boss_type
 
-                    if (real_x, real_y) in seen_coords:
+                    if (real_x, real_y) in fresh_seen_coords:
                         continue
 
                     dist = math.hypot(real_x - cx, real_y - cy)
                     if dist > max_limit:
                         continue
 
-                    seen_ids.add(tid)
-                    seen_coords.add((real_x, real_y))
+                    fresh_seen_ids.add(tid)
+                    fresh_seen_coords.add((real_x, real_y))
                     candidates.append((real_x, real_y, btype, map_type, tid, dist))
         except Exception as e:
             self.log.debug(f"خطأ أثناء استعلام الخريطة 2011/3: {e}")
@@ -793,44 +784,49 @@ class ElfBossTask(BaseTask):
 
     def _resolve_combat_heroes(self, form_heroes: List[int], fid_label: str = "") -> List[int]:
         """
-        التحقق من أبطال التشكيلة أو الاستبدال التلقائي بأبطال حرب شاغرين:
+        التحقق من أبطال التشكيلة أو الاستبدال التلقائي بأبطال حرب شاغرين (مطابق لمعيار monster.py و stronghold.py):
         """
-        available_form = []
-        for hid in form_heroes:
-            if hid not in self._busy_heroes:
-                hdata = next((x for x in self._heroes if x.get('id') == hid), None)
-                if hdata and hdata.get('status', {}).get('state', 0) == 0:
-                    available_form.append(hid)
+        available_form: List[int] = []
+        for h in form_heroes:
+            if h and str(h).isdigit():
+                hid = int(h)
+                if hid not in self._busy_heroes:
+                    hdata = next((x for x in self._heroes if x.get('id') and int(x['id']) == hid), None)
+                    if hdata and hdata.get('status', {}).get('state', 0) == 0:
+                        available_form.append(hid)
 
         if len(available_form) >= 2:
-            self.log.debug(f"🎖️ تم اختيار أبطال التشكيلة المحفوظة ({fid_label}): {available_form[:2]}")
-            return available_form[:2]
+            chosen = available_form[:2]
+            self.log.info(f"🎖️ تم اختيار أبطال التشكيلة المحفوظة ({fid_label}): {chosen}")
+            return chosen
 
         if available_form:
-            self.log.debug(f"ℹ️ أحد أبطال التشكيلة متاح ({available_form[0]}) والآخر مشغول...")
-            extra_busy = set(self._busy_heroes) | {available_form[0]}
+            hero1 = available_form[0]
+            self.log.debug(f"ℹ️ أحد أبطال التشكيلة متاح ({hero1}) والآخر مشغول — إكمال البطل الثاني...")
+            extra_busy = set(self._busy_heroes) | {hero1}
             fillers = _pick_combat_heroes(self._heroes, max_count=1, busy=extra_busy)
             if fillers:
-                chosen = [available_form[0], fillers[0]]
-                self.log.debug(f"⚔️ تشكيلة الأبطال المكتملة: {chosen}")
+                chosen = [hero1, fillers[0]]
+                self.log.info(f"⚔️ تشكيلة الأبطال المكتملة (بطل التشكيلة {hero1} + بديل {fillers[0]}): {chosen}")
                 return chosen
             else:
-                self.log.debug(f"⚔️ بطل واحد متاح من التشكيلة: {[available_form[0]]}")
-                return [available_form[0]]
+                chosen = [hero1]
+                self.log.info(f"⚔️ بطل واحد متاح من التشكيلة: {chosen}")
+                return chosen
 
-        self.log.debug("⚠️ أبطال التشكيلة المحفوظة غير متاحين أو مشغولون بالكامل...")
+        self.log.debug(f"⚠️ أبطال التشكيلة ({fid_label}) مشغولون أو غير متاحين — اختيار أفضل أبطال الحرب تلقائياً...")
         chosen = _pick_combat_heroes(self._heroes, max_count=2, busy=self._busy_heroes)
         if len(chosen) == 2:
-            self.log.debug(f"⚔️ تم اختيار بطلي حرب بدلاء بنجاح: {chosen}")
+            self.log.info(f"⚔️ أبطال الحرب البدلاء المختارون (بطلان اثنان): {chosen}")
             return chosen
         elif len(chosen) == 1:
-            self.log.debug(f"⚔️ بطل حرب واحد متاح بالقلعة: {chosen}")
+            self.log.info(f"⚔️ بطل حرب واحد متاح بالقلعة: {chosen}")
             return chosen
         else:
             any_cands = [int(h['id']) for h in self._heroes if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy_heroes and h.get('status', {}).get('state', 0) == 0]
             if any_cands:
                 chosen_any = any_cands[:2]
-                self.log.debug(f"⚠️ بديل اضطراري: تم اختيار أي أبطال متاحين بالقلعة ({len(chosen_any)}): {chosen_any}")
+                self.log.info(f"⚠️ بديل اضطراري: تم اختيار أي أبطال متاحين بالقلعة ({len(chosen_any)}): {chosen_any}")
                 return chosen_any
 
         self.log.warning("⚠️ لا يتوفر أي بطل شاغر بالقلعة نهائياً!")
@@ -862,10 +858,6 @@ class ElfBossTask(BaseTask):
             except Exception as e:
                 self.log.debug(f"خطأ أثناء استعلام 1005/1 للجيش: {e}")
 
-        for tid, used in self._used_army.items():
-            if tid in available:
-                available[tid] = max(0, available[tid] - used)
-
         march_army = []
         target_army = form_army or self._template_army
         if not target_army:
@@ -888,6 +880,9 @@ class ElfBossTask(BaseTask):
         if total_req > max_troops:
             scale = max_troops / float(total_req)
 
+        expected_march_troops = min(total_req, max_troops)
+        min_required_troops = int(expected_march_troops * 0.70)
+
         for tid, req_cnt in clean_target.items():
             avail = available.get(tid, 0)
             scaled_req = max(1, int(req_cnt * scale)) if scale < 1.0 else req_cnt
@@ -897,45 +892,29 @@ class ElfBossTask(BaseTask):
                 available[tid] -= take
 
         total_march = sum(x["num"] for x in march_army)
-        # إذا نفدت قوات التشكيلة المحددة من القلعة تماماً أو لم يتبق سوى عدد رمزي غير صالح
-        if total_march < 50:
+        # التحقق من شرط قوة التشكيلة (70% كحد أدنى إلزامي لمنع إرسال فيالق ضعيفة)
+        if total_march < min_required_troops:
             self.log.warning(
-                f"🛑 [نفاد جنود التشكيلة] القوات المتاحة بالقلعة من جنود التشكيلة المحددة ({self.formation_id}) "
-                f"غير كافية ({total_march:,} جندي) — التوقف الآمن وعدم إقحام قوات خارج التشكيلة."
+                f"🛑 [قوة التشكيلة غير كافية] القوات المتاحة بالقلعة من جنود التشكيلة ({self.formation_id}) "
+                f"غير كافية ({total_march:,} جندي) — أقل من 70% من قوة التشكيلة ({min_required_troops:,} من أصل {expected_march_troops:,}). "
+                f"التوقف الآمن والانتظار لعودة الفيالق النشطة."
             )
             return []
 
         self.log.debug(
-            f"🛡️ تم تجهيز القوات (100% من التشكيلة {self.formation_id}): "
+            f"🛡️ تم تجهيز القوات ({total_march / expected_march_troops * 100:.1f}% من التشكيلة {self.formation_id}): "
             f"إجمالي {total_march:,} جندي عبر {len(march_army)} فئة قتالية."
         )
         return march_army
 
     async def _get_queue_id(self) -> str:
         """جلب معرف الطابور من الذاكرة الحية دون استعلام شبكي (0ms)."""
-        # 1. قراءة فورية من طوابير الذاكرة الحية
-        if getattr(self.conn, 'local_queues', None):
-            for item in self.conn.local_queues:
-                q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
-                for q in q_list:
-                    if isinstance(q, dict):
-                        qid = q.get('queueId') or q.get('id')
-                        if qid:
-                            return str(qid)
-
-        for p in self.conn.cached_packets.values():
-            if isinstance(p, dict):
-                d = p.get('data', {})
-                if isinstance(d, dict) and d.get('notifyID') == 'NOTIFY_LOCAL_QUEUE_SYNC':
-                    nd = d.get('notifyData', [])
-                    if isinstance(nd, list):
-                        for item in nd:
-                            q_list = item.get('data', []) if isinstance(item, dict) else (item if isinstance(item, list) else [])
-                            for q in q_list:
-                                if isinstance(q, dict):
-                                    qid = q.get('queueId') or q.get('id')
-                                    if qid:
-                                        return str(qid)
+        queues = self._read_live_local_queues(self.conn)
+        for q in queues:
+            if isinstance(q, dict):
+                qid = q.get('queueId') or q.get('id')
+                if qid:
+                    return str(qid)
 
         # 2. استعلام احتياطي فقط إذا لم تتوفر بالذاكرة
         try:
@@ -971,9 +950,14 @@ class ElfBossTask(BaseTask):
         """
         # 1. تثبيت الاعتماد 100% على التشكيلة المحددة لجميع الفيالق
         target_fid = self.formation_id
+        self.log.info(f"{target_fid} 🥰🥰🥰🥰🥰")
 
         # 2. جلب بيانات التشكيلة
         form_heroes, form_pets, form_runes, form_army = await self._load_formation(target_fid)
+        self.log.info(f"{form_heroes} 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️")
+        self.log.info(f"{form_pets} 🐴🐴🐴🐴🐴")
+        self.log.info(f"{form_runes} 🥰🥰🥰🥰🥰")
+        self.log.info(f"{form_army} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻")
 
         # حفظ قوالب التشكيلة للاستخدام في الفيالق اللاحقة إذا كانت التشكيلات الأخرى فارغة
         if form_army and not self._template_army:
@@ -986,14 +970,22 @@ class ElfBossTask(BaseTask):
         # 3. تحديد الأبطال
         if not self._heroes:
             await self._load_heroes()
+        avail_heroes_before = [int(h['id']) for h in self._heroes if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy_heroes and h.get('status', {}).get('state', 0) == 0]
+        self.log.info(f"{avail_heroes_before} 🧝🏻‍♂️🧝🏻‍♂️🧝🏻‍♂️🧝🏻‍♂️🧝🏻‍♂️")
         chosen_heroes = self._resolve_combat_heroes(form_heroes, fid_label=f"تشكيلة {target_fid}")
         if not chosen_heroes:
             return False, "NO_HEROES"
 
+        afasf = await self.get_available_troops()
+
+        self.log.info(f"{afasf} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧")
+
+
         # 4. تحديد الجيش
         march_army = await self._resolve_army(form_army)
+        self.log.info(f"{march_army} 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️")
         if not march_army:
-            return False, "NO_ARMY"
+            return False, "INSUFFICIENT_ARMY"
 
         total_troops = sum(a['num'] for a in march_army)
 
@@ -1040,22 +1032,25 @@ class ElfBossTask(BaseTask):
 
         self.log.info(f"🚀 [العفريت] إرسال فيلق {legion_idx} نحو ({bx}, {by}) | جنود: {total_troops:,}")
 
+        if not getattr(self.conn, 'is_connected', False):
+            return False, "SOCKET_DISCONNECTED"
+
         resp = await self.conn.query('1007', '2', payload, timeout=8)
         if not resp:
+            if not getattr(self.conn, 'is_connected', False):
+                return False, "SOCKET_DISCONNECTED"
             return False, "انتهت مهلة استجابة السيرفر أثناء إرسال المسيرة"
 
         err = str(resp.get('err', '0'))
         if err == '0':
-            # تحديث المشغولين بمدة حشد ومسيرة واقعية (5 دقائق حشد + 2 دقيقة ذهاب وعودة = 420 ثانية)
-            now = time.time()
             for hid in chosen_heroes:
                 self._busy_heroes.add(hid)
-                self._hero_busy_until[hid] = now + 420.0
-            for item in march_army:
-                self._used_army[item['id']] = self._used_army.get(item['id'], 0) + item['num']
             self._targeted_bosses.add((bx, by))
             if target_map_id:
                 self._targeted_boss_ids.add(target_map_id)
+
+            avail_heroes_after = [int(h['id']) for h in self._heroes if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy_heroes and h.get('status', {}).get('state', 0) == 0]
+            self.log.info(f"{avail_heroes_after} 🏹🏹🏹🏹🏹")
                         # استخراج معرف المسيرة (queueId) فورياً من رد السيرفر المباشر أو الذاكرة الحية
             self.log.debug(f"🔍 رد 1007/2: {resp}")
             resp_data = resp.get('data') or resp.get('retData') or {}
@@ -1105,11 +1100,13 @@ class ElfBossTask(BaseTask):
             self._targeted_bosses.add((bx, by))
             if target_map_id:
                 self._targeted_boss_ids.add(target_map_id)
+            self._remove_from_cached_pool(bx, by, target_map_id)
             return False, "8002: الهدف غير متاح أو تغيرت حالته/انتهى على الخريطة"
         elif err == '8026':
             self._targeted_bosses.add((bx, by))
             if target_map_id:
                 self._targeted_boss_ids.add(target_map_id)
+            self._remove_from_cached_pool(bx, by, target_map_id)
             return False, "8026: يوجد حشد جماعي نشط لك بالفعل ضد هذا العفريت حالياً"
         elif err == '800001':
             return False, "800001: الحيوان الأليف غير مفتوح بالحساب (Err_PET_UNLOCK_ERROR_DEBRIS_COUNT_NOTENOUGH)"
@@ -1117,17 +1114,16 @@ class ElfBossTask(BaseTask):
             self._targeted_bosses.add((bx, by))
             if target_map_id:
                 self._targeted_boss_ids.add(target_map_id)
+            self._remove_from_cached_pool(bx, by, target_map_id)
             return False, "8035: الهدف مشغول بمعركة أو حشد آخر حالياً وصل للحد الأقصى أو تغيرت حالته (Err_MAP_QUEUE_BATTLE_NUM_OUT)"
         elif err in ('8032', '10002', '10003'):
             return False, "STAMINA_EMPTY: طاقة اللورد غير كافية لإرسال الهجوم على العفريت (كود 8032)"
         elif err == '8009':
             return False, "NO_ARMY: نقص في القوات المتاحة بالقلعة (كود 8009)"
         elif err == '9007020':
-            now = time.time()
             for hid in chosen_heroes:
                 self._busy_heroes.add(hid)
-                self._hero_busy_until[hid] = now + 240.0
-            return False, f"HEROES_BUSY: 9007020: أبطال التشكيلة {chosen_heroes} مشغولون حالياً في مسيرة أو حشد قائم"
+            return False, f"HERO_BUSY: 9007020: أبطال التشكيلة {chosen_heroes} مشغولون حالياً في مسيرة أو حشد قائم"
         elif err in ('8004', '9007004'):
             return False, "QUEUE_FULL: طوابير المسيرات بالقلعة مكتملة بالكامل"
         elif err == '16001':
@@ -1151,6 +1147,7 @@ class ElfBossTask(BaseTask):
         total_attacks = 0
         last_error = ""
         cycle_num = 0
+        empty_map_attempts = 0
 
         # تحميل إحداثيات القلعة ومعرف الخريطة لمرة واحدة فقط
         await self._load_castle_coords()
@@ -1182,12 +1179,21 @@ class ElfBossTask(BaseTask):
                 current_legion = total_attacks + successful_attacks + 1
                 self.log.debug(f"⚔️ تجهيز الفيلق رقم ({current_legion})...")
 
+                available = await self.get_available_marches_count(allow_network=False)
+                self.log.info(f"{available} ⚔️⚔️⚔️⚔️⚔️")
+                if available <= 0:
+                    self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.")
+                    break
+
+
                 bx, by, btype, itype, tid, dist, status = await self._find_unique_elf_boss()
 
                 if status != "OK" or bx is None or by is None or btype is None:
                     last_error = status
                     self.log.info(f"🏁 لا توجد نخبة عفريت متاحة حالياً على الخريطة ({status}).")
                     break
+
+                empty_map_attempts = 0
 
                 # إرسال الهجوم
                 success, err_or_qid = await self._send_elf_attack(
@@ -1206,14 +1212,18 @@ class ElfBossTask(BaseTask):
                     march_queue_id = err_or_qid
                     self.log.debug(f"🎉 الفيلق ({total_attacks}) أُطلق بنجاح على نخبة العفريت عند ({bx}, {by}) [queueId={march_queue_id}]")
                     if successful_attacks < self.attack_count and time.time() < deadline:
-                        safe_delay = round(random.uniform(30.0, 50.0), 2)
-                        self.log.debug(f"🛡️ تم إرسال الفيلق بنجاح — انتظار {safe_delay:.1f} ثانية قبل تجهيز الفيلق التالي...")
+                        safe_delay = round(random.uniform(8.0, 14.0), 2)
+                        self.log.debug(f"🛡️ تم إرسال الفيلق بنجاح — انتظار {safe_delay:.1f} ثانية (فاصل أمان بشري) قبل تجهيز الفيلق التالي...")
                         await asyncio.sleep(safe_delay)
                 else:
                     err_msg = err_or_qid
                     last_error = err_msg
                     consecutive_errors += 1
                     self.log.warning(f"⚠️ تعذر إرسال الفيلق {current_legion}: {err_msg}")
+
+                    if "SOCKET_DISCONNECTED" in err_msg or not getattr(self.conn, 'is_connected', False):
+                        self.log.warning("⚡ انقطع الاتصال بالسيرفر أثناء إرسال الفيلق.")
+                        return TaskResult.fail("انقطاع الاتصال بالسيرفر", error="SOCKET_DISCONNECTED", attacks=total_attacks)
 
                     if "STAMINA_EMPTY" in err_msg or "8032" in err_msg:
                         self.log.info("🛑 نفدت طاقة اللورد — تعطيل مهمة العفريت للقلعة وإنهاء الجلسة.")
@@ -1224,8 +1234,21 @@ class ElfBossTask(BaseTask):
                         self.log.info("🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.")
                         break
 
-                    if "NO_ARMY" in err_msg:
-                        self.log.info("🛑 نفدت القوات المتاحة بالقلعة حالياً.")
+                    if "NO_ARMY" in err_msg or "INSUFFICIENT_ARMY" in err_msg:
+                        self.log.info("🛑 القوات المتاحة بالقلعة لا تكفي لتشكيل فيلق بقوة 70% من التشكيلة.")
+                        break
+
+                    if "HERO_BUSY" in err_msg or "HEROES_BUSY" in err_msg or "9007020" in err_msg:
+                        # إذا كان البطل مشغولاً وتوجد أبطال قتال بديلة متاحة: تجربة البطل التالي فوراً (مطابق لمعيار monster.py و stronghold.py)
+                        avail_combat_heroes = [
+                            h for h in self._heroes
+                            if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy_heroes
+                            and str(h.get('id', '')).startswith('5501')
+                        ]
+                        if avail_combat_heroes:
+                            self.log.info(f"🔄 البطل السابق في مسيرة — تجربة بطل قتالي بديل فوراً ({len(avail_combat_heroes)} متاح بالقلعة)...")
+                            continue
+                        self.log.info("🛑 كافة أبطال الحرب بالقلعة في مسيرات نشطة حالياً.")
                         break
 
                     if "NO_HEROES" in err_msg:
@@ -1247,12 +1270,13 @@ class ElfBossTask(BaseTask):
                             break
 
                     if "8026" in err_msg or "8002" in err_msg or "8035" in err_msg:
-                        if consecutive_errors >= 2:
-                            self.log.warning(f"🛑 [قاطع الدائرة] استنفاد المحاولة البديلة للزعيم المتاح ({err_msg}).")
+                        max_retries = max(4, min(10, len(self._cached_boss_pool)))
+                        if consecutive_errors >= max_retries:
+                            self.log.warning(f"🛑 [قاطع الدائرة] استنفاد المحاولات البديلة للزعماء المتاحين ({consecutive_errors} محاولات | {err_msg}).")
                             break
                         retry_desc = "حشد مكرر" if "8026" in err_msg else ("زعيم انتهى" if "8002" in err_msg else "معركة ممتلئة")
-                        self.log.warning(f"⚠️ ({retry_desc}) للهدف ({bx}, {by}) — تجربة هدف بديل لمرة واحدة فقط...")
-                        retry_wait = round(random.uniform(4.0, 7.0), 2)
+                        self.log.warning(f"⚠️ ({retry_desc}) للهدف ({bx}, {by}) — تجربة هدف بديل من الكاش...")
+                        retry_wait = round(random.uniform(2.0, 4.0), 2)
                         await asyncio.sleep(retry_wait)
                         continue
 
@@ -1264,13 +1288,99 @@ class ElfBossTask(BaseTask):
             if remaining_seconds <= 0 or self.is_stopped():
                 break
 
-            # انتظار 3 دقائق إذا امتلأت الطوابير أو انتهت الفيالق أو انشغل الأبطال
-            self.log.info(f"⏳ امتلاء/انشغال الفيالق — انتظار 3 دقائق (180 ثانية) قبل معاودة الهجوم... (الوقت المتبقي للجلسة: {int(remaining_seconds // 60)} دقيقة)")
-            await asyncio.sleep(180)
+            # التحقق هل التوقف سببه انشغال الفيالق بالخارج (امتلاء الطوابير أو انتظار عودة القوات والأبطال)
+            active_marches = await self.get_active_marches_count(force_sync=False)
+            avail_cap = await self.get_available_marches_count(force_sync=False, allow_network=False)
+            waiting_for_legions = (avail_cap <= 0) or (active_marches > 0 and (
+                "INSUFFICIENT_ARMY" in last_error or "NO_ARMY" in last_error or
+                "NO_HEROES" in last_error or "HERO_BUSY" in last_error or
+                "HEROES_BUSY" in last_error or "9007020" in last_error
+            ))
 
-            # تفريغ الأهداف القديمة المنتهية استعداداً للدورة القادمة
-            self._targeted_bosses.clear()
-            self._targeted_boss_ids.clear()
+            if waiting_for_legions:
+                # 🔄 الانتظار الذكي لعودة أي فيلق شاغر لاستعادة الطوابير والقوات والأبطال
+                if avail_cap <= 0:
+                    wait_reason = "طوابير الفيالق ممتلئة بالكامل"
+                elif "HERO_BUSY" in last_error or "HEROES_BUSY" in last_error or "9007020" in last_error or "NO_HEROES" in last_error:
+                    wait_reason = "أبطال الحرب في مسيرات نشطة بالخارج بانتظار عودتهم"
+                else:
+                    wait_reason = "قوة الجيش غير مكتملة (<70%) بانتظار عودة الفيالق النشطة"
+                self.log.info(f"⏳ {wait_reason} (يوجد {active_marches} فيلق بالخارج | المتبقي للجلسة: {int(remaining_seconds // 60)}د)...")
+                queue_freed = False
+                wait_start = time.time()
+                max_queue_wait = min(remaining_seconds, 900.0)
+                initial_active = active_marches
+
+                while (time.time() - wait_start) < max_queue_wait and not self.is_stopped():
+                    if not getattr(self.conn, 'is_connected', False):
+                        return TaskResult.fail("انقطاع الاتصال أثناء انتظار الفيالق", error="SOCKET_DISCONNECTED", attacks=total_attacks)
+
+                    # فحص فوري للطوابير والمسيرات النشطة من الذاكرة الحية (Zero-Request)
+                    curr_active = await self.get_active_marches_count(force_sync=False)
+                    curr_avail = await self.get_available_marches_count(force_sync=False, allow_network=False)
+
+                    # إذا عاد فيلق إلى القلعة (انخفض عدد الفيالق بالخارج أو فُرغ طابور مسيرة)
+                    if curr_active < initial_active or (avail_cap <= 0 and curr_avail > 0):
+                        self.log.info(f"🐎 عاد فيلق إلى القلعة (المسيرات بالخارج الآن: {curr_active}) — استعادة القوات وانطلاق فوري لمهاجمة العفريت!")
+                        queue_freed = True
+                        break
+
+                    # نبضة نوم سريعة 1 ثانية، مع استجابة فورية كل 0.25 ثانية لزر الإيقاف
+                    slept = 0.0
+                    while slept < 1.0:
+                        if self.is_stopped():
+                            break
+                        await asyncio.sleep(0.25)
+                        slept += 0.25
+
+                    if self.is_stopped():
+                        break
+
+                if not queue_freed and not self.is_stopped() and getattr(self.conn, 'is_connected', False):
+                    # مزامنة احتياطية إذا طال الانتظار للتأكد من حالة الطوابير
+                    try:
+                        await self.get_available_marches_count(force_sync=True, allow_network=True)
+                    except Exception:
+                        pass
+
+                    synced_active = await self.get_active_marches_count(force_sync=False)
+                    synced_avail = await self.get_available_marches_count(force_sync=False, allow_network=False)
+                    if synced_active >= initial_active and (avail_cap <= 0 and synced_avail <= 0 or avail_cap > 0):
+                        self.log.warning(
+                            "⏳ استمرت الفيالق بالخارج بعد 15 دقيقة والمزامنة الاحتياطية (1007/1000) — "
+                            "إنهاء الجلسة فوراً والانتظار حتى رأس الساعة (:00)."
+                        )
+                        break
+
+                if queue_freed:
+                    self._busy_heroes.clear()
+                    await self._load_heroes()
+                    avail_heroes_freed = [int(h['id']) for h in self._heroes if isinstance(h, dict) and h.get('id') and int(h['id']) not in self._busy_heroes and h.get('status', {}).get('state', 0) == 0]
+                    self.log.info(f"{avail_heroes_freed} 🏰🏰🏰🏰🏰")
+                    continue
+            elif "INSUFFICIENT_ARMY" in last_error or "NO_ARMY" in last_error:
+                # لا توجد فيالق بالخارج، ومع ذلك قوات القلعة لا تبلغ 70% من التشكيلة
+                self.log.warning(
+                    f"🛑 لا توجد أي فيالق بالخارج وقوات القلعة لا تبلغ 70% من التشكيلة ({self.formation_id}) — "
+                    "إنهاء الجلسة فوراً لحين تدريب قوات جديدة."
+                )
+                break
+            else:
+                # الطوابير شاغرة لكن لا توجد أهداف صالحة على الخريطة حالياً
+                empty_map_attempts += 1
+                if empty_map_attempts >= 2:
+                    self.log.warning("🏁 تأكد خلو الخريطة من العفاريت بعد محاولتي بحث — إنهاء الجلسة فوراً والانتظار حتى رأس الساعة (:00).")
+                    break
+
+                wait_refresh = min(remaining_seconds, 60.0)
+                self.log.info(f"⏳ لم يتم العثور على أي عفريت متاح (محاولة 1/2) — انتظار دقيقة كاملة ({int(wait_refresh)} ثانية) لإعادة البحث...")
+                self._cached_boss_pool.clear()  # تفريغ الكاش لإعادة البحث بالخريطة
+                slept = 0.0
+                while slept < wait_refresh:
+                    if self.is_stopped():
+                        break
+                    await asyncio.sleep(0.25)
+                    slept += 0.25
 
         # إرجاع النتيجة النهائية للجلسة
         if total_attacks > 0:
@@ -1358,7 +1468,6 @@ if __name__ == "__main__":
 
             # إعادة فحص جاهزية القلعة وتفريغ المشغولين المنتهين
             task._busy_heroes.clear()
-            task._used_army.clear()
             task._targeted_bosses.clear()
             task._targeted_boss_ids.clear()
             await task._load_heroes()

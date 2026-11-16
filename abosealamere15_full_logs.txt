@@ -1,0 +1,202 @@
+Nov 16 09:08:54 srv2165848 python[4454]: INFO:     172.71.148.83:0 - "GET /api/admin/users-castles/summary?page=1&page_size=25&search=abosealamere15%40gmail.com HTTP/1.0" 200 OK
+Nov 16 09:09:56 srv2165848 python[4454]: [09:09:56][INFO][api_server] 🚀 [abosealamere15@gmail.com] بدء تشغيل البوت (Thread Pool)...
+Nov 16 09:09:56 srv2165848 python[4454]: [09:09:56][INFO][api_server] ▶️  [abosealamere15@gmail.com] طلب تشغيل قُبل من 4PRyi0yByeUbc7vs7S27AGbSCgW2 (castle_id=pD8qSHvGxV)
+Nov 16 09:09:56 srv2165848 python[4454]: [09:09:56][INFO][api_server] ✅ [abosealamere15@gmail.com] تم تأكيد الجلسة بنجاح.
+Nov 16 09:09:56 srv2165848 python[4454]: [09:09:56][abosealamere15] ═══ 🔄 دورة #1 (09:09:56) ═══
+Nov 16 09:09:56 srv2165848 python[4454]: [09:09:56][abosealamere15] 🔐 جاري الاتصال بالحساب: abosealamere15@gmail.com
+Nov 16 09:09:57 srv2165848 python[4454]: [09:09:57][INFO][game_client] [Login] ✓ abosealamere15@gmail.com → Gate 119.8.213.131:4000 uid=10592144
+Nov 16 09:09:57 srv2165848 python[4454]: [09:09:57][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_ACTIVITY_SHOW_CHANGE_TIME
+Nov 16 09:09:58 srv2165848 python[4454]: [09:09:58][abosealamere15] 🌐 1000/1
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] ✅ تم الاتصال والمصافحة بنجاح
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] ▶️ بدء: نخبة العفريت (31د | طاقة 1755)
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 👹 [العفريت] بدء استهداف نخبة العفريت فئة 10 (مدة الجلسة: 31 دقيقة)...
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: local_queues فارغة في الذاكرة (تهيئة أولى)
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 🌐 1007/1000
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD_ALL(2) | مسيراتي=2
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 3 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:09:59 srv2165848 python[4454]: [09:09:59][abosealamere15] 😍😍😍😍😍😍
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] 🌐 2011/3
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] {511: 104116, 710: 239, 709: 67} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:10:00 srv2165848 python[4454]: [09:10:00][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 🚀 [العفريت] إرسال فيلق 1 نحو (468, 369) | جنود: 31,990
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 🌐 1007/2
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:72,202,821:101,710:184), woundedArmy(709:26,511:26), trainArmy()
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: base.health=1,735
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: physical.time=-1
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501018(lv=100,st=0)
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501009(lv=60,st=0)
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD(10592144-6114) | مسيراتي=3
+Nov 16 09:10:02 srv2165848 python[4454]: [09:10:02][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] 2 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] 🎯 [من كاش الأهداف المباشر] تم اختيار نخبة العفريت (Elite Boss) عند (404, 289) [ID: 404-289-24-0-10] | المسافة: 90.1 كم (المتبقي بالكاش: 7 زعيم)
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] {511: 72202, 710: 184, 709: 46} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:10:13 srv2165848 python[4454]: [09:10:13][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 🚀 [العفريت] إرسال فيلق 3 نحو (404, 289) | جنود: 31,990
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 🌐 1007/2
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:40,288,821:101,710:129), woundedArmy(709:26,511:26), trainArmy()
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: base.health=1,715
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: physical.time=-1
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501012(lv=60,st=0)
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501014(lv=60,st=0)
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD(10592144-6115) | مسيراتي=4
+Nov 16 09:10:16 srv2165848 python[4454]: [09:10:16][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:10:17 srv2165848 python[4454]: [09:10:17][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:10:27 srv2165848 python[4454]: [09:10:27][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] 1 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] 🎯 [من كاش الأهداف المباشر] تم اختيار نخبة العفريت (Elite Boss) عند (406, 327) [ID: 406-327-24-0-10] | المسافة: 94.3 كم (المتبقي بالكاش: 6 زعيم)
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] {511: 40288, 710: 129, 709: 25} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:10:28 srv2165848 python[4454]: [09:10:28][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 🚀 [العفريت] إرسال فيلق 5 نحو (406, 327) | جنود: 31,990
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 🌐 1007/2
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:8,374,821:101,710:74), woundedArmy(709:26,511:26), trainArmy()
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: base.health=1,695
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: physical.time=-1
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501001(lv=60,st=0)
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501005(lv=40,st=0)
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD(10592144-6116) | مسيراتي=5
+Nov 16 09:10:31 srv2165848 python[4454]: [09:10:31][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:10:43 srv2165848 python[4454]: [09:10:43][abosealamere15] 0 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:10:43 srv2165848 python[4454]: [09:10:43][abosealamere15] 🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.
+Nov 16 09:10:43 srv2165848 python[4454]: [09:10:43][abosealamere15] ⏳ طوابير الفيالق ممتلئة بالكامل (يوجد 5 فيلق بالخارج | المتبقي للجلسة: 30د)...
+Nov 16 09:10:51 srv2165848 python[4454]: [09:10:51][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_TIME
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:40,287,821:101,710:129), woundedArmy(709:26,511:26), trainArmy()
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:40,287,821:101,710:129), woundedArmy(709:27,511:27), trainArmy()
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501013(lv=40,st=1)
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_MIGRATION
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501023(lv=9,st=1)
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_CITY [cityCtrl] | الدمج: نجح ✅ | الجديد: قمح=1,995,639,023
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: REMOVE(10592144-6113 hit) | مسيراتي=4
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ACK(11) | مسيراتي=4
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: fcInfo.fcInfo={'aVictoryTimes': 7015, 'battleShipFc': 4650, 'historyTopFc': 20243389, 'winning': '76%', 'heroFc': 739...
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 🐎 عاد فيلق إلى القلعة (المسيرات بالخارج الآن: 4) — استعادة القوات وانطلاق فوري لمهاجمة العفريت!
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 1 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 🎯 [من كاش الأهداف المباشر] تم اختيار نخبة العفريت (Elite Boss) عند (553, 368) [ID: 553-368-24-0-10] | المسافة: 95.4 كم (المتبقي بالكاش: 5 زعيم)
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] {511: 40287, 710: 129, 709: 24} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:11:02 srv2165848 python[4454]: [09:11:02][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:11:04 srv2165848 python[4454]: [09:11:04][abosealamere15] 🚀 [العفريت] إرسال فيلق 4 نحو (553, 368) | جنود: 31,990
+Nov 16 09:11:04 srv2165848 python[4454]: [09:11:04][abosealamere15] 🌐 1007/2
+Nov 16 09:11:04 srv2165848 python[4454]: [09:11:04][abosealamere15] ⚠️ تعذر إرسال الفيلق 4: HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم
+Nov 16 09:11:04 srv2165848 python[4454]: [09:11:04][abosealamere15] 🛑 [قاطع الدائرة الفوري] خطأ سيرفر (HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم) — إيقاف الدورة.
+Nov 16 09:11:04 srv2165848 python[4454]: [09:11:04][abosealamere15] ⏳ لم يتم العثور على أي عفريت متاح (محاولة 1/2) — انتظار دقيقة كاملة (60 ثانية) لإعادة البحث...
+Nov 16 09:11:31 srv2165848 python[4454]: [09:11:31][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: UPDATE(10606961-1387) | مسيراتي=4
+Nov 16 09:11:31 srv2165848 python[4454]: [09:11:31][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: REMOVE(10606961-1387 hit) | مسيراتي=4
+Nov 16 09:11:51 srv2165848 python[4454]: [09:11:51][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_TIME
+Nov 16 09:11:52 srv2165848 python[4454]: [09:11:52][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:11:58 srv2165848 python[4454]: [09:11:58][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: UPDATE(10592144-6110) | مسيراتي=4
+Nov 16 09:12:04 srv2165848 python[4454]: [09:12:04][abosealamere15] 1 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:12:04 srv2165848 python[4454]: [09:12:04][abosealamere15] 😍😍😍😍😍😍
+Nov 16 09:12:04 srv2165848 python[4454]: [09:12:04][abosealamere15] 🌐 2011/3
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] {511: 40287, 710: 129, 709: 24} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:12:05 srv2165848 python[4454]: [09:12:05][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:12:07 srv2165848 python[4454]: [09:12:07][abosealamere15] 🚀 [العفريت] إرسال فيلق 4 نحو (553, 368) | جنود: 31,990
+Nov 16 09:12:07 srv2165848 python[4454]: [09:12:07][abosealamere15] 🌐 1007/2
+Nov 16 09:12:07 srv2165848 python[4454]: [09:12:07][abosealamere15] ⚠️ تعذر إرسال الفيلق 4: HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم
+Nov 16 09:12:07 srv2165848 python[4454]: [09:12:07][abosealamere15] 🛑 [قاطع الدائرة الفوري] خطأ سيرفر (HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم) — إيقاف الدورة.
+Nov 16 09:12:07 srv2165848 python[4454]: [09:12:07][abosealamere15] ⏳ لم يتم العثور على أي عفريت متاح (محاولة 1/2) — انتظار دقيقة كاملة (60 ثانية) لإعادة البحث...
+Nov 16 09:12:27 srv2165848 python[4454]: INFO:     172.70.243.116:0 - "GET /api/admin/users-castles/summary?page=1&page_size=25&search=abosealamere15%40gmail.com HTTP/1.0" 200 OK
+Nov 16 09:12:29 srv2165848 python[4454]: INFO:     172.70.243.116:0 - "GET /api/admin/users-castles/summary?page=1&page_size=25&search=abosealamere15%40gmail.com HTTP/1.0" 200 OK
+Nov 16 09:12:36 srv2165848 python[4454]: [09:12:36][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:12:42 srv2165848 python[4454]: [09:12:42][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:12:42 srv2165848 python[4454]: [09:12:42][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_DYNAMIC_AD
+Nov 16 09:12:51 srv2165848 python[4454]: [09:12:51][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_TIME
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] 1 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] 😍😍😍😍😍😍
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] 🌐 2011/3
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] {511: 40287, 710: 129, 709: 24} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:13:07 srv2165848 python[4454]: [09:13:07][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:13:10 srv2165848 python[4454]: [09:13:10][abosealamere15] 🚀 [العفريت] إرسال فيلق 4 نحو (553, 368) | جنود: 31,990
+Nov 16 09:13:10 srv2165848 python[4454]: [09:13:10][abosealamere15] 🌐 1007/2
+Nov 16 09:13:10 srv2165848 python[4454]: [09:13:10][abosealamere15] ⚠️ تعذر إرسال الفيلق 4: HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم
+Nov 16 09:13:10 srv2165848 python[4454]: [09:13:10][abosealamere15] 🛑 [قاطع الدائرة الفوري] خطأ سيرفر (HEROES_BUSY: 9007020: أبطال التشكيلة [5501018, 5501009] مشغولون حالياً في مسيرة أو حشد قائم) — إيقاف الدورة.
+Nov 16 09:13:10 srv2165848 python[4454]: [09:13:10][abosealamere15] ⏳ لم يتم العثور على أي عفريت متاح (محاولة 1/2) — انتظار دقيقة كاملة (60 ثانية) لإعادة البحث...
+Nov 16 09:13:51 srv2165848 python[4454]: [09:13:51][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_TIME
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_STATUS
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] 📨 إشعار NOTIFY_CITY [cityCtrl] | الدمج: نجح ✅ | الجديد: قمح=1,995,633,766
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] ⚠️ انقطع الاتصال (other_device)
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] ⚡ انقطاع الاتصال أثناء بوت العفريت (دخول شخص آخر إلى الحساب (Other Device Login))
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] 🛑 تم إيقاف مهمة [elf_boss]
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] ⚠️ انقطاع الاتصال (دخول شخص آخر إلى الحساب (Other Device Login)) — انتظار 250ث...
+Nov 16 09:14:10 srv2165848 python[4454]: [09:14:10][abosealamere15] ⏳ إعادة الاتصال (1/10) خلال 250ث...
+Nov 16 09:17:20 srv2165848 python[4454]: [09:17:20][abosealamere15] ⏳ متبقي على إعادة الدخول: 60ث
+Nov 16 09:17:35 srv2165848 python[4454]: [09:17:35][abosealamere15] ⏳ متبقي على إعادة الدخول: 45ث
+Nov 16 09:17:50 srv2165848 python[4454]: [09:17:50][abosealamere15] ⏳ متبقي على إعادة الدخول: 30ث
+Nov 16 09:18:05 srv2165848 python[4454]: [09:18:05][abosealamere15] ⏳ متبقي على إعادة الدخول: 15ث
+Nov 16 09:18:15 srv2165848 python[4454]: [09:18:15][abosealamere15] ⏳ متبقي على إعادة الدخول: 5ث
+Nov 16 09:18:20 srv2165848 python[4454]: [09:18:20][abosealamere15] 🔄 محاولة إعادة الدخول (1/10)...
+Nov 16 09:18:20 srv2165848 python[4454]: [09:18:20][abosealamere15] 🔐 جاري الاتصال بالحساب: abosealamere15@gmail.com
+Nov 16 09:18:22 srv2165848 python[4454]: [09:18:22][INFO][game_client] [Login] ✓ abosealamere15@gmail.com → Gate 119.8.213.131:4000 uid=10592144
+Nov 16 09:18:22 srv2165848 python[4454]: [09:18:22][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_ACTIVITY_SHOW_CHANGE_TIME
+Nov 16 09:18:23 srv2165848 python[4454]: [09:18:23][abosealamere15] 🌐 1000/1
+Nov 16 09:18:24 srv2165848 python[4454]: INFO:     104.23.239.89:0 - "GET /api/admin/users-castles/summary?page=1&page_size=25&search=abosealamere15%40gmail.com HTTP/1.0" 200 OK
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] ✅ تم الاتصال والمصافحة بنجاحINFO:     connection open
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] ✅ تمت إعادة الاتصال بالقلعة بنجاح
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 🔄 استئناف بوت العفريت بعد إعادة الاتصال...
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 👹 [العفريت] بدء استهداف نخبة العفريت فئة 10 (مدة الجلسة: 23 دقيقة)...
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 🔄 [QUEUE_SYNC] استعلام مزامنة طوابير الفيالق 1007/1000 من السيرفر | السبب: local_queues فارغة في الذاكرة (تهيئة أولى)
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 🌐 1007/1000
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD_ALL(4) | مسيراتي=4
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 1 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:18:24 srv2165848 python[4454]: [09:18:24][abosealamere15] 😍😍😍😍😍😍
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] 🌐 2011/3
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] 3 🥰🥰🥰🥰🥰
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] [5501002, 5501007] 🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️🚴🏻‍♀️
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] [1264] 🐴🐴🐴🐴🐴
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] [1] 🥰🥰🥰🥰🥰
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] {'511': 31914, '710': 55, '709': 21} 👨🏻👩🏻👩🏻👨🏻👨🏻👨🏻
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] {511: 40287, 710: 129, 709: 24} 🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧🧧
+Nov 16 09:18:26 srv2165848 python[4454]: [09:18:26][abosealamere15] [{'id': 511, 'num': 31914}, {'id': 710, 'num': 55}, {'id': 709, 'num': 21}] 👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️👱🏻‍♀️
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 🚀 [العفريت] إرسال فيلق 1 نحو (538, 199) | جنود: 31,990
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 🌐 1007/2
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_ARMY [armyCtrl] | الدمج: نجح ✅ | الجديد: totalArmy(511:8,373,821:101,710:74), woundedArmy(709:27,511:27), trainArmy()
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: base.health=1,675
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: physical.time=-1
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501007(lv=120,st=0)
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_HERO [heroCtrl] | الدمج: نجح ✅ | الجديد: بطل#5501004(lv=120,st=0)
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD(10592144-6119) | مسيراتي=5
+Nov 16 09:18:29 srv2165848 python[4454]: [09:18:29][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_CHAT
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: base.health=1,695
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار NOTIFY_LORD [lordInfoCtrl] | الدمج: نجح ✅ | الجديد: physical.time=-1
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ADD(10592144-6120) | مسيراتي=6
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: REMOVE(10592144-6114 hit) | مسيراتي=5
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار NOTIFY_LOCAL_QUEUE_SYNC [local_queues] | الدمج: نجح ✅ | الجديد: ACK(11) | مسيراتي=5
+Nov 16 09:18:35 srv2165848 python[4454]: [09:18:35][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_WORLD
+Nov 16 09:18:38 srv2165848 python[4454]: [09:18:38][abosealamere15] 0 ⚔️⚔️⚔️⚔️⚔️
+Nov 16 09:18:38 srv2165848 python[4454]: [09:18:38][abosealamere15] 🛑 طوابير المسيرات بالقلعة مكتملة بالكامل.
+Nov 16 09:18:38 srv2165848 python[4454]: [09:18:38][abosealamere15] ⏳ طوابير الفيالق ممتلئة بالكامل (يوجد 5 فيلق بالخارج | المتبقي للجلسة: 22د)...
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] 📨 إشعار غير معرّف: NOTIFY_SERVER_STATUS
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] 📨 إشعار NOTIFY_CITY [cityCtrl] | الدمج: نجح ✅ | الجديد: قمح=1,995,626,075
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] ⚠️ انقطع الاتصال (other_device)
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] ⚡ انقطاع الاتصال أثناء بوت العفريت (دخول شخص آخر إلى الحساب (Other Device Login))
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] 🛑 تم إيقاف مهمة [elf_boss]
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] ⚠️ انقطاع الاتصال (دخول شخص آخر إلى الحساب (Other Device Login)) — انتظار 250ث...
+Nov 16 09:18:45 srv2165848 python[4454]: [09:18:45][abosealamere15] ⏳ إعادة الاتصال (1/10) خلال 250ث...

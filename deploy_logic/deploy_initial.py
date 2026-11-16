@@ -2,22 +2,25 @@
 """
 deploy_initial.py — أداة النشر والتهيئة الأولية لخادم IBRA BOT الجديد
 ════════════════════════════════════════════════════════════════════
-السيرفر الجديد: 187.7.79.122
+السيرفر الجديد: 88.222.220.51
 المسار البعيد:  /var/www/osmanli
 
-المميزات:
+المميزات الحديثة:
   1) تثبيت وتهيئة بيئة السيرفر الجديد من الصفر (Nginx, Python Venv, Systemd).
-  2) بناء ورفع الواجهة الأمامية الكاملة (Dashboard Dist).
-  3) رفع كافة ملفات الباك إند والمجلدات التابعة (core, tasks).
-  4) رفع قاعدة البيانات المحلية الحالية (database/castles.db) بحجمها الكامل.
-  5) تثبيت الاعتماديات (requirements.txt) في بيئة venv.
-  6) تشغيل خدمة empire-bot.service وضبط Nginx.
-  7) تشغيل واستئناف كافة الحسابات الموافق عليها والنشطة (Approved & Active) تدريجياً عبر السيرفر.
+  2) بناء ورفع الواجهة الأمامية الكاملة (dashboard/dist) دون رفع node_modules.
+  3) حزم ورفع كافة ملفات الباك إند والمجلدات التابعة الحديثة (core, tasks, proxy) والملفات الجذرية ذرياً وبسرعة.
+  4) رفع قاعدة البيانات المحلية (database/castles.db) وملفات التهيئة المرجعية (castle_prereqs, tech_names, session_cache) مع استبعاد الكاشات المؤقتة والـ Locks.
+  5) تثبيت مكتبات البايثون (requirements.txt) في بيئة venv على السيرفر.
+  6) ضبط وتشغيل خادم Nginx وخدمة النظام empire-bot.service.
+  7) فحص جاهزية الخادم والواجهة والـ API.
+  8) خيار التشغيل التدريجي الآمن للبوتات عند الطلب.
 
 طريقة الاستخدام:
-  python deploy_logic/deploy_initial.py --init           # تهيئة ورفع شامل من الصفر
-  python deploy_logic/deploy_initial.py --db-only        # رفع وتحديث قاعدة البيانات المحلية فقط
-  python deploy_logic/deploy_initial.py --resume         # تشغيل الحسابات الموافق عليها فقط
+  python deploy_logic/deploy_initial.py --init           # تهيئة ونشر أولي شامل من الصفر
+  python deploy_logic/deploy_initial.py --db-only        # رفع وتحديث قاعدة البيانات وملفات التهيئة فقط
+  python deploy_logic/deploy_initial.py --backend-only   # رفع وتحديث كود الباك إند فقط
+  python deploy_logic/deploy_initial.py --frontend-only  # بناء ورفع الواجهة الأمامية فقط
+  python deploy_logic/deploy_initial.py --resume         # تشغيل واستئناف الحسابات المؤهلة تدريجياً
   python deploy_logic/deploy_initial.py --check          # فحص حالة السيرفر والخدمات
 """
 
@@ -27,7 +30,7 @@ import time
 import tarfile
 import subprocess
 import argparse
-from typing import Optional
+from typing import Optional, List, Tuple
 
 if sys.platform == "win32":
     try:
@@ -37,17 +40,51 @@ if sys.platform == "win32":
         pass
 
 # ── إعدادات السيرفر الجديد ──────────────────────────────────────────
-SERVER_HOST = "187.7.79.122"
+SERVER_HOST = "88.222.220.51"
 SERVER_USER = "root"
 SERVER_PASS = "hsnAsdfghjkl150#"
 REMOTE_DIR  = "/var/www/osmanli"
 DEPLOY_DIR  = os.path.dirname(os.path.abspath(__file__))
 LOCAL_DIR   = os.path.dirname(DEPLOY_DIR)
 
-# إعدادات الاستئناف التدريجي
-RESUME_BATCH_SIZE      = 10    # عدد البوتات في كل دفعة
-RESUME_BATCH_DELAY_AVG = 210   # متوسط 3.5 دقيقة بين الدفعات
-RESUME_ITEM_DELAY_AVG  = 3.5   # فاصل بين كل حساب وآخر
+# قائمة المجلدات المستثناة تماماً من الرفع
+EXCLUDE_DIRS = {
+    "node_modules",
+    "venv",
+    ".venv",
+    "__pycache__",
+    ".git",
+    ".github",
+    ".idea",
+    ".vscode",
+    "scratch",
+    "tests",
+    "test",
+    "game_listener",
+    "tcp_learning",
+    "docs",
+    "logs",
+    "reports",
+    "lua_src",
+    "lua_src_backup",
+    "apk_libs",
+    ".agents",
+}
+
+# امتدادات الملفات المستثناة
+EXCLUDE_EXTENSIONS = {
+    ".pyc",
+    ".pyo",
+    ".pyd",
+    ".log",
+    ".tmp",
+    ".bak",
+    ".apk",
+    ".tar.gz",
+    ".zip",
+    ".db-wal",
+    ".db-shm",
+}
 
 
 def get_ssh_client():
@@ -93,17 +130,17 @@ def _run(client, cmd: str, timeout: int = 120) -> str:
 
 def setup_system_prerequisites(client):
     """تثبيت الحزم الأساسية للنظام وإعداد البيئة من الصفر على السيرفر الجديد."""
-    print("\n🛠️ [1/8] تثبيت الحزم الأساسية وإعداد نظام التشغيل (Nginx, Python3, Venv)...")
+    print("\n🛠️ [1/7] تثبيت الحزم الأساسية وإعداد نظام التشغيل (Nginx, Python3, Venv, SQLite3)...")
     cmd = (
         "export DEBIAN_FRONTEND=noninteractive && "
         "apt-get update -y && "
         "apt-get install -y python3 python3-pip python3-venv python3-dev nginx curl git build-essential sqlite3 libsqlite3-dev && "
-        f"mkdir -p {REMOTE_DIR}/database {REMOTE_DIR}/dashboard/dist {REMOTE_DIR}/core {REMOTE_DIR}/tasks"
+        f"mkdir -p {REMOTE_DIR}/database {REMOTE_DIR}/dashboard/dist {REMOTE_DIR}/core {REMOTE_DIR}/tasks {REMOTE_DIR}/proxy"
     )
-    res = _run(client, cmd, timeout=300)
-    print("✅ تم تثبيت حزم النظام وإنشاء مسارات المشروع.")
+    _run(client, cmd, timeout=300)
+    print("✅ تم تثبيت حزم النظام وإنشاء مسارات المشروع الرئيسية.")
 
-    print("🐍 [2/8] إنشاء البيئة الافتراضية للبايثون (venv)...")
+    print("🐍 [2/7] إنشاء البيئة الافتراضية للبايثون (venv)...")
     venv_cmd = (
         f"if [ ! -d '{REMOTE_DIR}/venv' ]; then "
         f"  python3 -m venv {REMOTE_DIR}/venv; "
@@ -111,24 +148,30 @@ def setup_system_prerequisites(client):
         f"{REMOTE_DIR}/venv/bin/pip install --upgrade pip"
     )
     _run(client, venv_cmd, timeout=180)
-    print("✅ تم تجهيز البيئة الافتراضية /var/www/osmanli/venv.")
+    print("✅ تم تجهيز البيئة الافتراضية /var/www/osmanli/venv بنجاح.")
 
 
 def build_and_upload_frontend(client):
-    """بناء حزمة الواجهة الأمامية ورفعها إلى السيرفر."""
-    print("\n📦 [3/8] بناء حزمة الواجهة الأمامية (Vite Dashboard)...")
+    """بناء حزمة الواجهة الأمامية ورفعها إلى السيرفر (مع استبعاد node_modules تماماً)."""
+    print("\n📦 بناء حزمة الواجهة الأمامية (Vite Dashboard)...")
     dash_dir = os.path.join(LOCAL_DIR, "dashboard")
     cmd = "npm run build" if sys.platform != "win32" else "cmd.exe /c npm run build"
     res = subprocess.run(cmd, cwd=dash_dir, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
-        print(f"⚠️ فشل بناء الواجهة الأمامية عبر npm:\n{res.stderr}\nسيتم البحث عن dist الحالية...")
+        print(f"⚠️ تحذير: فشل بناء الواجهة الأمامية عبر npm:\n{res.stderr}\nسيتم التحقق من وجود مجلد dist السابق...")
 
     local_dist = os.path.join(dash_dir, "dist")
     if not os.path.exists(local_dist):
-        print("❌ مجلد dashboard/dist غير موجود! لا يمكن رفع الواجهة.")
+        print("❌ مجلد dashboard/dist غير موجود! يرجى تشغيل npm run build يدوياً.")
         return False
 
     tar_path = os.path.join(dash_dir, "dist.tar.gz")
+    if os.path.exists(tar_path):
+        try:
+            os.remove(tar_path)
+        except Exception:
+            pass
+
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(local_dist, arcname=".")
 
@@ -152,131 +195,163 @@ def build_and_upload_frontend(client):
     return True
 
 
-def upload_backend_code(client):
-    """رفع كافة ملفات الباك إند والبايثون والمجلدات الفرعية."""
-    print("\n🐍 [4/8] رفع ملفات الباك إند إلى السيرفر الجديد...")
-    sftp = client.open_sftp()
+def create_and_upload_backend(client):
+    """
+    تجميع وحزم كافة ملفات الباك إند والمجلدات المطلوبة الحديثة ورفعها ذرياً:
+      - المجلدات: core, tasks, proxy
+      - الملفات الجذرية: api_server.py, bot_manager.py, game_client.py, GEMINI.md, requirements.txt, reset_stuck_castles.py, firebase_runner.py
+      - ملفات التهيئة: nginx-empire.conf, empire-bot.service
+    """
+    print("\n🐍 [3/7] حزم ورفع ملفات الباك إند والمجلدات الحديثة...")
+    tar_path = os.path.join(DEPLOY_DIR, "backend_init.tar.gz")
+    if os.path.exists(tar_path):
+        try:
+            os.remove(tar_path)
+        except Exception:
+            pass
 
-    base_files = [
-        ("api_server.py", "api_server.py"),
-        ("game_client.py", "game_client.py"),
-        ("bot_manager.py", "bot_manager.py"),
-        ("reset_stuck_castles.py", "reset_stuck_castles.py"),
-        ("firebase_runner.py", "firebase_runner.py"),
-        ("database/castle_prereqs.json", "database/castle_prereqs.json"),
-        ("database/castle_prereqs.json", "castle_prereqs.json"),
-        ("check_building_upgrade.py", "check_building_upgrade.py"),
-        ("database/tech_names.json", "database/tech_names.json"),
-        ("database/tech_names.json", "tech_names.json"),
-        ("get_march_capacity.py", "get_march_capacity.py"),
-        ("check_online.py", "check_online.py"),
-        ("check_optional_chests.py", "check_optional_chests.py"),
-        ("requirements.txt", "requirements.txt"),
-        ("deploy_logic/nginx-empire.conf", "nginx-empire.conf"),
-        ("deploy_logic/empire-bot.service", "empire-bot.service"),
-        ("database/session_cache.json", "database/session_cache.json"),
-        ("database/session_cache.json", "session_cache.json"),
-        ("database/firebase_service_account.json", "database/firebase_service_account.json"),
-        ("database/firebase_service_account.json", "firebase_service_account.json"),
+    included_folders = ["core", "tasks", "proxy"]
+    included_root_files = [
+        "api_server.py",
+        "bot_manager.py",
+        "game_client.py",
+        "GEMINI.md",
+        "requirements.txt",
+        "reset_stuck_castles.py",
+        "firebase_runner.py",
     ]
 
-    for item in base_files:
-        if isinstance(item, tuple):
-            rel_local, rel_remote = item
-        else:
-            rel_local, rel_remote = item, item
-        lpath = os.path.join(LOCAL_DIR, rel_local)
-        if os.path.exists(lpath):
-            rpath = f"{REMOTE_DIR}/{rel_remote}"
-            sftp.put(lpath, rpath)
-            print(f"  ⬆️ {rel_local} -> {rel_remote}")
+    packed_count = 0
+    with tarfile.open(tar_path, "w:gz") as tar:
+        # 1. إضافة الملفات الجذرية
+        for rf in included_root_files:
+            lpath = os.path.join(LOCAL_DIR, rf)
+            if os.path.exists(lpath):
+                tar.add(lpath, arcname=rf)
+                packed_count += 1
 
-    # رفع مجلد core
-    core_dir = os.path.join(LOCAL_DIR, "core")
-    if os.path.exists(core_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/core")
-        for cf in os.listdir(core_dir):
-            if cf.endswith(".py") or cf.endswith(".json"):
-                sftp.put(os.path.join(core_dir, cf), f"{REMOTE_DIR}/core/{cf}")
-                print(f"  ⬆️ core/{cf}")
+        # 2. إضافة ملفات خدمات النظام من deploy_logic
+        nginx_conf = os.path.join(DEPLOY_DIR, "nginx-empire.conf")
+        if os.path.exists(nginx_conf):
+            tar.add(nginx_conf, arcname="nginx-empire.conf")
+            packed_count += 1
 
-    # رفع مجلد tasks
-    tasks_dir = os.path.join(LOCAL_DIR, "tasks")
-    if os.path.exists(tasks_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/tasks")
-        for tf in os.listdir(tasks_dir):
-            if tf.endswith(".py"):
-                sftp.put(os.path.join(tasks_dir, tf), f"{REMOTE_DIR}/tasks/{tf}")
-                print(f"  ⬆️ tasks/{tf}")
+        service_conf = os.path.join(DEPLOY_DIR, "empire-bot.service")
+        if os.path.exists(service_conf):
+            tar.add(service_conf, arcname="empire-bot.service")
+            packed_count += 1
 
-    # رفع مجلد proxy
-    proxy_dir = os.path.join(LOCAL_DIR, "proxy")
-    if os.path.exists(proxy_dir):
-        _run(client, f"mkdir -p {REMOTE_DIR}/proxy")
-        for pf in os.listdir(proxy_dir):
-            if pf.endswith(".py") or pf.endswith(".json"):
-                sftp.put(os.path.join(proxy_dir, pf), f"{REMOTE_DIR}/proxy/{pf}")
-                print(f"  ⬆️ proxy/{pf}")
+        # 3. إضافة المجلدات الرئيسية (core, tasks, proxy) مع الفلترة
+        for folder in included_folders:
+            folder_path = os.path.join(LOCAL_DIR, folder)
+            if not os.path.exists(folder_path):
+                continue
+            for root, dirs, files in os.walk(folder_path):
+                dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("__pycache__")]
+                for f in files:
+                    if any(f.endswith(ext) for ext in EXCLUDE_EXTENSIONS):
+                        continue
+                    full_f = os.path.join(root, f)
+                    rel_f = os.path.relpath(full_f, LOCAL_DIR).replace("\\", "/")
+                    tar.add(full_f, arcname=rel_f)
+                    packed_count += 1
 
+    tar_size_mb = os.path.getsize(tar_path) / (1024 * 1024)
+    print(f"   تم حزم {packed_count} ملفاً بحجم إجمالي: {tar_size_mb:.2f} MB")
+
+    print("🚀 رفع حزمة الباك إند إلى السيرفر...")
+    sftp = client.open_sftp()
+    remote_tar = f"{REMOTE_DIR}/backend_init.tar.gz"
+    sftp.put(tar_path, remote_tar)
     sftp.close()
-    print("✅ تم رفع كافة ملفات الباك إند بنجاح.")
+
+    try:
+        os.remove(tar_path)
+    except Exception:
+        pass
+
+    extract_cmd = (
+        f"tar -xzf {remote_tar} -C {REMOTE_DIR} && "
+        f"rm -f {remote_tar}"
+    )
+    _run(client, extract_cmd)
+    print("✅ تم استخراج وتحديث كافة ملفات ومجلدات الباك إند على السيرفر بنجاح.")
 
 
-def upload_local_database(client):
-    """رفع قاعدة البيانات المحلية database/castles.db مع إظهار شريط التقدم."""
-    print("\n🗄️ [5/8] رفع قاعدة البيانات المحلية (castles.db)...")
-    local_db = os.path.join(LOCAL_DIR, "database", "castles.db")
+def upload_database_and_data_files(client):
+    """
+    رفع قاعدة البيانات ومجلد database/ مع استبعاد ملفات الكاش والنسخ الاحتياطية:
+      - database/castles.db (مع شريط تقدم الرفع)
+      - castle_prereqs.json, tech_names.json, session_cache.json, firebase_service_account.json
+    """
+    print("\n🗄️ [4/7] رفع قاعدة البيانات وملفات التهيئة المرجعية (database/)...")
+    db_dir = os.path.join(LOCAL_DIR, "database")
+    _run(client, f"mkdir -p {REMOTE_DIR}/database")
+
+    sftp = client.open_sftp()
+
+    # 1. رفع قاعدة البيانات الرئيسية castles.db
+    local_db = os.path.join(db_dir, "castles.db")
     if not os.path.exists(local_db):
         local_db = os.path.join(LOCAL_DIR, "castles.db")
 
-    if not os.path.exists(local_db):
-        print("❌ لم يتم العثور على ملف قاعدة البيانات castles.db محلياً!")
-        return False
+    if os.path.exists(local_db):
+        file_size = os.path.getsize(local_db)
+        size_mb = file_size / (1024 * 1024)
+        print(f"   ⬆️ قاعدة البيانات الرئيسية (castles.db) بحجم: {size_mb:.2f} MB")
 
-    file_size = os.path.getsize(local_db)
-    size_mb = file_size / (1024 * 1024)
-    print(f"   حجم قاعدة البيانات: {size_mb:.2f} ميجابايت ({file_size:,} بايت)")
+        last_printed = [0]
+        def _progress(transferred, total):
+            pct = int((transferred / total) * 100)
+            if pct >= last_printed[0] + 15 or pct == 100:
+                last_printed[0] = pct
+                mb_done = transferred / (1024 * 1024)
+                sys.stdout.write(f"\r      التقدم: {pct}% ({mb_done:.1f}/{size_mb:.1f} MB)")
+                sys.stdout.flush()
 
-    _run(client, f"mkdir -p {REMOTE_DIR}/database")
-    remote_db = f"{REMOTE_DIR}/database/castles.db"
+        sftp.put(local_db, f"{REMOTE_DIR}/database/castles.db", callback=_progress)
+        print("\n   ✅ تم رفع castles.db بنجاح.")
+    else:
+        print("⚠️ لم يتم العثور على castles.db محلياً!")
 
-    last_printed = [0]
-    def _progress(transferred, total):
-        pct = int((transferred / total) * 100)
-        if pct >= last_printed[0] + 10 or pct == 100:
-            last_printed[0] = pct
-            mb_done = transferred / (1024 * 1024)
-            sys.stdout.write(f"\r   ⬆️ جاري الرفع: {pct}% ({mb_done:.1f}/{size_mb:.1f} MB)")
-            sys.stdout.flush()
+    # 2. رفع ملفات التهيئة المرجعية داخل مجلد database
+    if os.path.exists(db_dir):
+        for f in os.listdir(db_dir):
+            if f in ("castles.db", "bot.db") or any(f.endswith(ext) for ext in EXCLUDE_EXTENSIONS):
+                continue
+            lf = os.path.join(db_dir, f)
+            if os.path.isfile(lf):
+                rf = f"{REMOTE_DIR}/database/{f}"
+                sftp.put(lf, rf)
+                print(f"   📄 database/{f}")
 
-    sftp = client.open_sftp()
-    sftp.put(local_db, remote_db, callback=_progress)
     sftp.close()
-    print("\n✅ تم رفع قاعدة البيانات المحلية بنجاح إلى /var/www/osmanli/database/castles.db")
 
-    # تصفير أي حالات اتصال قديمة عالقة في قاعدة البيانات المرفوعة لتبدأ نظيفة
+    # 3. تصفير الحالات العالقة في قاعدة البيانات لتبدأ نظيفة
+    remote_db = f"{REMOTE_DIR}/database/castles.db"
     clean_sql = (
         f"sqlite3 {remote_db} \""
-        "UPDATE castle_states SET conn_state='idle', conn_message='جاهز للتشغيل' WHERE conn_state IN ('connecting', 'connected', 'running');\""
+        "UPDATE castle_states SET conn_state='idle', conn_message='جاهز للتشغيل' "
+        "WHERE conn_state IN ('connecting', 'connected', 'running');\" 2>/dev/null || true"
     )
     _run(client, clean_sql)
-    return True
+    print("✅ تم تصفير أي حالات اتصال قديمة عالقة في قاعدة البيانات لتشغيل هادئ.")
 
 
 def install_python_requirements(client):
     """تثبيت مكتبات البايثون في بيئة venv على السيرفر."""
-    print("\n📦 [6/8] تثبيت متطلبات البايثون (pip requirements)...")
+    print("\n📦 [5/7] تثبيت متطلبات البايثون (pip requirements)...")
     cmd = (
         f"{REMOTE_DIR}/venv/bin/pip install --no-cache-dir -r {REMOTE_DIR}/requirements.txt"
     )
     res = _run(client, cmd, timeout=300)
-    print("✅ تم تثبيت متطلبات البايثون بنجاح.")
+    print("✅ تم تثبيت مكتبات البايثون بنجاح.")
 
 
 def configure_and_start_services(client):
     """إعداد وتشغيل خدمات Nginx و Systemd على السيرفر."""
-    print("\n⚙️ [7/8] إعداد وتشغيل خدمات النظام (Nginx & Systemd)...")
-    
+    print("\n⚙️ [6/7] إعداد وتشغيل خدمات النظام (Nginx & Systemd)...")
+
     setup_service_cmd = (
         f"cp {REMOTE_DIR}/empire-bot.service /etc/systemd/system/empire-bot.service && "
         "systemctl daemon-reload && "
@@ -296,77 +371,103 @@ def configure_and_start_services(client):
     status = _run(client, "systemctl is-active empire-bot.service")
     print(f"   حالة خدمة البوت (empire-bot.service): {status}")
 
-    print("🔍 التحقق من جاهزية الخادم...")
+    print("\n🔍 [7/7] التحقق من استجابة خادم البوت والواجهة...")
     health = ""
     for _ in range(8):
         time.sleep(1.5)
         health = _run(client, "curl -s -m 10 http://127.0.0.1:8000/api/health || true", timeout=12)
-        if "online" in health:
+        if "online" in health or "status" in health:
             break
-    print(f"   استجابة الفحص: {health}")
+    print(f"   استجابة فحص الصحة (/api/health): {health}")
 
 
 def launch_approved_castles(client):
-    """تشغيل كافة الحسابات المؤهلة تدريجياً وبأمان (فاصل 5-10 ثوانٍ عشوائي بين كل حساب)."""
+    """تشغيل كافة الحسابات المؤهلة تدريجياً وبأمان (فاصل عشوائي بين الحسابات)."""
     print("\n🚀 تشغيل واستئناف الحسابات المؤهلة تدريجياً وبأمان...")
     resume_resp = _run(client, "curl -s -m 30 -X POST http://127.0.0.1:8000/api/internal/gradual-start || true", timeout=35)
     print(f"   استجابة خادم التشغيل التدريجي: {resume_resp}")
 
     db_path = f"{REMOTE_DIR}/database/castles.db"
-    count_active = _run(client, f"sqlite3 {db_path} \"SELECT COUNT(*) FROM castle_states WHERE is_active=1;\"")
+    count_active = _run(client, f"sqlite3 {db_path} \"SELECT COUNT(*) FROM castle_states WHERE is_active=1;\" 2>/dev/null || true")
     try:
         active_num = int(count_active)
-        print(f"\n📊 إجمالي الحسابات المؤهلة في قاعدة البيانات: {active_num} حساب")
-        print("⏳ التشغيل التدريجي الآمن: حساب كل 5 إلى 10 ثوانٍ مع خلط الحسابات لمنع ضغط السيرفر أو حظر الحسابات.")
+        print(f"📊 إجمالي الحسابات المؤهلة في قاعدة البيانات: {active_num} حساب")
+        print("⏳ التشغيل التدريجي الآمن: حساب كل 5 إلى 10 ثوانٍ لمنع ضغط السيرفر أو حظر الحسابات.")
     except Exception:
         pass
     print("✅ تم إطلاق مهمة التشغيل التدريجي بنجاح في الخلفية على السيرفر.")
 
 
 def run_full_initial_deployment():
-    """تنفيذ النشر الأولي الشامل للسيرفر الجديد مع إبقاء جميع البوتات متوقفة idle."""
+    """تنفيذ النشر الأولي الشامل للسيرفر الجديد مع إبقاء البوتات في وضع الاستعداد idle."""
     print("\n" + "═" * 70)
-    print(f"🌐 بدء النشر والتهيئة الأولية للسيرفر الجديد: {SERVER_HOST}")
+    print(f"🌐 بدء النشر والتهيئة الأولية الشاملة للسيرفر الجديد: {SERVER_HOST}")
     print("═" * 70)
 
     client = get_ssh_client()
     try:
         setup_system_prerequisites(client)
         build_and_upload_frontend(client)
-        upload_backend_code(client)
-        upload_local_database(client)
+        create_and_upload_backend(client)
+        upload_database_and_data_files(client)
         install_python_requirements(client)
         configure_and_start_services(client)
-        # ملاحظة: تم إيقاف التشغيل التلقائي للبوتات لضمان هدوء السيرفر وعدم الضغط عليه
     finally:
         client.close()
 
     print("\n" + "═" * 70)
     print(f"🎉 اكتمل النشر الأولي للسيرفر الجديد {SERVER_HOST} بنجاح تام!")
-    print("🛑 جميع البوتات متوقفة حالياً وهادئة (idle) بنجاح لحماية موارد السيرفر.")
-    print(f"🌐 يمكنك الآن فتح لوحة التحكم عبر المتصفح: http://{SERVER_HOST}")
+    print("🛑 جميع البوتات متوقفة حالياً وهادئة (idle) لحماية السيرفر.")
+    print(f"🌐 لوحة التحكم متاحة الآن عبر المتصفح: http://{SERVER_HOST}")
     print("👉 لتشغيل الحسابات تدريجياً وبأمان متى ما أردت، نفذ:")
     print("   python deploy_logic/deploy_initial.py --resume")
-    print("   أو: python deploy_logic/deploy.py --gradual-start")
     print("═" * 70)
 
 
 def upload_db_only():
-    """رفع قاعدة البيانات المحلية فقط دون تشغيل تلقائي للبوتات."""
+    """رفع قاعدة البيانات المحلية وملفات التهيئة فقط."""
     print("\n" + "═" * 70)
-    print(f"🗄️ رفع قاعدة البيانات المحلية إلى {SERVER_HOST} فقط...")
+    print(f"🗄️ رفع قاعدة البيانات وملفات التهيئة إلى {SERVER_HOST} فقط...")
     print("═" * 70)
     client = get_ssh_client()
     try:
-        print("🛑 إيقاف الخدمة مؤقتاً لضمان سلامة النقل...")
+        print("🛑 إيقاف خدمة البوت مؤقتاً لضمان سلامة النقل...")
         _run(client, "systemctl stop empire-bot.service || true")
-        upload_local_database(client)
-        print("🔄 إعادة تشغيل الخدمة...")
+        upload_database_and_data_files(client)
+        print("🔄 إعادة تشغيل خدمة البوت...")
         _run(client, "systemctl restart empire-bot.service")
     finally:
         client.close()
-    print("\n✅ تم تحديث قاعدة البيانات بنجاح (جميع البوتات متوقفة idle).")
-    print("👉 لتشغيل الحسابات تدريجياً وبأمان: python deploy_logic/deploy_initial.py --resume")
+    print("\n✅ تم تحديث قاعدة البيانات بنجاح (الحسابات في وضع الاستعداد idle).")
+
+
+def upload_backend_only():
+    """رفع كود الباك إند فقط وإعادة تشغيل الخدمة."""
+    print("\n" + "═" * 70)
+    print(f"🐍 رفع وتحديث كود الباك إند فقط إلى {SERVER_HOST}...")
+    print("═" * 70)
+    client = get_ssh_client()
+    try:
+        create_and_upload_backend(client)
+        print("🔄 إعادة تشغيل خدمة empire-bot...")
+        _run(client, "systemctl restart empire-bot.service")
+    finally:
+        client.close()
+    print("\n✅ تم تحديث كود الباك إند بنجاح.")
+
+
+def upload_frontend_only():
+    """بناء ورفع الواجهة فقط وإعادة تحميل Nginx."""
+    print("\n" + "═" * 70)
+    print(f"📦 بناء ورفع الواجهة الأمامية فقط إلى {SERVER_HOST}...")
+    print("═" * 70)
+    client = get_ssh_client()
+    try:
+        build_and_upload_frontend(client)
+        _run(client, "systemctl reload nginx || systemctl restart nginx")
+    finally:
+        client.close()
+    print("\n✅ تم تحديث الواجهة الأمامية بنجاح.")
 
 
 def check_server_status():
@@ -379,7 +480,7 @@ def check_server_status():
         cmd = (
             "systemctl is-active empire-bot.service; "
             "curl -s http://127.0.0.1:8000/api/health; echo ''; "
-            "curl -s http://127.0.0.1:8000/api/admin/stats; echo ''; "
+            "curl -s http://127.0.0.1:8000/api/admin/stats 2>/dev/null || true; echo ''; "
             "sqlite3 /var/www/osmanli/database/castles.db 'SELECT conn_state, count(*) FROM castle_states GROUP BY conn_state;' 2>/dev/null || true"
         )
         out = _run(client, cmd)
@@ -391,9 +492,11 @@ def check_server_status():
 def main():
     parser = argparse.ArgumentParser(description=f"أداة النشر الأولي للسيرفر الجديد ({SERVER_HOST})")
     parser.add_argument("--init", "-1", action="store_true", help="تهيئة ونشر أولي شامل للسيرفر الجديد")
-    parser.add_argument("--db-only", "-2", action="store_true", help="رفع قاعدة البيانات المحلية وتحديث الحسابات فقط")
-    parser.add_argument("--resume", "-3", action="store_true", help="تشغيل واستئناف الحسابات الموافق عليها فقط")
-    parser.add_argument("--check", "-4", action="store_true", help="فحص حالة السيرفر الجديد")
+    parser.add_argument("--db-only", "-2", action="store_true", help="رفع وتحديث قاعدة البيانات وملفات التهيئة فقط")
+    parser.add_argument("--backend-only", "-3", action="store_true", help="رفع وتحديث كود الباك إند فقط")
+    parser.add_argument("--frontend-only", "-4", action="store_true", help="بناء ورفع الواجهة الأمامية فقط")
+    parser.add_argument("--resume", "-5", action="store_true", help="تشغيل واستئناف الحسابات المؤهلة تدريجياً")
+    parser.add_argument("--check", "-6", action="store_true", help="فحص حالة السيرفر والخدمات")
     args = parser.parse_args()
 
     if args.init:
@@ -401,6 +504,12 @@ def main():
         return
     if args.db_only:
         upload_db_only()
+        return
+    if args.backend_only:
+        upload_backend_only()
+        return
+    if args.frontend_only:
+        upload_frontend_only()
         return
     if args.resume:
         client = get_ssh_client()
@@ -417,10 +526,12 @@ def main():
     print("\n" + "═" * 70)
     print(f"🚀 أداة النشر والتهيئة الأولية للسيرفر الجديد ({SERVER_HOST})")
     print("═" * 70)
-    print("  [1] تهيئة ونشر أولي شامل (Setup + Frontend + Backend + DB + Run Castles)")
-    print("  [2] رفع وتحديث قاعدة البيانات المحلية فقط وتشغيل الحسابات")
-    print("  [3] استئناف وتشغيل الحسابات الموافق عليها الآن")
-    print("  [4] فحص حالة السيرفر الجديد والبوتات")
+    print("  [1] تهيئة ونشر أولي شامل (Setup + Frontend + Backend + DB + Start Services)")
+    print("  [2] رفع وتحديث قاعدة البيانات المحلية وملفات التهيئة فقط")
+    print("  [3] رفع وتحديث كود الباك إند فقط")
+    print("  [4] بناء ورفع الواجهة الأمامية (Dashboard Dist) فقط")
+    print("  [5] تشغيل واستئناف الحسابات المؤهلة تدريجياً الآن")
+    print("  [6] فحص حالة السيرفر والخدمات والبوتات")
     print("  [0] إلغاء وخروج")
     print("═" * 70)
 
@@ -435,12 +546,16 @@ def main():
     elif choice == "2":
         upload_db_only()
     elif choice == "3":
+        upload_backend_only()
+    elif choice == "4":
+        upload_frontend_only()
+    elif choice == "5":
         client = get_ssh_client()
         try:
             launch_approved_castles(client)
         finally:
             client.close()
-    elif choice == "4":
+    elif choice == "6":
         check_server_status()
     elif choice == "0":
         print("تم الخروج.")
@@ -450,4 +565,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
