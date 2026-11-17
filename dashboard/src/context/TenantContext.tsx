@@ -111,7 +111,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const isCustomTenant = tenant.id !== DEFAULT_TENANT.id
   const lang = (i18n.language || 'ar').toLowerCase()
   const localizedTagline =
-    lang === 'tr' ? tenant.tagline.tr : lang === 'en' ? tenant.tagline.en : tenant.tagline.ar
+    lang === 'ru'
+      ? (tenant.tagline.ru || tenant.tagline.en)
+      : lang === 'tr'
+      ? tenant.tagline.tr
+      : lang === 'en'
+      ? tenant.tagline.en
+      : tenant.tagline.ar
 
   // ─── ضبط اللغة الافتراضية للتاجر تلقائياً (مثل التركية لدومين نورجان) ما لم يختر المستخدم لغة أخرى ───
   useEffect(() => {

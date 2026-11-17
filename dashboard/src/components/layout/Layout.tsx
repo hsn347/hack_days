@@ -6,13 +6,12 @@ import { BottomNav } from './BottomNav'
 import { PwaInstallPrompt } from '../common/PwaInstallPrompt'
 import { ConfirmLogoutModal } from '../common/ConfirmLogoutModal'
 import { AccountSwitcherModal } from '../common/AccountSwitcherModal'
+import { LanguageDropdown } from '../common/LanguageDropdown'
 import { Sun, Moon, LogOut, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../store/appStore'
 import { useAuth } from '../../hooks/useAuth'
 import { useTenant } from '../../context/TenantContext'
-
-const LANGUAGES = ['AR', 'EN', 'TR'] as const
 
 interface LayoutProps {
   children: React.ReactNode
@@ -20,22 +19,14 @@ interface LayoutProps {
 }
 
 export function Layout({ children, title }: LayoutProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { brandName, tagline, logoUrl } = useTenant()
   const navigate = useNavigate()
   const { logout, savedAccounts } = useAuth()
-  const { theme, language, setTheme, setLanguage } = useAppStore()
+  const { theme, setTheme } = useAppStore()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-
-  const handleLangChange = (lang: string) => {
-    const lc = lang.toLowerCase() as 'ar' | 'en' | 'tr'
-    setLanguage(lc)
-    i18n.changeLanguage(lc)
-    document.documentElement.dir = 'ltr'
-    document.documentElement.lang = lc
-  }
 
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true)
@@ -103,27 +94,8 @@ export function Layout({ children, title }: LayoutProps) {
               )}
             </button>
 
-            {/* Language Selector */}
-            <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-lg p-0.5 border border-gray-200 dark:border-white/10">
-              {LANGUAGES.map((lang) => {
-                const isActive = language === lang.toLowerCase()
-                return (
-                  <button
-                    key={lang}
-                    onClick={() => handleLangChange(lang)}
-                    style={isActive ? { backgroundColor: 'var(--theme-primary)', color: '#ffffff' } : {}}
-                    className={clsx(
-                      'px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-all',
-                      isActive
-                        ? 'shadow-xs'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    )}
-                  >
-                    {lang}
-                  </button>
-                )
-              })}
-            </div>
+            {/* Language Selector Dropdown */}
+            <LanguageDropdown direction="down" />
 
             {/* Quick theme toggle */}
             <button

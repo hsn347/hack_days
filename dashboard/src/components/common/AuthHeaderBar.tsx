@@ -2,21 +2,11 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sun, Moon } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
-import clsx from 'clsx'
-
-const LANGUAGES = ['AR', 'EN', 'TR'] as const
+import { LanguageDropdown } from './LanguageDropdown'
 
 export function AuthHeaderBar() {
-  const { i18n, t } = useTranslation()
-  const { theme, language, setTheme, setLanguage } = useAppStore()
-
-  const handleLangChange = (lang: string) => {
-    const lc = lang.toLowerCase() as 'ar' | 'en' | 'tr'
-    setLanguage(lc)
-    i18n.changeLanguage(lc)
-    document.documentElement.dir = 'ltr'
-    document.documentElement.lang = lc
-  }
+  const { t } = useTranslation()
+  const { theme, setTheme } = useAppStore()
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -27,28 +17,8 @@ export function AuthHeaderBar() {
       <div />
       {/* Language & Theme Controls */}
       <div className="flex items-center gap-1.5 bg-white/80 dark:bg-[#0c120f]/80 backdrop-blur-md p-1 rounded-xl border border-gray-200/80 dark:border-white/10 shadow-xs">
-        {/* Language selector */}
-        <div className="flex items-center bg-gray-100 dark:bg-white/6 rounded-lg p-0.5 border border-gray-200/60 dark:border-white/5">
-          {LANGUAGES.map((lang) => {
-            const isActive = language === lang.toLowerCase()
-            return (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => handleLangChange(lang)}
-                style={isActive ? { backgroundColor: 'var(--theme-primary)', color: '#ffffff' } : {}}
-                className={clsx(
-                  'px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer select-none',
-                  isActive
-                    ? 'shadow-xs'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                )}
-              >
-                {lang}
-              </button>
-            )
-          })}
-        </div>
+        {/* Language selector dropdown */}
+        <LanguageDropdown direction="down" />
 
         {/* Theme toggle button */}
         <button

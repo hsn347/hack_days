@@ -7,33 +7,24 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../store/appStore'
+import { LanguageDropdown } from '../common/LanguageDropdown'
 import { useAuth } from '../../hooks/useAuth'
 import { localizeUsername } from '../../lib/localize'
 import { AccountSwitcherModal } from '../common/AccountSwitcherModal'
 import { useTenant } from '../../context/TenantContext'
 import toast from 'react-hot-toast'
 
-const LANGUAGES = ['AR', 'EN', 'TR'] as const
-
 export interface SidebarProps {
   onLogoutClick?: () => void
 }
 
 export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { brandName, tagline, logoUrl } = useTenant()
   const navigate    = useNavigate()
   const { user, logout, isAdmin, savedAccounts } = useAuth()
-  const { theme, language, sidebarOpen, setTheme, setLanguage, toggleSidebar } = useAppStore()
+  const { theme, sidebarOpen, setTheme, toggleSidebar } = useAppStore()
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false)
-
-  const handleLangChange = (lang: string) => {
-    const lc = lang.toLowerCase() as 'ar' | 'en' | 'tr'
-    setLanguage(lc)
-    i18n.changeLanguage(lc)
-    document.documentElement.dir = 'ltr'
-    document.documentElement.lang = lc
-  }
 
   const handleLogout = async () => {
     if (onLogoutClick) {
@@ -152,24 +143,9 @@ export function Sidebar({ onLogoutClick }: SidebarProps = {}) {
         {/* Bottom: Language + Theme + Logout */}
         <div className="border-t border-white/8 px-3 py-3 space-y-2">
           {/* Language selector */}
-          <div className="flex items-center gap-1 px-1">
-            <span className="text-xs text-gray-500 flex-1">{t('settings.language')}</span>
-            <div className="flex gap-1">
-              {LANGUAGES.map(lang => (
-                <button
-                  key={lang}
-                  onClick={() => handleLangChange(lang)}
-                  className={clsx(
-                    'px-2 py-0.5 rounded text-xs font-medium transition-all',
-                    language === lang.toLowerCase()
-                      ? 'bg-primary-600 text-white'
-                      : 'text-gray-400 hover:text-white hover:bg-white/8'
-                  )}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-gray-500">{t('settings.language')}</span>
+            <LanguageDropdown direction="up" />
           </div>
 
           {/* Theme toggle */}

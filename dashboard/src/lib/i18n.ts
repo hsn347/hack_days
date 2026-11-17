@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 import ar from '../locales/ar.json'
 import en from '../locales/en.json'
 import tr from '../locales/tr.json'
+import ru from '../locales/ru.json'
 import { getInitialLanguage } from '../config/tenants'
 
 /**
@@ -21,6 +22,7 @@ i18n
       ar: { translation: ar },
       en: { translation: en },
       tr: { translation: tr },
+      ru: { translation: ru },
     },
     lng: initialLang,
     fallbackLng: initialLang,

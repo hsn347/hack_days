@@ -11,11 +11,12 @@ export interface TenantConfig {
   domains: string[]
   /** اسم البوت المعروض للمستخدمين */
   brandName: string
-  /** وصف البوت باللغات الثلاث */
+  /** وصف البوت باللغات المتعددة */
   tagline: {
     ar: string
     en: string
     tr: string
+    ru?: string
   }
   /** رابط شعار البوت (يمكن وضع الصورة في مجلد public مثلاً /logos/nurjan.png) */
   logoUrl: string
@@ -28,8 +29,8 @@ export interface TenantConfig {
   primaryColor: string
   /** البريد الإلكتروني لمشرف هذا الدومين (Merchant Admin) */
   adminEmail: string
-  /** اللغة الافتراضية للزوار عند الدخول عبر هذا الدومين لأول مرة ('ar' | 'en' | 'tr') */
-  defaultLanguage?: 'ar' | 'en' | 'tr'
+  /** اللغة الافتراضية للزوار عند الدخول عبر هذا الدومين لأول مرة ('ar' | 'en' | 'tr' | 'ru') */
+  defaultLanguage?: 'ar' | 'en' | 'tr' | 'ru'
 }
 
 // ─── 1. الدومين الرئيسي الافتراضي (IBRA BOT - المشرف الأعلى) ───────────────────
@@ -42,6 +43,7 @@ export const DEFAULT_TENANT: TenantConfig = {
     ar: 'أول بوت عربي',
     en: 'The First Arabic Bot',
     tr: 'İlk Arapça Bot',
+    ru: 'Первый арабский бот',
   },
   logoUrl: '/logo.png?v=2',
   faviconUrl: '/favicon.ico',
@@ -165,7 +167,7 @@ export function getCurrentTenant(): TenantConfig {
  * 2. إذا لم يقم المستخدم باختيار يدوي صريح، تؤخذ اللغة الافتراضية المحددة في إعدادات النطاق
  *    (مثل التركية 'tr' لنورجان، والعربية 'ar' للرئيسي).
  */
-export function getInitialLanguage(): 'ar' | 'en' | 'tr' {
+export function getInitialLanguage(): 'ar' | 'en' | 'tr' | 'ru' {
   if (typeof window === 'undefined') return 'ar'
   try {
     const tenant = getCurrentTenant()
@@ -174,12 +176,12 @@ export function getInitialLanguage(): 'ar' | 'en' | 'tr' {
     // 1. فحص الاختيار اليدوي الصريح لهذا النطاق
     const isManualForTenant = localStorage.getItem(`osmanli_lang_manual_${tenantKey}`) === 'true'
     const savedForTenant = localStorage.getItem(`osmanli_lang_${tenantKey}`)
-    if (isManualForTenant && savedForTenant && (savedForTenant === 'ar' || savedForTenant === 'en' || savedForTenant === 'tr')) {
-      return savedForTenant as 'ar' | 'en' | 'tr'
+    if (isManualForTenant && savedForTenant && (savedForTenant === 'ar' || savedForTenant === 'en' || savedForTenant === 'tr' || savedForTenant === 'ru')) {
+      return savedForTenant as 'ar' | 'en' | 'tr' | 'ru'
     }
 
     // 2. فحص لغة النطاق الافتراضية
-    if (tenant.defaultLanguage && (tenant.defaultLanguage === 'ar' || tenant.defaultLanguage === 'en' || tenant.defaultLanguage === 'tr')) {
+    if (tenant.defaultLanguage && (tenant.defaultLanguage === 'ar' || tenant.defaultLanguage === 'en' || tenant.defaultLanguage === 'tr' || tenant.defaultLanguage === 'ru')) {
       return tenant.defaultLanguage
     }
   } catch {

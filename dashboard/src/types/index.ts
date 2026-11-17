@@ -338,7 +338,7 @@ export interface CastleLog {
 
 // ─── UI Types ────────────────────────────────────────
 export type Theme = 'dark' | 'light'
-export type Language = 'ar' | 'en' | 'tr'
+export type Language = 'ar' | 'en' | 'tr' | 'ru'
 
 export type TaskTab =
   | 'gather'
